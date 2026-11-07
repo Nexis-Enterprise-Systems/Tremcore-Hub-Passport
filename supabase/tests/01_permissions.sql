@@ -150,3 +150,30 @@ select * from chk('summary counts every item incl. missing in the total', :'staf
   $$select green=1 and amber=1 and red=1 and missing=1 and total>=4 from property_summary where property_id='20000000-0000-0000-0000-0000000000a1'$$);
 
 commit;
+
+-- Website enquiries: the public can add, never read; staff can manage with 2FA
+begin;
+set local role anon;
+insert into enquiries(name,email) values ('Visitor','v@example.com');
+do $$ begin
+  begin perform count(*) from enquiries; raise exception 'anon could read enquiries';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+select 'anon cannot read enquiries back' as test, true as ok;
+select 'anon can submit an enquiry' as test, count(*)=1 as ok from enquiries;
+select * from chk('enquiries: staff with 2FA can read', :'staff', 'aal2', 'select count(*)>=1 from enquiries');
+select * from chk('enquiries: staff without 2FA cannot read', :'staff', 'aal1', 'select count(*)=0 from enquiries');
+select * from chk('enquiries: client cannot read', :'superA', 'aal2', 'select count(*)=0 from enquiries');
+select * from chk('enquiries: client cannot change', :'superA', 'aal2', $$with u as (update enquiries set status='won' returning 1) select count(*)=0 from u$$);
+select * from chk('enquiries: staff can update status', :'staff', 'aal2', $$with u as (update enquiries set status='contacted' returning 1) select count(*)>=1 from u$$);
+do $$ begin
+  set local role anon;
+  begin insert into enquiries(name,email) values ('X','not-an-email'); raise exception 'bad email was accepted';
+  exception when check_violation then null; end;
+  begin insert into enquiries(name,email,status) values ('X','x@example.com','won'); raise exception 'visitor set status';
+  exception when insufficient_privilege or check_violation or others then if sqlerrm like '%accepted%' or sqlerrm like '%visitor set%' then raise; end if; end;
+  reset role;
+end $$;
+select 'enquiries: database rejects a bad email and a visitor-set status' as test, true as ok;
+rollback;

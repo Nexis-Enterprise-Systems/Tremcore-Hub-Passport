@@ -71,7 +71,7 @@
       e.preventDefault();
       if (!email.value.trim()) return message(box, 'err', 'Enter your email address.');
       await busy(btn, async () => {
-        await sb.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: location.origin + '/' });
+        await sb.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: location.origin + '/app/' });
         // Same answer whether or not the address has an account, so the page can't be used to find out who is a client.
         message(box, 'ok', 'If that email has an account, a reset link is on its way. Check your inbox and spam folder.');
       });
@@ -227,6 +227,6 @@
     await route();
   }
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js').catch(() => {});
   start();
 })();

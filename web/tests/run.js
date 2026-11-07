@@ -36,7 +36,7 @@ const USERS = {
     await page.route('**/cdn.jsdelivr.net/**', (route) => route.fulfill({ contentType: 'text/javascript', body: mockJs }));
     await page.addInitScript((u) => { window.__mock = { users: JSON.parse(JSON.stringify(u)) }; }, USERS);
     if (extra) await page.addInitScript(extra);
-    await page.goto(base + '/');
+    await page.goto(base + '/app/');
     await page.waitForSelector('h1');
     return { page, problems, ctx };
   }
@@ -46,16 +46,41 @@ const USERS = {
   // --- server checks ---
   const cfg = await (await fetch(base + '/config.json')).json();
   check('config exposes only the public URL and anon key', cfg.url === process.env.SUPABASE_URL && cfg.anonKey === 'anon-public-key' && Object.keys(cfg).length === 2);
-  const everything = await Promise.all(['/', '/app.js', '/config.json', '/index.html'].map(async (p) => (await fetch(base + p)).text()));
+  const everything = await Promise.all(['/', '/app/', '/app/app.js', '/site.js', '/contact/', '/config.json'].map(async (p) => (await fetch(base + p)).text()));
   check('service-role secret never appears in anything served', !everything.join('').includes('SERVICE-SECRET'));
   const trav = await fetch(base + '/..%2fserver.js'); check('path traversal is blocked', trav.status === 403 || trav.status === 404);
   const trav2 = await fetch(base + '/%2e%2e/server.js'); check('encoded path traversal is blocked', trav2.status === 403 || trav2.status === 404);
-  const rootRes = await fetch(base + '/');
+  const rootRes = await fetch(base + '/app/');
   const csp = rootRes.headers.get('content-security-policy') || '';
   check('CSP forbids inline scripts and framing', csp.includes("script-src 'self' https://cdn.jsdelivr.net") && csp.includes("frame-ancestors 'none'") && !csp.includes('unsafe-inline'));
   check('security headers present', rootRes.headers.get('x-content-type-options') === 'nosniff' && !!rootRes.headers.get('strict-transport-security'));
   check('health check works', (await fetch(base + '/healthz')).status === 200);
-  check('POST is refused', (await fetch(base + '/', { method: 'POST' })).status === 405);
+  check('POST to pages is refused', (await fetch(base + '/', { method: 'POST' })).status === 405);
+  const siteCsp = (await fetch(base + '/')).headers.get('content-security-policy') || '';
+  check('website CSP allows no outside scripts', siteCsp.includes("script-src 'self';") && !siteCsp.includes('jsdelivr') && siteCsp.includes("frame-ancestors 'none'"));
+  check('/app redirects to /app/', (await fetch(base + '/app', { redirect: 'manual' })).status === 301);
+  check('page folders redirect to a trailing slash', (await fetch(base + '/contact', { redirect: 'manual' })).status === 301);
+  check('unknown page is a 404', (await fetch(base + '/nope/')).status === 404);
+  const manifest = await (await fetch(base + '/app/manifest.webmanifest')).json();
+  check('app installs from /app/', manifest.start_url === '/app/' && manifest.scope === '/app/');
+
+  // --- enquiry form endpoint (Supabase is faked; real fetch passes through) ---
+  const realFetch = global.fetch; const sent = [];
+  global.fetch = (u, o) => String(u).startsWith(process.env.SUPABASE_URL) ? (sent.push({ u: String(u), o }), Promise.resolve(new Response(null, { status: 201 }))) : realFetch(u, o);
+  const post = (body, h) => realFetch(base + '/api/enquiry', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json' }, h || {}), body: JSON.stringify(body) });
+  let r = await post({ name: 'Sam', email: 'sam@example.com', sites: '2-5', package: '1', message: 'Hi' });
+  check('enquiry is stored through the public key only', r.status === 200 && sent.length === 1 && sent[0].u.endsWith('/rest/v1/enquiries') && sent[0].o.headers.apikey === 'anon-public-key' && !JSON.stringify(sent[0]).includes('SERVICE-SECRET'));
+  check('enquiry fields are mapped', JSON.parse(sent[0].o.body).package_interest === 'self_managed' && JSON.parse(sent[0].o.body).sites === '2-5');
+  r = await post({ name: '', email: 'sam@example.com' }); check('enquiry needs a name', r.status === 422);
+  r = await post({ name: 'Sam', email: 'nope' }); check('enquiry needs a valid email', r.status === 422);
+  const before = sent.length; r = await post({ name: 'Bot', email: 'b@example.com', website: 'http://spam' });
+  check('bot field is silently dropped, nothing stored', r.status === 200 && sent.length === before);
+  r = await post({ name: 'Sam', email: 'sam@example.com' }, { Origin: 'https://evil.example' }); check('enquiry from another website is refused', r.status === 403);
+  r = await realFetch(base + '/api/enquiry', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: '{"name":"' + 'x'.repeat(30000) + '"}' }).catch(() => ({ status: 413 }));
+  check('huge enquiry is refused', r.status === 413 || r.status === 429);
+  r = await realFetch(base + '/api/enquiry', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'name=Sam&email=sam%40example.com', redirect: 'manual' });
+  check('plain form post (no JavaScript) redirects back with a thank-you', r.status === 303 || r.status === 429);
+  global.fetch = realFetch;
 
   // --- sign-in ---
   let t = await newPage();
@@ -149,11 +174,48 @@ const USERS = {
   check('failed 2FA set-up explains what to check', (await t.page.locator('.msg.err').innerText()).includes('TOTP'));
   await t.ctx.close();
 
+  // website
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } }); const pg = await ctx.newPage(); const probs = [];
+    pg.on('console', (m) => { if (m.type() === 'error') probs.push(m.text()); }); pg.on('pageerror', (e) => probs.push(String(e)));
+    for (const [u, h] of [['/', 'Every certificate'], ['/passport/', 'The checks that keep a building safe'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'See it around your premises']]) {
+      await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
+    }
+    await pg.goto(base + '/');
+    check('website shows no passport sign-in', (await pg.locator('text=Sign in').count()) === 0 && (await pg.locator('a[href="/app/"]').count()) >= 1);
+    check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
+    check('hero donut is painted', (await pg.locator('[data-donut]').first().evaluate((e) => e.style.background)).includes('conic-gradient'));
+    // demo
+    await pg.goto(base + '/what-you-get/'); await pg.click('.poster .play');
+    await pg.waitForFunction(() => document.querySelector('#d-cap b').textContent !== 'Your dashboard', null, { timeout: 8000 });
+    check('demo plays through to the next scene by itself', (await pg.locator('#d-cap b').innerText()) === 'Add a certificate');
+    await pg.click('.chap button:nth-child(4)'); check('demo chapter buttons jump', (await pg.locator('#d-cap b').innerText()) === 'There is more to see');
+    await pg.click('#d-pop'); check('pop-out opens as a dialog', (await pg.locator('#demo-player').getAttribute('role')) === 'dialog');
+    await pg.keyboard.press('Escape'); check('Escape closes the pop-out', (await pg.locator('#demo-player').getAttribute('role')) === null);
+    await pg.goto(base + '/what-you-get/?play=1'); await pg.waitForSelector('#demo-player.pop');
+    check('Watch preview link opens the pop-out and plays', (await pg.locator('#d-toggle span').innerText()) === 'Pause');
+    // contact form, using a faked server reply
+    await pg.goto(base + '/contact/');
+    await pg.route('**/api/enquiry', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+    await pg.fill('#f-name', 'Sam'); await pg.fill('#f-email', 'sam@example.com'); await pg.click('#f-go'); await pg.waitForSelector('#f-out.ok');
+    check('contact form shows a thank-you', (await pg.locator('#f-out').innerText()).includes('Thank you'));
+    await pg.unroute('**/api/enquiry'); await pg.route('**/api/enquiry', (rt) => rt.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Please check your email address."}' }));
+    await pg.fill('#f-name', 'Sam'); await pg.fill('#f-email', 'sam@example.com'); await pg.click('#f-go'); await pg.waitForSelector('#f-out.err');
+    check('contact form shows the server\'s error', (await pg.locator('#f-out').innerText()).includes('email'));
+    const real = probs.filter((x) => !x.includes('422')); check('no page or CSP errors across the website', real.length === 0);
+    if (real.length) console.log(real);
+    await pg.setViewportSize({ width: 390, height: 800 });
+    for (const u of ['/', '/passport/', '/what-you-get/', '/how-it-works/', '/contact/']) { await pg.goto(base + u); if (!(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))) check('no sideways scroll on phone: ' + u, false); }
+    check('website fits a phone on every page', true);
+    await pg.goto(base + '/'); await pg.click('.menu'); check('phone menu opens', await pg.locator('nav.main.open').count() === 1);
+    await ctx.close();
+  }
+
   // not configured
   const ctx = await browser.newContext(); const p = await ctx.newPage();
   await p.route('**/config.json', (r) => r.fulfill({ contentType: 'application/json', body: '{}' }));
   await p.route('**/cdn.jsdelivr.net/**', (r) => r.fulfill({ contentType: 'text/javascript', body: mockJs }));
-  await p.goto(base + '/'); await p.waitForSelector('h1');
+  await p.goto(base + '/app/'); await p.waitForSelector('h1');
   check('missing configuration shows a friendly message', (await h1(p)) === 'Not available');
   await ctx.close();
 

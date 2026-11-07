@@ -1,8 +1,8 @@
 {
   "name": "Tremcore Compliance Passport",
   "short_name": "Tremcore",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "/app/",
+  "scope": "/app/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
