@@ -29,6 +29,8 @@ Owner: Aaron Loveday (Tremcore Ltd). Two connected parts: the **client app** (co
 - Deploys: Railway, from GitHub. Work on a branch, open a pull request, Aaron reviews and merges. Do not push straight to `main`.
 
 ## Working method
+- The web app in `web/` has **no build step and no npm packages** (the cloud workspace blocks package downloads). Browser code uses `supabase-js` from a pinned jsdelivr URL. The CSP in `web/server.js` allows only that CDN, so any new external script must be added there on purpose.
+- Web changes: run `npm run test:web` (Playwright, uses a pretend Supabase in `web/tests/mock-supabase.js`). The real sign-in can only be proven on a real Supabase project.
 - Aaron works from several computers; everything must be in this repo, none only on one machine.
 - Schema changes go in new numbered files in `supabase/migrations/` (never edit an applied migration). Run the tests locally before committing:
   `bash supabase/tests/run.sh` (needs a local Postgres; see the script).

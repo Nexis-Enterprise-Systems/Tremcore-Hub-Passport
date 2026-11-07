@@ -136,6 +136,11 @@ select * from chk('client cannot promote own profile', :'siteAu', 'aal1',
 select * from chk('changes are written to the audit log', :'staff', 'aal2', $$select count(*)>=1 from audit_log where table_name='compliance_items'$$);
 rollback;  -- discard edits made above so the traffic-light fixtures are clean
 begin;
+-- Sign-in helper (works before 2FA is passed, returns only the caller's own row)
+select * from chk('auth_requirements: staff must use 2FA', :'staff', 'aal1', $$select count(*)=1 and bool_and(mfa_required) and bool_and(role_name='tremcore_admin') from auth_requirements()$$);
+select * from chk('auth_requirements: client super must use 2FA', :'superA', 'aal1', $$select bool_and(mfa_required) from auth_requirements()$$);
+select * from chk('auth_requirements: site user 2FA optional by default', :'siteAu', 'aal1', $$select count(*)=1 and not bool_or(mfa_required) and bool_and(level=1) from auth_requirements()$$);
+select * from chk('auth_requirements returns nothing for an anonymous caller', '00000000-0000-0000-0000-0000000000ff', 'aal1', $$select count(*)=0 from auth_requirements()$$);
 -- Traffic light + summary
 select * from chk('status: missing date is never green', :'staff', 'aal2', $$select status='missing' from compliance_status where id='30000000-0000-0000-0000-000000000001'$$);
 select * from chk('status: past due is red', :'staff', 'aal2', $$select status='red' from compliance_status where id='30000000-0000-0000-0000-000000000002'$$);

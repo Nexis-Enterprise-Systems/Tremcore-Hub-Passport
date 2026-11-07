@@ -9,6 +9,9 @@
 | 2026-11-07 | Permissions enforced by row-level security in the database. Level 1 clients edit; Level 2 and 3 clients are view-only; only Level 3 can raise jobs. |
 | 2026-11-07 | Staging Supabase project is "TREMCORE Test". Production project to be created later. |
 | 2026-11-07 | App Store name placeholder "Tremcore Passport", icon = gold T-in-circle logo. |
+| 2026-11-07 | Launch scope: Self-Managed (Level 1) and a low-level Managed Service (Level 2, limited to areas Aaron stipulates). Level 3 deferred; its tables stay unused. |
+| 2026-11-07 | Web app built with no build step (plain pages + dependency-free Node server) because the workspace blocks npm. Installable as a phone/desktop app (PWA); store wrappers later. |
+| 2026-11-07 | 2FA recovery: Supabase TOTP has no backup codes, so a lost phone is handled by a Tremcore admin resetting the factor after identity checks. |
 
 ## Open
 - Onboarding flow style (client invite and setup / guided first run / Tremcore's sales-to-signed process).
@@ -16,3 +19,6 @@
 - Billing: manual subscription records first; Stripe later.
 - Professional review of compliance rules (`supabase/seed.sql` and the legal / standard / best-practice labels).
 - Website placeholders: phone, email, address, company number, privacy and terms pages, working contact form.
+- Pin and add an integrity hash (SRI) to the supabase-js script once packages can be downloaded, or serve a copy from our own server.
+- Meaning of 'areas we stipulate' for Managed Service (places vs types of compliance).
+- Admin screen to reset a client's 2FA and to invite users (needs a server-side secret key).
