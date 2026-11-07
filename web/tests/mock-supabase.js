@@ -10,9 +10,87 @@
 
   window.__fire = (event, email) => { if (email) current = email; if (cb) cb(event, current ? { user: { email: current } } : null); };
 
+
+  // ---- fake database tables (window.__mock.tables) for the management hub ----
+  // The two traffic-light views are worked out here the same way the real database views do it, so the hub is tested end to end.
+  // The real rule itself is proven in supabase/tests/01_permissions.sql.
+  let idn = 1;
+  const uuid = () => '00000000-0000-4000-8000-' + String(idn++).padStart(12, '0');
+  const db = () => (M().tables = M().tables || {});
+  const DEFAULTS = {
+    companies: () => ({ level: 1, subscription: 'trial', monthly_value_pence: 0, require_mfa: false }),
+    compliance_items: () => ({ notes: '', grp: 'Other', basis: 'standard' }),
+    properties: () => ({})
+  };
+  function statusRows() {
+    const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z').getTime();
+    return (db().compliance_items || []).map((i) => {
+      let status = 'missing', days = null;
+      if (i.due_date) {
+        days = Math.round((new Date(i.due_date + 'T00:00:00Z').getTime() - today) / 86400000);
+        status = days < 0 ? 'red' : days <= 30 ? 'amber' : 'green';
+      }
+      return Object.assign({}, i, { status, days_left: days });
+    });
+  }
+  function viewRows(name) {
+    if (name === 'compliance_status') return statusRows();
+    if (name === 'property_summary') {
+      const st = statusRows();
+      return (db().properties || []).map((p) => {
+        const mine = st.filter((x) => x.property_id === p.id), n = (k) => mine.filter((x) => x.status === k).length;
+        const g = n('green'), a = n('amber');
+        return { property_id: p.id, company_id: p.company_id, name: p.name, green: g, amber: a, red: n('red'), missing: n('missing'), total: mine.length,
+          pct_in_date: mine.length ? Math.round(100 * (g + a) / mine.length) : null };
+      });
+    }
+    return db()[name] || [];
+  }
+  function from(table) {
+    const st = { op: 'select', filters: [], order: null, lim: null, payload: null, single: null, returning: false };
+    const run = () => {
+      calls.push(['db', { table, op: st.op, payload: st.payload, filters: st.filters.map((f) => f[1] + '=' + f[2]) }]);
+      const errs = M().dbError || {};
+      const err = errs[table + ':' + st.op] || errs[table];
+      if (err) return { data: null, error: { message: err } };
+      const match = (r) => st.filters.every(([k, col, v]) => (k === 'eq' ? r[col] === v : v.includes(r[col])));
+      let out;
+      if (st.op === 'insert') {
+        const list = db()[table] = db()[table] || [];
+        out = (Array.isArray(st.payload) ? st.payload : [st.payload]).map((p) => Object.assign({ id: uuid(), created_at: new Date().toISOString() }, (DEFAULTS[table] || (() => ({})))(), p));
+        list.push(...out);
+      } else if (st.op === 'update') {
+        out = (db()[table] || []).filter(match); out.forEach((r) => Object.assign(r, st.payload));
+      } else if (st.op === 'delete') {
+        out = (db()[table] || []).filter(match); db()[table] = (db()[table] || []).filter((r) => !match(r));
+      } else out = viewRows(table).filter(match).map((r) => Object.assign({}, r));
+      if (st.order) out = out.slice().sort((a, b) => (a[st.order.col] > b[st.order.col] ? 1 : a[st.order.col] < b[st.order.col] ? -1 : 0) * (st.order.asc ? 1 : -1));
+      if (st.lim != null) out = out.slice(0, st.lim);
+      if (st.op !== 'select' && !st.returning) return { data: null, error: null };
+      if (st.single === 'single') return out.length === 1 ? { data: out[0], error: null } : { data: null, error: { message: 'Expected one row' } };
+      if (st.single === 'maybe') return { data: out[0] || null, error: null };
+      return { data: out, error: null };
+    };
+    const qb = {
+      select() { if (st.op !== 'select') st.returning = true; return qb; },
+      insert(p) { st.op = 'insert'; st.payload = p; return qb; },
+      update(p) { st.op = 'update'; st.payload = p; return qb; },
+      delete() { st.op = 'delete'; return qb; },
+      eq(col, v) { st.filters.push(['eq', col, v]); return qb; },
+      in(col, v) { st.filters.push(['in', col, v]); return qb; },
+      order(col, o) { st.order = { col, asc: !o || o.ascending !== false }; return qb; },
+      limit(n) { st.lim = n; return qb; },
+      single() { st.single = 'single'; return qb; },
+      maybeSingle() { st.single = 'maybe'; return qb; },
+      then(res, rej) { return Promise.resolve().then(run).then(res, rej); }
+    };
+    return qb;
+  }
+
   window.supabase = { createClient() { return {
+    from,
     auth: {
-      async getSession() { return { data: { session: current ? { user: { email: current } } : null } }; },
+      async getSession() { return { data: { session: current ? { user: { id: 'user-' + current, email: current } } : null } }; },
       async signInWithPassword({ email, password }) {
         rec('signIn', email);
         const u = M().users[email];

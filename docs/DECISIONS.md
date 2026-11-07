@@ -13,6 +13,7 @@
 | 2026-11-07 | Web app built with no build step (plain pages + dependency-free Node server) because the workspace blocks npm. Installable as a phone/desktop app (PWA); store wrappers later. |
 | 2026-11-07 | 2FA recovery: Supabase TOTP has no backup codes, so a lost phone is handled by a Tremcore admin resetting the factor after identity checks. |
 | 2026-11-07 | Website lives at the main address (`/`); the passport sign-in moved to `/app/`. Website uses system fonts for now (no third-party requests); enquiries are saved to the `enquiries` table and read in the hub. |
+| 2026-11-07 | Management hub stage 1 lives inside `/app/` for Tremcore staff only (`hub.js`): dashboard, clients, sites, compliance items, manual subscriptions, enquiries. Package picker offers Levels 1 and 2 only. Every read and write goes through Supabase as the signed-in staff member, so row-level security decides what is allowed. No database change was needed. |
 
 ## Open
 - Onboarding flow style (client invite and setup / guided first run / Tremcore's sales-to-signed process).
@@ -23,4 +24,5 @@
 - Website placeholders: phone, email, address, company number, privacy and terms pages, working contact form.
 - Pin and add an integrity hash (SRI) to the supabase-js script once packages can be downloaded, or serve a copy from our own server.
 - Meaning of 'areas we stipulate' for Managed Service (places vs types of compliance).
-- Admin screen to reset a client's 2FA and to invite users (needs a server-side secret key).
+- Admin screen to reset a client's 2FA and to invite users (needs a server-side secret key). The hub's client page shows the people list read-only until this exists.
+- Hub stage 2: certificate upload and download on compliance items, renewal task stages (due soon, booking required, booked, completed), audit history view, delete or archive a client, Level 2 "areas we stipulate" once Aaron defines it.

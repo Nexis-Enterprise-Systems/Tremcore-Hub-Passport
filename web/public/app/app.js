@@ -11,6 +11,7 @@
   const root = document.getElementById('app');
   let sb = null;
   let recovering = false;   // true while the user is on a password-reset link
+  let suppressSignedOut = false; // true while we sign out on purpose and show our own message afterwards
   let wantEnroll = false;   // true when an optional user chose "Set up 2FA"
 
   // ---------- tiny DOM helper (text only: nothing is ever inserted as HTML) ----------
@@ -26,6 +27,8 @@
     return el;
   }
   function show(...nodes) {
+    document.body.classList.remove('hub');
+    if (window.TCHub) window.TCHub.unmount();
     root.replaceChildren(h('img', { class: 'logo', src: '/img/logo-mark.png', alt: 'Tremcore' }), ...nodes);
     const f = root.querySelector('input'); if (f) f.focus();
   }
@@ -105,7 +108,8 @@
         const { error } = await sb.auth.updateUser({ password: p1.value });
         if (error) return message(box, 'err', error.message || 'Could not save the password. The link may have expired; request a new one.');
         recovering = false;
-        await sb.auth.signOut();
+        suppressSignedOut = true;
+        try { await sb.auth.signOut(); } finally { suppressSignedOut = false; }
         viewLogin('Password changed. Sign in with your new password.');
       });
     } },
@@ -176,6 +180,10 @@
   }
 
   function viewHome(req, hasFactor) {
+    // Tremcore staff land in the management hub (hub.js). Everyone else sees the holding page until their passport is built.
+    if ((req.role_name === 'tremcore_admin' || req.role_name === 'tremcore_staff') && window.TCHub) {
+      return window.TCHub.mount({ sb, root, req, hasFactor, signOut });
+    }
     show(h('div', { class: 'card' },
       h('h1', {}, 'Welcome' + (req.full_name ? ', ' + req.full_name.split(' ')[0] : '')),
       h('p', { class: 'muted' }, 'You are signed in.'),
@@ -222,7 +230,7 @@
     // Never call Supabase directly inside this callback (it can deadlock); hand off to the next tick.
     sb.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') { recovering = true; setTimeout(route, 0); }
-      else if (event === 'SIGNED_OUT') { setTimeout(viewLogin, 0); }
+      else if (event === 'SIGNED_OUT' && !suppressSignedOut) { setTimeout(viewLogin, 0); }
     });
     await route();
   }

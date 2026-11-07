@@ -11,6 +11,9 @@ Clickable prototypes only. Nothing is saved to a server; data lives in memory an
 
 Prototype already covers: three subscription levels with permission rules, hub (clients, properties, subcontractors, create client, subscriptions), traffic-light dashboard, filter-responsive donuts (legal / standard / best practice), site plans and 3D walkthrough with numbered safety markers and photos, PDF floor-plan import, multi-site clients with head-office super user and per-site logins.
 
+## Build status (updated 7 Nov 2026)
+Done in the real app: database and permission tests, sign-in with 2FA, public website with enquiry form, **management hub stage 1** (dashboard, clients, sites, compliance items, subscriptions, enquiries). Next: certificates and renewals in the hub, user invites (needs the server key), then the Self-Managed passport and the Managed Service view for clients.
+
 ## Decisions made
 - Website shows **Level 1 only** for now. Levels 2 and 3 stay built in the prototype but hidden publicly.
 - Website stays dark-only.
