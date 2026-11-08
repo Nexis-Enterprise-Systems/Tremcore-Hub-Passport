@@ -130,7 +130,7 @@ async function handleLookup(req, res, pathname, query) {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(6000) });
     const rows = r.ok ? await r.json() : null;
     const a = rows && rows[0];
-    if (!a) return reply(502, { error: 'Sorry, we could not check that just now. Please call us.' });
+    if (!a) { console.error('managed_area lookup failed: status ' + r.status + (r.ok ? ' (no area row: has migration 0006 been run?)' : ' (has migration 0006 been run in Supabase?)')); return reply(502, { error: 'Sorry, we could not check that just now. Please call us.' }); }
     return reply(200, { ok: true, available: miles({ lat: a.lat, lng: a.lng }, here) <= a.radius_miles, area: a.label, radius_miles: a.radius_miles });
   } catch (e) { console.error('lookup error', e.message); return reply(502, { error: 'Sorry, we could not check that just now. Please call us.' }); }
 }
