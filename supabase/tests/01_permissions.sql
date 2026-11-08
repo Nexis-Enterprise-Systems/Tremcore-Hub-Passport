@@ -222,6 +222,7 @@ select 'signup: person becomes the head-office user with full rights' as test,
   exists (select 1 from profiles p join companies c on c.id=p.company_id where p.id='00000000-0000-0000-0000-0000000000d1' and p.role='client_super' and p.perm='full' and c.name='Acme Cafes Ltd') as ok;
 select 'signup: first site is created under that company' as test,
   exists (select 1 from properties pr join companies c on c.id=pr.company_id where c.name='Acme Cafes Ltd' and pr.name='Acme High Street' and pr.address='1 High Street') as ok;
+update companies set subscription='active' where name='Acme Cafes Ltd';   -- payment confirmed (Stripe, later)
 select * from chk('signup: new customer sees their own company and site after 2FA', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select (select count(*) from companies)=1 and (select count(*) from properties)=1$$);
 select * from chk('signup: new customer cannot see anyone else', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select count(*)=0 from properties where company_id<>my_company()$$);
 select * from chk('signup: new customer is held to 2FA like any head-office user', '00000000-0000-0000-0000-0000000000d1', 'aal1', $$select count(*)=0 from properties$$);
@@ -308,41 +309,24 @@ do $$ begin
   perform signup_company('BigCo','Owner','HQ');
   reset role;
 end $$;
-select 'trial: new sign-up gets a 7-day trial' as test,
-  (select trial_ends_at between now() + interval '6 days 23 hours' and now() + interval '7 days 1 hour' from companies where name='BigCo') as ok;
+select 'sign-up: there is no free trial; a new company starts unpaid with nothing open' as test,
+  (select subscription='trial' and trial_ends_at <= now() from companies where name='BigCo') as ok;
+select * from chk('sign-up: before payment the new customer sees nothing and is told payment is awaited', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=0 from properties) and (select count(*)=0 from companies) and (select state='awaiting_payment' and is_head from my_access())$$);
+select * from chk('sign-up: an unpaid company cannot edit anything', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select not can_edit_property((select id from properties where company_id=(select id from companies where name='BigCo') limit 1))$$);
 do $$ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e2', true);
-  begin perform signup_company('BigCo Two','Other','HQ2'); raise exception 'second trial from same domain worked'; exception when insufficient_privilege then null; end;
-  reset role;
-end $$;
-select 'trial: a second trial from the same company email domain is refused (any capitals)' as test, true as ok;
-do $$ begin
-  set local role authenticated;
+  perform signup_company('BigCo Second Site','Other','HQ2');
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e3', true);
   perform signup_company('Jo Trading','Jo','Shop');
-  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e5', true);
-  perform signup_company('Someone Else Trading','Sam','Shop');
-  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e4', true);
-  begin perform signup_company('Jo Again','Jo','Shop2'); raise exception 'same gmail address trialled twice'; exception when insufficient_privilege then null; end;
   reset role;
 end $$;
-select 'trial: free webmail is checked by exact address, so two gmail users can each try, but not the same person twice' as test, true as ok;
-select 'trial: the register keeps only a fingerprint, and clients cannot read it' as test,
-  not exists (select 1 from trial_registry where key_hash like '%bigco%') as ok;
-select 'trial: clients have no access to the trial register at all' as test, not has_table_privilege('authenticated','trial_registry','select') as ok;
-
--- the access state follows the dates
-select * from chk('trial: during the trial the passport opens and the app is told how long is left', '00000000-0000-0000-0000-0000000000e1', 'aal2',
-  $$select (select count(*)=1 from properties) and (select state='trial' and days_left between 6 and 7 and is_head from my_access())$$);
-update companies set trial_ends_at = now() - interval '1 minute' where name='BigCo';
-select * from chk('trial: after 7 days with no payment the account sees nothing', '00000000-0000-0000-0000-0000000000e1', 'aal2',
-  $$select (select count(*)=0 from properties) and (select count(*)=0 from companies) and (select state='stopped' from my_access())$$);
-select * from chk('trial: an ended trial cannot be used to edit records either', '00000000-0000-0000-0000-0000000000e1', 'aal2',
-  $$select not can_edit_property((select id from properties where company_id=(select id from companies where name='BigCo') limit 1))$$);
+select 'sign-up: two people at the same company domain, or two Gmail users, can each sign up (nothing is free to abuse)' as test, true as ok;
 update companies set subscription='active' where name='BigCo';
-select 'billing: marking a company paid clears the trial end' as test, (select trial_ends_at is null and payment_failed_at is null from companies where name='BigCo') as ok;
-select * from chk('billing: paid company is open again', '00000000-0000-0000-0000-0000000000e1', 'aal2', $$select (select count(*)=1 from properties) and (select state='ok' from my_access())$$);
+select 'billing: confirming payment opens the account and clears the unpaid marker' as test, (select trial_ends_at is null and payment_failed_at is null from companies where name='BigCo') as ok;
+select * from chk('billing: a paid company is open', '00000000-0000-0000-0000-0000000000e1', 'aal2', $$select (select count(*)=1 from properties) and (select state='ok' from my_access())$$);
 
 -- payment failure: warning first, then a full stop after 7 days
 update companies set subscription='past_due' where name='BigCo';
@@ -442,4 +426,89 @@ insert into company_extras(company_id,extra_code,price_pence) values ('10000000-
 select * from chk('extras: a client sees its own extras', :'superA', 'aal2', $$select count(*)=1 from company_extras$$);
 select * from chk('extras: another company sees none of them', :'superB', 'aal2', $$select count(*)=0 from company_extras$$);
 select * from deny('extras: a client cannot switch an extra on for itself', :'superA', 'aal2', $$insert into company_extras(company_id,extra_code,price_pence) values ('10000000-0000-0000-0000-00000000000a','staff_signin',0)$$);
+rollback;
+
+-- Team management (migration 0010) ---------------------------------------------------
+begin;
+insert into companies(id,name,level,require_mfa) values ('10000000-0000-0000-0000-0000000000e9','Team Co',1,false);
+insert into properties(id,company_id,name) values
+ ('20000000-0000-0000-0000-0000000000e1','10000000-0000-0000-0000-0000000000e9','Team site 1'),
+ ('20000000-0000-0000-0000-0000000000e2','10000000-0000-0000-0000-0000000000e9','Team site 2');
+insert into auth.users(id,email,email_confirmed_at) values
+ ('00000000-0000-0000-0000-0000000000f9','boss@team.test', now()),
+ ('00000000-0000-0000-0000-0000000000fa','mgr@team.test', now());
+insert into profiles(id,full_name,role,company_id,perm) values
+ ('00000000-0000-0000-0000-0000000000f9','Boss','client_super','10000000-0000-0000-0000-0000000000e9','full');
+\set boss '00000000-0000-0000-0000-0000000000f9'
+\set mgr  '00000000-0000-0000-0000-0000000000fa'
+select * from chk('team: super admin sees the team page numbers (2 sites = 3 users)', :'boss', 'aal2', $$select (select allowed=3 and used=1 from team_summary())$$);
+select * from chk('team: super admin invites a manager for site 1 with update', :'boss', 'aal2',
+  $$select team_invite('Mgr@Team.test','Manager','update', array['20000000-0000-0000-0000-0000000000e1']::uuid[]) is not null$$);
+select * from chk('team: the invite counts towards the seats', :'boss', 'aal2', $$select (select used=2 from team_summary()) and (select count(*)=1 from team_pending())$$);
+select * from chk('team: inviting the same person again just replaces the invite', :'boss', 'aal2',
+  $$select team_invite('mgr@team.test','Manager','view', array['20000000-0000-0000-0000-0000000000e1']::uuid[]) is not null and (select count(*)=1 from team_pending())$$);
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f9', true);
+  perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform team_invite('x@team.test','X','view', array['20000000-0000-0000-0000-0000000000a1']::uuid[]); raise exception 'foreign site accepted'; exception when invalid_parameter_value then null; end;
+  begin perform team_invite('bad','X','view', array['20000000-0000-0000-0000-0000000000e1']::uuid[]); raise exception 'bad email accepted'; exception when invalid_parameter_value then null; end;
+  begin perform team_invite('x@team.test','X','admin', array['20000000-0000-0000-0000-0000000000e1']::uuid[]); raise exception 'odd permission accepted'; exception when invalid_parameter_value then null; end;
+  perform team_invite('third@team.test','Third','view', array['20000000-0000-0000-0000-0000000000e2']::uuid[]);
+  begin perform team_invite('fourth@team.test','Fourth','view', array['20000000-0000-0000-0000-0000000000e2']::uuid[]); raise exception 'over the user limit'; exception when insufficient_privilege then null; end;
+  perform team_cancel_invite((select id from team_pending() where email='third@team.test'));
+  reset role;
+end $$;
+select 'team: foreign sites, bad emails, odd permissions and going over the user limit are all refused' as test, true as ok;
+-- the manager signs up and accepts
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000fa', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  if not accept_invitation('Mo Manager') then raise exception 'invite not accepted'; end if;
+  if accept_invitation() then raise exception 'accepted twice'; end if;
+  reset role;
+end $$;
+select 'team: the invited person is set up with the chosen permission and site only' as test,
+  exists (select 1 from profiles p join profile_properties pp on pp.profile_id=p.id where p.id=:'mgr' and p.role='client_site' and p.perm='view' and pp.property_id='20000000-0000-0000-0000-0000000000e1' and p.company_id='10000000-0000-0000-0000-0000000000e9')
+  and (select count(*) from profile_properties where profile_id=:'mgr')=1 as ok;
+select * from chk('team: the manager can see their one site, and not the other', :'mgr', 'aal1', $$select (select count(*)=1 from properties)$$);
+select * from chk('team: a site user cannot see or use the team tools', :'mgr', 'aal1', $$select (select count(*)=0 from team_members()) and (select count(*)=0 from team_summary())$$);
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000fa', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  begin perform team_invite('x@team.test','X','full', array['20000000-0000-0000-0000-0000000000e1']::uuid[]); raise exception 'site user invited'; exception when insufficient_privilege then null; end;
+  begin perform team_set_access('00000000-0000-0000-0000-0000000000fa'::uuid, 'full', array['20000000-0000-0000-0000-0000000000e1']::uuid[], true); raise exception 'site user raised own access'; exception when insufficient_privilege then null; end;
+  begin perform team_set_require_mfa(true); raise exception 'site user changed 2FA rule'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'team: a site user cannot invite, raise their own access or change the 2FA rule' as test, true as ok;
+select * from chk('team: super admin lists the team with the manager', :'boss', 'aal2', $$select count(*)=2 from team_members()$$);
+select * from chk('team: super admin gives the manager update on both sites', :'boss', 'aal2',
+  $$select (select team_set_access('00000000-0000-0000-0000-0000000000fa','update', array['20000000-0000-0000-0000-0000000000e1','20000000-0000-0000-0000-0000000000e2']::uuid[], true) is null) is not null$$);
+select * from chk('team: the manager now sees both sites and can edit', :'mgr', 'aal1', $$select (select count(*)=2 from properties) and can_edit_property('20000000-0000-0000-0000-0000000000e1')$$);
+select * from chk('team: super admin switches the manager off, and they see nothing', :'boss', 'aal2', $$select (select team_set_access('00000000-0000-0000-0000-0000000000fa','update', array['20000000-0000-0000-0000-0000000000e1']::uuid[], false) is null) is not null$$);
+select * from chk('team: a switched-off user sees nothing', :'mgr', 'aal1', $$select (select count(*)=0 from properties)$$);
+select * from chk('team: super admin can make 2FA compulsory for the company', :'boss', 'aal2', $$select (select team_set_require_mfa(true) is null) is not null$$);
+select 'team: 2FA rule is now on for the company' as test, (select require_mfa from companies where id='10000000-0000-0000-0000-0000000000e9') as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f9', true);
+  perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform team_set_access('00000000-0000-0000-0000-0000000000a3', 'full', array['20000000-0000-0000-0000-0000000000e1']::uuid[], true); raise exception 'edited another company user'; exception when insufficient_privilege then null; end;
+  begin perform team_set_access('00000000-0000-0000-0000-0000000000f9', 'view', array['20000000-0000-0000-0000-0000000000e1']::uuid[], true); raise exception 'edited the super admin'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'team: the super admin cannot edit other companies'' users or themselves through the team tools' as test, true as ok;
+-- an uninvited, confirmed person gets nothing
+insert into auth.users(id,email,email_confirmed_at) values ('00000000-0000-0000-0000-0000000000fb','stranger@team.test', now());
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000fb', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  if accept_invitation('Stranger') then raise exception 'stranger accepted'; end if;
+  reset role;
+end $$;
+select 'team: someone nobody invited gets no access' as test, not exists (select 1 from profiles where id='00000000-0000-0000-0000-0000000000fb') as ok;
 rollback;

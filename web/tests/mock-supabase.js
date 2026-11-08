@@ -132,6 +132,21 @@
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
       if (name === 'request_cancellation') { rec('cancel', 'x'); if (M().cancelError) return { data: null, error: { message: 'x' } }; M().access = { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 }; return { data: '2026-12-08T00:00:00Z' }; }
       if (name === 'withdraw_cancellation') { M().access = { state: 'ok', is_head: true }; return { data: null }; }
+      if (name === 'team_members') return { data: M().team.members };
+      if (name === 'team_pending') return { data: M().team.pending };
+      if (name === 'team_summary') return { data: [M().team.summary] };
+      if (name === 'team_invite') {
+        if (M().team.inviteError) return { data: null, error: { message: M().team.inviteError } };
+        M().team.pending.push({ id: 'inv-' + (M().team.pending.length + 1), full_name: args.p_full_name, email: args.p_email, perm: args.p_perm, property_ids: args.p_property_ids });
+        M().team.summary.used += 1; return { data: 'inv' };
+      }
+      if (name === 'team_cancel_invite') { M().team.pending = M().team.pending.filter((i) => i.id !== args.p_id); M().team.summary.used -= 1; return { data: null }; }
+      if (name === 'team_set_access') { const u = M().team.members.find((x) => x.user_id === args.p_user); Object.assign(u, { perm: args.p_perm, property_ids: args.p_property_ids, active: args.p_active }); return { data: null }; }
+      if (name === 'team_set_require_mfa') { M().team.summary.require_mfa = args.p_on; return { data: null }; }
+      if (name === 'accept_invitation') {
+        if (!userRow() || !userRow().invitedProfile) return { data: false };
+        userRow().profile = userRow().invitedProfile; return { data: true };
+      }
       if (name === 'signup_open') return { data: M().signupOpen === true };
       if (name === 'signup_company') {
         if (M().signupRpcError) return { data: null, error: { message: M().signupRpcError } };

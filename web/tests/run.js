@@ -423,11 +423,13 @@ const USERS = {
     await p.fill('#su-pass', 'a-long-enough-password'); await go();
     check('sign-up will not go ahead without agreeing to the terms', (await p.locator('.msg.err').innerText()).includes('terms') && (await calls(p, 'signUp')).length === 0);
     check('terms and privacy links open the notices in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
-    check('sign-up says 7 days free, no card, shows prices excluding VAT and leaves monthly or yearly until they pay', (await p.locator('input[name=su-billing]').count()) === 0 && (await p.locator('.plans').innerText()).includes('No card needed') && (await p.locator('.plans').innerText()).includes('£14.99') && (await p.locator('.plans').innerText()).includes('save 15%') && (await p.locator('.plans').innerText()).includes('exclude VAT'));
+    check('sign-up offers monthly (ticked) or yearly, prices excluding VAT, and says there is no trial', (await p.locator('input[name=su-billing]').count()) === 2 && (await p.locator('input[value=monthly]').isChecked()) && (await p.locator('.plans').innerText()).includes('£14.99') && (await p.locator('.plans').innerText()).includes('£152.90') && (await p.locator('.plans').innerText()).includes('exclude VAT') && !/free trial/i.test(await p.locator('.card').innerText()));
+    await p.check('input[value=annual]');
     check('the terms and privacy links are on the form and open in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
     await p.check('#su-terms'); await go(); await p.waitForSelector('text=Check your email');
     const su = (await calls(p, 'signUp'))[0];
     check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_site_name === 'Acme High Street' && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
+    check('the yearly choice is kept with the sign-up details', su.meta.signup_billing === 'annual');
     check('no company is created before the email is confirmed', (await calls(p, 'rpc:signup_company')).length === 0);
     check('the confirmation screen names the address', (await p.locator('strong').innerText()) === 'pat@acme.example');
     await p.click('text=Go to sign in'); await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('.msg.err');
@@ -435,7 +437,7 @@ const USERS = {
     await p.evaluate(() => { window.__mock.users['pat@acme.example'].confirmed = true; });
     await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('img.qr');
     const made = (await calls(p, 'rpc:signup_company'));
-    check('first confirmed sign-in creates the company once, with the saved details', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street');
+    check('first confirmed sign-in creates the company once, with the saved details and billing choice', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street' && made[0].p_billing === 'annual');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
     check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your account is ready').count()) === 1);
@@ -463,9 +465,9 @@ const USERS = {
     await t.ctx.close();
 
     // trial, payment failure, stop and cancellation screens
-    t = await newPage(() => { window.__mock.access = { state: 'trial', is_head: true, ends_at: '2026-11-15T00:00:00Z', days_left: 7 }; });
-    await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
-    check('trial: a banner says how long is left and that no card is needed', (await t.page.locator('.msg.ok').innerText()).includes('7 days') && (await t.page.locator('.msg.ok').innerText()).includes('No card'));
+    t = await newPage(() => { window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('text=One step left');
+    check('unpaid: a new customer sees only the payment step, nothing else', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#pay-now').isDisabled()) && (await t.page.locator('.card').innerText()).includes('opens as soon as your payment is confirmed'));
     await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'payment_failed', is_head: true, ends_at: '2026-11-15T00:00:00Z', days_left: 5 }; });
     await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
@@ -489,9 +491,48 @@ const USERS = {
     await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#cancel-start');
     check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
     await t.ctx.close();
-    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.users['again@t'] = { password: 'correct-horse-battery', factor: false, profile: null, confirmed: true, meta: { signup_company: 'Again Co', signup_full_name: 'Al', signup_site_name: 'S' } }; window.__mock.signupRpcError = 'trial_already_used'; });
-    await login(t.page, 'again@t'); await t.page.waitForSelector('text=Almost there');
-    check('repeat trial: the person is told a trial was already used and nothing is created', (await t.page.locator('.msg.err').innerText()).includes('already been used'));
+    // team page: the head-office user chooses who can do what
+    const teamSeed = () => { window.__mock.tables = { properties: [{ id: 's1', name: 'High Street' }, { id: 's2', name: 'Station Road' }] };
+      window.__mock.team = { summary: { used: 2, allowed: 3, require_mfa: false },
+        members: [{ user_id: 'u1', full_name: 'Boss', email: 'boss@x.test', role: 'client_super', perm: 'full', active: true, property_ids: [], is_me: true },
+                  { user_id: 'u2', full_name: 'Mo Manager', email: 'mo@x.test', role: 'client_site', perm: 'view', active: true, property_ids: ['s1'], is_me: false }], pending: [] }; };
+    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#team-open');
+    await t.page.click('#team-open'); await t.page.waitForSelector('text=My team');
+    check('team: shows seats used, the head-office user and the manager', (await t.page.locator('.card').innerText()).includes('2 of 3 users') && (await t.page.locator('.member').count()) === 3);
+    await t.page.selectOption('[data-user=u2] select', 'update'); await t.page.check('[data-user=u2] input[value=s2]');
+    await t.page.click('[data-save=u2]'); await t.page.waitForSelector('text=Saved changes for Mo Manager');
+    const sv = (await calls(t.page, 'rpc:team_set_access')).pop();
+    check('team: permission and sites saved for that person only', sv.p_user === 'u2' && sv.p_perm === 'update' && sv.p_property_ids.length === 2 && sv.p_active === true);
+    await t.page.fill('#inv-name', 'Sam Site'); await t.page.fill('#inv-email', 'sam@x.test'); await t.page.selectOption('#inv-perm', 'view'); await t.page.check('input[data-site=new][value=s2]');
+    await t.page.click('#inv-go'); await t.page.waitForSelector('text=Invitation saved for sam@x.test');
+    check('team: inviting shows the link and says to use the same email', (await t.page.locator('#team-msg').innerText()).includes('/app/?invite=1') && (await t.page.locator('.member:has-text("sam@x.test")').count()) === 1);
+    check('team: the user count goes up with the invite and the add form is then closed (3 of 3)', (await t.page.locator('.card').innerText()).includes('3 of 3 users') && await t.page.locator('#inv-go').isDisabled());
+    await t.page.click('[data-cancel=inv-1]'); await t.page.waitForSelector('text=Invitation cancelled');
+    check('team: an invitation can be cancelled', (await t.page.locator('.member:has-text("sam@x.test")').count()) === 0);
+    await t.page.check('#team-mfa'); await t.page.waitForSelector('text=2FA is now required');
+    check('team: head office can require 2FA for everyone', (await calls(t.page, 'rpc:team_set_require_mfa')).pop().p_on === true);
+    await t.ctx.close();
+    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.evaluate(() => { window.__mock.team.inviteError = 'user_limit_reached'; }); await t.page.click('#team-open'); await t.page.waitForSelector('#inv-name');
+    await t.page.fill('#inv-name', 'X'); await t.page.fill('#inv-email', 'x@x.test'); await t.page.check('input[data-site=new][value=s1]'); await t.page.click('#inv-go');
+    await t.page.waitForSelector('.msg.err');
+    check('team: going over the user limit is explained', (await t.page.locator('.msg.err').innerText()).includes('used all the users'));
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: false }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
+    check('team: a site user is not offered the team page', (await t.page.locator('#team-open').count()) === 0);
+    await t.ctx.close();
+    // invited person's own sign-up
+    t = await newPage(() => { window.__mock.users['sam@x.test'] = undefined; delete window.__mock.users['sam@x.test']; });
+    await t.page.goto(base + '/app/?invite=1'); await t.page.waitForSelector('#iv-email');
+    await t.page.fill('#iv-name', 'Sam Site'); await t.page.fill('#iv-email', 'sam@x.test'); await t.page.fill('#iv-pass', 'a-long-enough-password'); await t.page.click('button[type=submit]');
+    check('invite: terms must be agreed first', (await t.page.locator('.msg.err').innerText()).includes('terms') && (await calls(t.page, 'signUp')).length === 0);
+    await t.page.check('#iv-terms'); await t.page.click('button[type=submit]'); await t.page.waitForSelector('text=Check your email');
+    const iv = (await calls(t.page, 'signUp'))[0];
+    check('invite: creates only a login, marked as invited; no company is created by the page', iv.email === 'sam@x.test' && iv.meta.invited === true && !iv.meta.signup_company && (await calls(t.page, 'rpc:signup_company')).length === 0);
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.users['sam@x.test'] = { password: 'correct-horse-battery', factor: false, profile: null, confirmed: true, meta: { invited: true, signup_full_name: 'Sam Site' },
+      invitedProfile: { role_name: 'client_site', full_name: 'Sam Site', company_id: 'c1', level: 1, mfa_required: false } }; });
+    await login(t.page, 'sam@x.test'); await t.page.waitForSelector('text=Welcome, Sam');
+    check('invite: first confirmed sign-in accepts the invitation and lands in the passport as a site user', (await calls(t.page, 'rpc:accept_invitation')).length === 1 && (await t.page.locator('.kv').first().innerText()).includes('Site user'));
     await t.ctx.close();
 
     // the staff hub: markers and the on/off switch
@@ -546,7 +587,7 @@ const USERS = {
     check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
     check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
     signupOpen = true; await pg.goto(base + '/what-you-get/'); await pg.waitForSelector('[data-signup]:visible');
-    check('website shows "Start free trial" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
+    check('website shows "Sign up" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
     signupOpen = false;
     for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
     await pg.goto(base + '/');
