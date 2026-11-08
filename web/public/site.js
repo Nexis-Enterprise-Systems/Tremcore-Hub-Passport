@@ -100,6 +100,28 @@
     if (/[?&]play=1/.test(location.search) && !reduce) { openPop(); play(); }
   }
 
+  // ---------- Managed Service postcode check ----------
+  var area = $('#area-check');
+  if (area) {
+    var out = $('#area-out'), ask = $('#area-ask'), go = $('#area-go');
+    area.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var pc = area.postcode.value.trim();
+      ask.hidden = true; out.textContent = '';
+      if (!pc) { out.textContent = 'Please enter your postcode.'; return; }
+      go.disabled = true; out.textContent = 'Checking...';
+      fetch('/api/managed-check?postcode=' + encodeURIComponent(pc), { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+        .then(function (x) {
+          if (x.j && x.j.ok && x.j.available) { out.textContent = 'Good news: the Managed Service is available at your premises.'; ask.hidden = false; }
+          else if (x.j && x.j.ok) out.textContent = 'Sorry, the Managed Service is not available at that postcode yet. Self-Managed works anywhere in the UK, and we will let you know if we cover your area in future.';
+          else out.textContent = (x.j && x.j.error) || 'Sorry, we could not check that just now. Please call us.';
+        })
+        .catch(function () { out.textContent = 'Sorry, we could not check that just now. Please call us.'; })
+        .then(function () { go.disabled = false; });
+    });
+  }
+
   // ---------- enquiry form ----------
   var form = $('#enquiry');
   if (form) {

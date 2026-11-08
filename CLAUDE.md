@@ -15,7 +15,7 @@ Owner: Aaron Loveday (Tremcore Ltd). Two connected parts: the **client app** (co
 - **Traffic light**: green > 30 days to the due date; amber within 30 days; red past due; **missing/not entered is never green**. Percentages count missing items against the total.
 - Compliance items carry a basis: legal / standard / best practice. The legal-basis wording is illustrative and **needs professional review**; never present it as legal advice.
 - Multi-site clients: a head-office **super user** sees all sites and a dashboard split by site; each site gets its own login with `view` / `update` / `full` permission limited to assigned sites.
-- The public website sells **Level 1 only** for now. Keep it dark-only.
+- The public website sells **Level 1 (sign-up)** and shows the **Managed Service (Level 2)** by enquiry only, and only within the set distance of the base point (Medway, 30 miles, changeable in hub Settings). Level 3 is not offered. Keep it dark-only.
 
 ## Security rules
 - Permissions are enforced by the **database (row-level security)**, never only by hiding UI. A Level 2 client must fail to edit or raise a job even by calling the API directly. `supabase/tests/01_permissions.sql` proves this; keep it passing and extend it with every new table or rule.

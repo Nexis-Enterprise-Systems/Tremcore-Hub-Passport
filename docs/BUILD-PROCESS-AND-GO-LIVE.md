@@ -33,7 +33,7 @@ Stages 1 to 3 are the heart of it. 5 comes after you've seen 1 to 3 working, as 
 
 ### A. Accounts and hosting
 - [ ] Production Supabase project created (separate from "TREMCORE Test"), on the Pro plan
-- [ ] Database migrations 0001 to 0005 (and any new ones) run on staging and checked
+- [ ] Database migrations 0001 to 0006 (and any new ones) run on staging and checked
 - [ ] Same migrations run on production, then permission tests passed there
 - [ ] Railway production service set up from GitHub, deploying from `main` only after your review
 - [ ] Domain name bought and pointed at the site (via Cloudflare)
@@ -75,11 +75,14 @@ Stages 1 to 3 are the heart of it. 5 comes after you've seen 1 to 3 working, as 
 - [ ] Terms of use reviewed by a solicitor (draft exists at `/terms/`)
 - [ ] Privacy policy reviewed by a solicitor (draft exists at `/privacy/`)
 - [ ] Registered with the ICO (UK data protection fee) if required; ask your accountant or the ICO website
+- [ ] Privacy notice updated to say postcodes typed into the checker are looked up with postcodes.io and not stored
 - [ ] Legal-basis wording on compliance items reviewed by someone qualified (never presented as legal advice)
 - [ ] Professional indemnity insurance quote requested
 - [ ] Real company number, registered address, phone and email put on the website (placeholders today)
 
 ### F. Website
+- [ ] Managed Service postcode check tried with a Medway postcode (should say available) and a far-away one (should say not available)
+- [ ] Managed Service price decided and wording on the website agreed
 - [ ] Phone number, email, address and company number replaced (no placeholders left)
 - [ ] Self-Managed "Sign up" button tried on a phone and a computer
 - [ ] "Ask a question" form delivers to the right inbox

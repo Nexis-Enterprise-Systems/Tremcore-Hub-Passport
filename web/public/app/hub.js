@@ -462,7 +462,7 @@
         return h('section', { class: 'card enq' },
           h('div', { class: 'titlerow' }, h('h2', {}, e.name + (e.company ? ' · ' + e.company : '')), h('span', { class: 'muted' }, new Date(e.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))),
           h('p', {}, h('a', { href: 'mailto:' + e.email }, e.email), e.phone ? ' · ' : '', e.phone ? h('a', { href: 'tel:' + e.phone.replace(/[^\d+]/g, '') }, e.phone) : null),
-          h('p', { class: 'muted' }, [e.sites ? SITES[e.sites] : null, e.package_interest ? 'Interested in Self-Managed' : null].filter(Boolean).join(' · ')),
+          h('p', { class: 'muted' }, [e.sites ? SITES[e.sites] : null, e.package_interest ? 'Interested in ' + (e.package_interest === 'managed_service' ? 'Managed Service' : 'Self-Managed') : null].filter(Boolean).join(' · ')),
           e.message ? h('p', { class: 'quote' }, e.message) : null,
           h('div', { class: 'grid2' }, h('div', { class: 'f' }, h('label', {}, 'Status'), st), h('div', { class: 'f' }, h('label', {}, 'Notes'), nt)),
           h('div', { class: 'actions' }, save, out));
@@ -476,6 +476,10 @@
     const rows = await q(ctx.sb.from('app_settings').select('key,value').eq('key', 'self_signup_open'));
     if (my !== token) return;
     const open = rows.length > 0 && rows[0].value === true;
+    const areaRows = await q(ctx.sb.from('app_settings').select('key,value').in('key', ['managed_base', 'managed_radius_miles']));
+    if (my !== token) return;
+    const base = (areaRows.find((r) => r.key === 'managed_base') || {}).value || null;
+    const radius = (areaRows.find((r) => r.key === 'managed_radius_miles') || {}).value;
     const out = h('div');
     const btn = h('button', { class: 'btn small' + (open ? ' danger' : ''), onclick: async () => {
       await busy(btn, async () => {
@@ -493,7 +497,47 @@
           ? 'Businesses can create their own Self-Managed account from the website and the sign-in page. Each one starts as a trial with no charge, and appears under Clients marked “Self sign-up”.'
           : 'Sign-up is closed. The website shows only “Book a demo” and nobody can create an account for themselves.'),
         h('p', { class: 'hint' }, 'Before opening: in Supabase switch on email sign-ups and “Confirm email”, add the site address to the allowed redirect URLs, and have the Terms and Privacy pages checked and finished.'),
-        btn, out));
+        btn, out),
+      managedCard(base, radius));
+  }
+
+  // Where the Managed Service is offered: a base point and a distance in miles (straight-line).
+  function managedCard(base, radius) {
+    const box = h('div');
+    const label = text(base ? base.label : '', { 'aria-label': 'Name of the area' });
+    const pc = text('', { placeholder: 'Leave blank to keep the current point', 'aria-label': 'Base postcode', autocomplete: 'off' });
+    const miles = text(radius != null ? String(radius) : '30', { inputmode: 'numeric', 'aria-label': 'Distance in miles' });
+    const save = h('button', { class: 'btn small', type: 'submit' }, 'Save area');
+    const form = h('form', { novalidate: true, onsubmit: async (e) => {
+      e.preventDefault();
+      const mi = Number(miles.value.trim());
+      if (!Number.isInteger(mi) || mi < 1 || mi > 300) return note(box, 'err', 'Enter the distance as a whole number of miles, between 1 and 300.');
+      if (!label.value.trim()) return note(box, 'err', 'Give the area a short name, for example Medway (ME).');
+      await busy(save, async () => {
+        try {
+          let point = base ? { lat: base.lat, lng: base.lng } : null;
+          if (pc.value.trim()) {
+            const r = await fetch('/api/postcode?postcode=' + encodeURIComponent(pc.value.trim()), { headers: { Accept: 'application/json' } });
+            const j = await r.json();
+            if (!j.ok) throw new Error(j.error || 'postcode not found');
+            point = { lat: j.lat, lng: j.lng };
+          }
+          if (!point) throw new Error('enter a base postcode');
+          const now = new Date().toISOString();
+          const a = await q(ctx.sb.from('app_settings').update({ value: { label: label.value.trim(), lat: point.lat, lng: point.lng }, updated_at: now }).eq('key', 'managed_base').select());
+          const b = await q(ctx.sb.from('app_settings').update({ value: mi, updated_at: now }).eq('key', 'managed_radius_miles').select());
+          if (!a || !a.length || !b || !b.length) throw new Error('only a Tremcore administrator can change this');
+          note(box, 'ok', 'Saved. The website postcode check now uses this area.');
+        } catch (err) { note(box, 'err', 'Not saved: ' + err.message); }
+      });
+    } },
+      h('div', { class: 'grid2' }, field('m-label', 'Name of the area', label), field('m-miles', 'Distance (miles, in a straight line)', miles)),
+      field('m-pc', 'New base postcode (optional)', pc), save, box);
+    return h('section', { class: 'card' },
+      h('div', { class: 'titlerow' }, h('h2', {}, 'Managed Service area')),
+      h('p', {}, base ? 'The Managed Service is offered within ' + (radius != null ? radius : '?') + ' miles of ' + base.label + '.' : 'No area has been set yet, so the website postcode check will not work.'),
+      h('p', { class: 'muted' }, 'Measured in a straight line from the base point. Visitors check their own postcode on the website; you still agree each plan by hand.'),
+      form);
   }
 
   // ---------- routing ----------

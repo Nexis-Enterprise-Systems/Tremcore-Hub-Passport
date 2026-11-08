@@ -67,11 +67,26 @@ const USERS = {
 
   // --- enquiry form endpoint (Supabase is faked; real fetch passes through) ---
   const realFetch = global.fetch; const sent = [];
-  global.fetch = (u, o) => String(u).startsWith(process.env.SUPABASE_URL) ? (sent.push({ u: String(u), o }), Promise.resolve(new Response(null, { status: 201 }))) : realFetch(u, o);
+  const PC = { 'ME44TL': { latitude: 51.381, longitude: 0.527 }, 'NR11AA': { latitude: 52.63, longitude: 1.29 }, 'ME14AA': { latitude: 51.39, longitude: 0.50 } };
+  let pcDown = false;
+  global.fetch = (u, o) => {
+    const url = String(u);
+    if (url.startsWith('https://api.postcodes.io/postcodes/')) {
+      if (pcDown) return Promise.resolve(new Response('x', { status: 500 }));
+      const hit = PC[decodeURIComponent(url.split('/').pop()).replace(/\s/g, '')];
+      return Promise.resolve(hit ? new Response(JSON.stringify({ status: 200, result: hit }), { status: 200 }) : new Response('{"status":404}', { status: 404 }));
+    }
+    if (url.startsWith(process.env.SUPABASE_URL)) {
+      sent.push({ u: url, o });
+      return Promise.resolve(url.endsWith('/rpc/managed_area') ? new Response(JSON.stringify([{ label: 'Medway (ME)', lat: 51.385, lng: 0.52, radius_miles: 30 }]), { status: 200 }) : new Response(null, { status: 201 }));
+    }
+    return realFetch(u, o);
+  };
   const post = (body, h) => realFetch(base + '/api/enquiry', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json' }, h || {}), body: JSON.stringify(body) });
   let r = await post({ name: 'Sam', email: 'sam@example.com', sites: '2-5', package: '1', message: 'Hi' });
   check('enquiry is stored through the public key only', r.status === 200 && sent.length === 1 && sent[0].u.endsWith('/rest/v1/enquiries') && sent[0].o.headers.apikey === 'anon-public-key' && !JSON.stringify(sent[0]).includes('SERVICE-SECRET'));
   check('enquiry fields are mapped', JSON.parse(sent[0].o.body).package_interest === 'self_managed' && JSON.parse(sent[0].o.body).sites === '2-5');
+  r = await post({ name: 'Sam', email: 'sam@example.com', package: '2' }); check('enquiry about Managed Service is stored as such', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).package_interest === 'managed_service');
   r = await post({ name: '', email: 'sam@example.com' }); check('enquiry needs a name', r.status === 422);
   r = await post({ name: 'Sam', email: 'nope' }); check('enquiry needs a valid email', r.status === 422);
   const before = sent.length; r = await post({ name: 'Bot', email: 'b@example.com', website: 'http://spam' });
@@ -81,6 +96,16 @@ const USERS = {
   check('huge enquiry is refused', r.status === 413 || r.status === 429);
   r = await realFetch(base + '/api/enquiry', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'name=Sam&email=sam%40example.com', redirect: 'manual' });
   check('plain form post (no JavaScript) redirects back with a thank-you', r.status === 303 || r.status === 429);
+  // --- Managed Service postcode check ---
+  const mc = async (pc) => { const x = await realFetch(base + '/api/managed-check?postcode=' + encodeURIComponent(pc)); return { s: x.status, j: await x.json() }; };
+  let m = await mc('ME4 4TL'); check('a postcode inside the area is available', m.s === 200 && m.j.available === true && m.j.area === 'Medway (ME)' && m.j.radius_miles === 30);
+  m = await mc('me14aa'); check('postcodes are accepted without a space and in lower case', m.j.available === true);
+  m = await mc('NR1 1AA'); check('a postcode far away is not available', m.s === 200 && m.j.available === false);
+  check('the answer reveals no distance or coordinates', !JSON.stringify(m.j).match(/lat|lng|miles_away|distance/));
+  m = await mc('ZZ1 1ZZ'); check('an unknown postcode is explained', m.s === 404 && m.j.error.includes('could not find'));
+  m = await mc('hello'); check('something that is not a postcode is refused', m.s === 422);
+  pcDown = true; m = await mc('ME4 4TL'); check('if the postcode service is down, visitors are told to call', m.s === 502 && m.j.error.includes('call us')); pcDown = false;
+  const pr = await (await realFetch(base + '/api/postcode?postcode=ME4%204TL')).json(); check('the hub can turn a postcode into a point', pr.ok && Math.abs(pr.lat - 51.381) < 0.001 && pr.postcode === 'ME4 4TL');
   global.fetch = realFetch;
 
   // --- sign-in ---
@@ -185,7 +210,7 @@ const USERS = {
       { id: C1, name: 'Harbour Cafe Group', level: 1, subscription: 'active', monthly_value_pence: 4900, require_mfa: false, contact_email: 'ops@harbour.example', created_at: '2026-10-01' },
       { id: C2, name: 'Quay Offices Ltd', level: 2, subscription: 'trial', monthly_value_pence: 0, require_mfa: true, created_at: '2026-10-02' },
       { id: C3, name: 'Online Bakery Ltd', level: 1, subscription: 'trial', monthly_value_pence: 0, require_mfa: false, source: 'self_signup', contact_name: 'Bea Baker', contact_email: 'bea@bakery.example', created_at: '2026-11-08' }],
-    app_settings: [{ key: 'self_signup_open', value: false }],
+    app_settings: [{ key: 'self_signup_open', value: false }, { key: 'managed_base', value: { label: 'Medway (ME)', lat: 51.385, lng: 0.52 } }, { key: 'managed_radius_miles', value: 30 }],
     properties: [{ id: P1, company_id: C1, name: 'Harbour Cafe Ipswich', address: '1 Quay Road' }, { id: P2, company_id: C1, name: 'Harbour Cafe Colchester' }, { id: P3, company_id: C2, name: 'Quay House' }],
     compliance_items: [
       { id: 'i1', property_id: P1, grp: 'Fire safety', title: 'Fire risk assessment', basis: 'legal', frequency_months: 12, due_date: day(120), notes: '' },
@@ -415,8 +440,14 @@ const USERS = {
     check('their page tells staff who to contact and what to do next', (await pg.locator('.msg.ok').innerText()).includes('bea@bakery.example') && (await pg.locator('.msg.ok').innerText()).includes('Active'));
     await pg.click('.hubnav >> text=Settings'); await pg.waitForSelector('text=Self-Managed sign-up');
     check('settings shows sign-up as closed with what to do before opening', (await pg.locator('.badge:has-text("Closed")').count()) === 1 && (await pg.locator('.hint').innerText()).includes('Confirm email'));
+    check('settings shows the Managed Service area: Medway, 30 miles', (await pg.locator('text=within 30 miles of Medway (ME)').count()) === 1);
+    await pg.fill('#m-miles', '0'); await pg.click('button:has-text("Save area")'); await pg.waitForSelector('.msg.err');
+    check('a silly distance is refused', (await pg.locator('.msg.err').innerText()).includes('between 1 and 300'));
+    await pg.fill('#m-miles', '25'); await pg.click('button:has-text("Save area")'); await pg.waitForSelector('.msg.ok:has-text("Saved. The website")');
+    const ar = await dbCalls(pg, "x.table==='app_settings'&&x.op==='update'&&x.filters[0]==='key=managed_radius_miles'");
+    check('the new distance is saved without moving the base point', ar.length === 1 && ar[0].payload.value === 25);
     await pg.click('button:has-text("Open sign-up")'); await pg.waitForSelector('.badge:has-text("Open")');
-    const sw = (await dbCalls(pg, "x.table==='app_settings'&&x.op==='update'"))[0];
+    const sw = (await dbCalls(pg, "x.table==='app_settings'&&x.op==='update'&&x.filters[0]==='key=self_signup_open'"))[0];
     check('opening sign-up changes only the sign-up setting', sw.payload.value === true && sw.filters[0] === 'key=self_signup_open');
     await pg.click('button:has-text("Close sign-up")'); await pg.waitForSelector('.badge:has-text("Closed")');
     check('sign-up can be closed again', true);
@@ -445,6 +476,19 @@ const USERS = {
     await pg.goto(base + '/');
     check('website shows no passport sign-in', (await pg.locator('text=Sign in').count()) === 0 && (await pg.locator('a[href="/app/"]').count()) >= 1);
     check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
+    await pg.goto(base + '/what-you-get/');
+    let areaReply = { ok: true, available: true };
+    await pg.route('**/api/managed-check*', (rt) => rt.fulfill({ status: areaReply.ok ? 200 : 422, contentType: 'application/json', body: JSON.stringify(areaReply) }));
+    check('website offers Managed Service with its area stated, but no request button until checked', (await pg.locator('#managed').innerText()).includes('30 miles of Medway') && (await pg.locator('#area-ask').isHidden()));
+    await pg.fill('#area-pc', 'ME4 4TL'); await pg.click('#area-go'); await pg.waitForSelector('#area-ask:visible');
+    check('a postcode inside the area shows the good news and the request button', (await pg.locator('#area-out').innerText()).includes('Good news') && (await pg.locator('#area-ask').getAttribute('href')) === '/contact/?package=2');
+    areaReply = { ok: true, available: false };
+    await pg.click('#area-go'); await pg.waitForFunction(() => document.querySelector('#area-out').textContent.includes('not available'));
+    check('a postcode outside the area is told so and points to Self-Managed', (await pg.locator('#area-ask').isHidden()) && (await pg.locator('#area-out').innerText()).includes('Self-Managed works anywhere'));
+    areaReply = { ok: false, error: 'Please enter a full UK postcode, for example ME4 4TL.' };
+    await pg.click('#area-go'); await pg.waitForFunction(() => document.querySelector('#area-out').textContent.includes('full UK postcode'));
+    check('a bad postcode shows the server message', true);
+    await pg.goto(base + '/contact/?package=2'); check('contact form arrives with Managed Service chosen', (await pg.locator('#f-pkg').inputValue()) === '2');
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
     check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
     check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);

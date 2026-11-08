@@ -77,7 +77,7 @@ async function handleEnquiry(req, res) {
   if (!d || typeof d !== 'object') return reply(400, { error: 'Sorry, that could not be read.' });
   if (clip(d.website, 50)) return reply(200, { ok: true }); // hidden field filled in: a bot. Pretend all is well.
   const row = { name: clip(d.name, 120), company: clip(d.company, 160), email: clip(d.email, 200), phone: clip(d.phone, 40),
-    sites: ['1', '2-5', '6-20', '20+'].includes(d.sites) ? d.sites : null, package_interest: d.package === '1' ? 'self_managed' : null, message: clip(d.message, 2000) };
+    sites: ['1', '2-5', '6-20', '20+'].includes(d.sites) ? d.sites : null, package_interest: d.package === '1' ? 'self_managed' : d.package === '2' ? 'managed_service' : null, message: clip(d.message, 2000) };
   if (!row.name) return reply(422, { error: 'Please tell us your name.' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) return reply(422, { error: 'Please check your email address.' });
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return reply(503, { error: 'Sorry, enquiries are not switched on yet. Please call us.' });
@@ -90,10 +90,56 @@ async function handleEnquiry(req, res) {
   return reply(200, { ok: true });
 }
 
+// ---- Managed Service postcode check. Two small lookups that return only what the page needs; nothing is stored.
+// The postcode service (postcodes.io) is free and public. The area itself (base point and miles) is read from the database's public managed_area().
+const lookups = new Map();
+function lookupLimited(ip) {
+  const now = Date.now(), recent = (lookups.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
+  recent.push(now); lookups.set(ip, recent);
+  if (lookups.size > 5000) for (const [k, v] of lookups) if (!v.some((t) => now - t < 600000)) lookups.delete(k);
+  return recent.length > 30;
+}
+function cleanPostcode(v) {
+  const t = String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return /^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$/.test(t) ? t.slice(0, -3) + ' ' + t.slice(-3) : null;
+}
+async function geocode(postcode) {
+  const r = await fetch('https://api.postcodes.io/postcodes/' + encodeURIComponent(postcode), { signal: AbortSignal.timeout(6000) });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('postcode service ' + r.status);
+  const j = await r.json();
+  return j && j.result && typeof j.result.latitude === 'number' && typeof j.result.longitude === 'number' ? { lat: j.result.latitude, lng: j.result.longitude } : null;
+}
+function miles(a, b) {
+  const rad = (d) => d * Math.PI / 180, dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 3958.8 * 2 * Math.asin(Math.sqrt(x));
+}
+async function handleLookup(req, res, pathname, query) {
+  const reply = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (lookupLimited(ip)) return reply(429, { error: 'Too many checks. Please try again in a few minutes, or call us.' });
+  const pc = cleanPostcode(query.get('postcode') || query.get('pc'));
+  if (!pc) return reply(422, { error: 'Please enter a full UK postcode, for example ME4 4TL.' });
+  try {
+    const here = await geocode(pc);
+    if (!here) return reply(404, { error: 'We could not find that postcode. Please check it and try again.' });
+    if (pathname === '/api/postcode') return reply(200, { ok: true, postcode: pc, lat: here.lat, lng: here.lng });
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return reply(503, { error: 'This check is not switched on yet. Please call us.' });
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/managed_area', { method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(6000) });
+    const rows = r.ok ? await r.json() : null;
+    const a = rows && rows[0];
+    if (!a) return reply(502, { error: 'Sorry, we could not check that just now. Please call us.' });
+    return reply(200, { ok: true, available: miles({ lat: a.lat, lng: a.lng }, here) <= a.radius_miles, area: a.label, radius_miles: a.radius_miles });
+  } catch (e) { console.error('lookup error', e.message); return reply(502, { error: 'Sorry, we could not check that just now. Please call us.' }); }
+}
+
 const server = http.createServer((req, res) => {
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return send(res, 400, 'Bad request'); }
   if (req.method === 'POST' && pathname === '/api/enquiry') return handleEnquiry(req, res);
+  if (req.method === 'GET' && (pathname === '/api/managed-check' || pathname === '/api/postcode')) return handleLookup(req, res, pathname, new URL(req.url, 'http://x').searchParams);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
 
   if (pathname === '/healthz') return send(res, 200, 'ok', { 'Content-Type': 'text/plain' });

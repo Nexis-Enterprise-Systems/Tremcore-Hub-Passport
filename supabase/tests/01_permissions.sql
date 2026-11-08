@@ -203,9 +203,9 @@ do $$ begin
 end $$;
 select 'signup: anonymous visitors cannot read settings or call sign-up' as test, true as ok;
 select * from chk('settings: client cannot read', :'superA', 'aal2', 'select count(*)=0 from app_settings');
-select * from chk('settings: client cannot switch sign-up on', :'superA', 'aal2', $$with u as (update app_settings set value='true'::jsonb returning 1) select count(*)=0 from u$$);
-select * from chk('settings: staff without 2FA cannot switch sign-up on', :'staff', 'aal1', $$with u as (update app_settings set value='true'::jsonb returning 1) select count(*)=0 from u$$);
-select * from chk('settings: administrator with 2FA can switch sign-up on', :'staff', 'aal2', $$with u as (update app_settings set value='true'::jsonb returning 1) select count(*)=1 from u$$);
+select * from chk('settings: client cannot switch sign-up on', :'superA', 'aal2', $$with u as (update app_settings set value='true'::jsonb where key='self_signup_open' returning 1) select count(*)=0 from u$$);
+select * from chk('settings: staff without 2FA cannot switch sign-up on', :'staff', 'aal1', $$with u as (update app_settings set value='true'::jsonb where key='self_signup_open' returning 1) select count(*)=0 from u$$);
+select * from chk('settings: administrator with 2FA can switch sign-up on', :'staff', 'aal2', $$with u as (update app_settings set value='true'::jsonb where key='self_signup_open' returning 1) select count(*)=1 from u$$);
 select 'signup: now open to everyone' as test, signup_open() as ok;
 
 -- open: happy path
@@ -266,4 +266,28 @@ do $$ begin
 end $$;
 select 'signup: annual billing choice is recorded, still a Level 1 trial with no charge' as test,
   exists (select 1 from companies where name='Annual Co' and billing_interval='annual' and level=1 and subscription='trial' and monthly_value_pence=0) as ok;
+rollback;
+
+-- Managed Service area (migration 0006) -------------------------------------------
+begin;
+select 'managed area: starts at Medway, 30 miles' as test,
+  exists (select 1 from managed_area() where label='Medway (ME)' and radius_miles=30) as ok;
+do $$ declare n int; begin
+  set local role anon;
+  select count(*) into n from managed_area();
+  if n <> 1 then raise exception 'anon cannot read the managed area'; end if;
+  begin perform count(*) from app_settings; raise exception 'anon read settings'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'managed area: visitors can read the area but not the settings table' as test, true as ok;
+select * from chk('managed area: a client cannot move the area', :'superA', 'aal2', $$with u as (update app_settings set value='500'::jsonb where key='managed_radius_miles' returning 1) select count(*)=0 from u$$);
+select * from chk('managed area: an administrator with 2FA can change the distance', :'staff', 'aal2', $$with u as (update app_settings set value='20'::jsonb where key='managed_radius_miles' returning 1) select count(*)=1 from u$$);
+select 'managed area: the change is seen by the public function' as test, exists (select 1 from managed_area() where radius_miles=20) as ok;
+do $$ begin
+  set local role anon;
+  insert into enquiries(name,email,package_interest) values ('Sam','sam@example.com','managed_service');
+  begin insert into enquiries(name,email,package_interest) values ('Sam','sam@example.com','free_stuff'); raise exception 'odd package accepted'; exception when check_violation then null; end;
+  reset role;
+end $$;
+select 'managed area: enquiries may ask about Managed Service and nothing unknown' as test, true as ok;
 rollback;
