@@ -214,7 +214,7 @@ const USERS = {
     check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Enquiries,Settings');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Revenue,Enquiries,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
@@ -297,6 +297,13 @@ const USERS = {
     check('subscription status and value are saved in pence', su && su.payload.subscription === 'active');
     await p.fill('input[aria-label="Monthly value for Quay Offices Ltd"]', 'lots'); await p.locator('tr:has-text("Quay Offices") button:has-text("Save")').click();
     check('bad subscription value is refused without saving', (await p.locator('tr:has-text("Quay Offices")').innerText()).includes('Enter pounds'));
+
+    // revenue & growth
+    await p.click('.hubnav >> text=Revenue'); await p.waitForSelector('text=Revenue by package');
+    const rv = await p.locator('.tiles').innerText();
+    check('revenue page shows MRR (49.00 + 59.50 + 25.00) and yearly run rate', rv.includes('£133.50') && rv.includes('£1,602.00'));
+    check('revenue page shows paying client count and average', rv.includes('44.50'));
+    check('revenue page lists biggest paying clients and new-client months', (await p.locator('text=Biggest paying clients').count()) === 1 && (await p.locator('text=New clients, last 6 months').count()) === 1);
 
     // enquiries
     await p.click('.hubnav >> text=Enquiries'); await p.waitForSelector('.enq');
@@ -416,7 +423,7 @@ const USERS = {
     await t.ctx.close();
 
     t = await hubPage(null, 'staffonly@t'); pg = t.page;
-    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Enquiries');
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Revenue,Enquiries');
     await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
     check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
     await t.ctx.close();
@@ -437,7 +444,7 @@ const USERS = {
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
     check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
     signupOpen = true; await pg.goto(base + '/what-you-get/'); await pg.waitForSelector('[data-signup]:visible');
-    check('website shows "Create an account" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
+    check('website shows "Sign up" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
     signupOpen = false;
     for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
     await pg.goto(base + '/');

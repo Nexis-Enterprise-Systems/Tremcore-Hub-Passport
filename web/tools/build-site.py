@@ -10,7 +10,7 @@ PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path
 LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="#d4af55" stroke-width="1.4"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="#d4af55" stroke-width="1.4"/></svg>'
 NAV = [('/', 'Home'), ('/passport/', 'The passport'), ('/what-you-get/', 'What you get'), ('/how-it-works/', 'How it works'), ('/contact/', 'Contact')]
 
-SIGNUP = '<a class="btn ghost" data-signup hidden href="/app/?signup=1">Create an account</a>'   # shown by site.js only while Tremcore has sign-up switched on
+SIGNUP = '<a class="btn solid" data-signup hidden href="/app/?signup=1">Sign up</a>'   # shown by site.js only while Tremcore has sign-up switched on
 
 def page(path, title, desc, body, current, noindex=False):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)
@@ -108,7 +108,7 @@ demo = f'''<div class="demo-head"><div><div class="eyebrow">See it in action</di
 what = f'''<section class="sec"><div class="wrap"><div class="eyebrow">What you get</div><h2 class="h2">One passport, quoted to suit your premises</h2><p class="lead">Tell us about your sites and we&rsquo;ll put together a quote that fits.</p>
 <article class="plan-card"><div class="eyebrow">The Compliance Passport</div><h3 class="h3" style="font-size:36px">Self-Managed</h3><p style="color:var(--mute)">For businesses that want to keep their own records and arrange their own inspections.</p>
 <ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li><li>A Call Tremcore button whenever you need help</li></ul>
-<div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px"><a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn solid" href="/contact/?package=1">Book a demo</a>{SIGNUP}</div></div></article>
+<div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px">{SIGNUP}<a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn ghost" href="/contact/?package=1">Ask a question</a></div></div></article>
 <div id="demo">{demo}</div></div></section>''' + cta('Want to see it around your premises?','Tell us about your premises and we&rsquo;ll show you how it would work.')
 how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it works</div><h2 class="h2">Simple to start. Easy to live with.</h2>
 <ol class="steps"><li><span class="no">01</span><div class="h3">Tell us about your premises</div><p>A short call to understand your sites and what you need to keep track of.</p></li><li><span class="no">02</span><div class="h3">We set up your passport</div><p>Each property gets its own passport, ready to use on your phone or computer.</p></li><li><span class="no">03</span><div class="h3">Stay on top of it</div><p>Keep your records up to date and watch the colours stay green.</p></li></ol></div></section>

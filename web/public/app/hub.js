@@ -13,7 +13,7 @@
   const ROLE = { client_super: 'Head office', client_site: 'Site user', tremcore_admin: 'Tremcore administrator', tremcore_staff: 'Tremcore staff' };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['subscriptions', 'Subscriptions'], ['enquiries', 'Enquiries'], ['settings', 'Settings']];
+  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['subscriptions', 'Subscriptions'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['settings', 'Settings']];
   const navFor = () => NAV.filter((n) => n[0] !== 'settings' || (ctx && ctx.req.role_name === 'tremcore_admin'));
 
   let ctx = null, token = 0;
@@ -404,6 +404,44 @@
         }) : [h('tr', {}, h('td', { colspan: '5', class: 'muted' }, 'No clients yet.'))]))));
   }
 
+  // ---------- Revenue & growth ----------
+  async function pageRevenue(my) {
+    chrome('revenue', h('h1', {}, 'Revenue & growth'), loading());
+    const companies = await q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,source,created_at'));
+    if (my !== token) return;
+    const active = companies.filter((c) => c.subscription === 'active');
+    const mrr = active.reduce((t, c) => t + (c.monthly_value_pence || 0), 0);
+    const count = (st) => companies.filter((c) => c.subscription === st).length;
+    const ever = companies.filter((c) => c.subscription !== 'trial').length;
+    const conv = companies.length ? Math.round((active.length / companies.length) * 100) + '%' : '-';
+    const avg = active.length ? money(Math.round(mrr / active.length)) : '-';
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push({ key: d.getFullYear() + '-' + d.getMonth(), label: d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), n: 0, self: 0 }); }
+    companies.forEach((c) => { const d = new Date(c.created_at); const m = months.find((x) => x.key === d.getFullYear() + '-' + d.getMonth()); if (m) { m.n += 1; if (c.source === 'self_signup') m.self += 1; } });
+    const byLevel = [1, 2, 3].map((l) => { const rows = active.filter((c) => c.level === l); return { l, n: rows.length, v: rows.reduce((t, c) => t + (c.monthly_value_pence || 0), 0) }; }).filter((r) => r.l !== 3 || r.n);
+    const top = active.slice().sort((a, b) => (b.monthly_value_pence || 0) - (a.monthly_value_pence || 0)).slice(0, 5);
+    const noValue = active.filter((c) => !c.monthly_value_pence).length;
+    chrome('revenue', h('h1', {}, 'Revenue & growth'),
+      h('div', { class: 'tiles' },
+        tile('Monthly recurring revenue', money(mrr)), tile('Yearly run rate', money(mrr * 12)),
+        tile('Paying clients', String(active.length)), tile('Average per paying client', avg),
+        tile('On trial', String(count('trial'))), tile('Past due', String(count('past_due'))),
+        tile('Cancelled', String(count('cancelled'))), tile('Trial to paying', conv)),
+      noValue ? h('div', { class: 'msg' }, noValue + ' active client' + (noValue === 1 ? ' has' : 's have') + ' no monthly value set, so the figures above are low. Set them on the Subscriptions page.') : null,
+      h('p', { class: 'hint' }, 'Based on the subscriptions and monthly values you record by hand. When Stripe is connected these will fill in automatically. Figures exclude VAT.'),
+      h('div', { class: 'grid2' },
+        h('div', { class: 'card' }, h('h2', {}, 'Revenue by package'), h('div', { class: 'tablewrap' }, h('table', {},
+          h('thead', {}, h('tr', {}, ['Package', 'Paying', 'Monthly'].map((x) => h('th', {}, x)))),
+          h('tbody', {}, byLevel.length ? byLevel.map((r) => h('tr', {}, h('td', {}, LEVELS[r.l]), h('td', { class: 'num' }, String(r.n)), h('td', { class: 'num' }, money(r.v)))) : [h('tr', {}, h('td', { colspan: '3', class: 'muted' }, 'No paying clients yet.'))])))),
+        h('div', { class: 'card' }, h('h2', {}, 'New clients, last 6 months'), h('div', { class: 'tablewrap' }, h('table', {},
+          h('thead', {}, h('tr', {}, ['Month', 'New', 'Self sign-ups'].map((x) => h('th', {}, x)))),
+          h('tbody', {}, months.map((m) => h('tr', {}, h('td', {}, m.label), h('td', { class: 'num' }, String(m.n)), h('td', { class: 'num' }, String(m.self)))))))),
+        h('div', { class: 'card' }, h('h2', {}, 'Biggest paying clients'), h('div', { class: 'tablewrap' }, h('table', {},
+          h('thead', {}, h('tr', {}, ['Client', 'Monthly'].map((x) => h('th', {}, x)))),
+          h('tbody', {}, top.length ? top.map((c) => h('tr', {}, h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name)), h('td', { class: 'num' }, money(c.monthly_value_pence)))) : [h('tr', {}, h('td', { colspan: '2', class: 'muted' }, 'No paying clients yet.'))]))))));
+  }
+
   // ---------- Enquiries ----------
   async function pageEnquiries(my) {
     chrome('enquiries', h('h1', {}, 'Enquiries'), loading());
@@ -465,6 +503,7 @@
       else if (a === 'sites' && id && UUID.test(id)) await pageSite(my, id);
       else if (a === 'clients') await pageClients(my);
       else if (a === 'subscriptions') await pageSubscriptions(my);
+      else if (a === 'revenue') await pageRevenue(my);
       else if (a === 'enquiries') await pageEnquiries(my);
       else if (a === 'settings' && ctx.req.role_name === 'tremcore_admin') await pageSettings(my);
       else await pageDashboard(my);
