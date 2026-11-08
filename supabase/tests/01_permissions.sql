@@ -436,8 +436,8 @@ end $$;
 update companies set extra_seats=1 where id='10000000-0000-0000-0000-0000000000f1';
 insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000f4','Fourth','client_site','10000000-0000-0000-0000-0000000000f1','view');
 select 'seats: a goodwill seat granted by Tremcore allows one more' as test, true as ok;
-select 'extras: catalogue has Toolbox Talks at 3.99 and Staff Sign In/Out at 4.99' as test,
-  (select price_pence from extras where code='toolbox_talks')=399 and (select price_pence from extras where code='staff_signin')=499 as ok;
+select 'extras: Toolbox Talks is 3.99 per company; Staff Sign In/Out is 6.99 per site' as test,
+  (select price_pence=399 and charged_per='company' from extras where code='toolbox_talks') and (select price_pence=699 and charged_per='site' from extras where code='staff_signin') as ok;
 insert into company_extras(company_id,extra_code,price_pence) values ('10000000-0000-0000-0000-00000000000a','toolbox_talks',399);
 select * from chk('extras: a client sees its own extras', :'superA', 'aal2', $$select count(*)=1 from company_extras$$);
 select * from chk('extras: another company sees none of them', :'superB', 'aal2', $$select count(*)=0 from company_extras$$);
