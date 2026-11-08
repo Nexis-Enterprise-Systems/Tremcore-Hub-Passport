@@ -9,6 +9,9 @@ catch { ({ chromium } = require('/home/claude/.npm-global/lib/node_modules/playw
 process.env.SUPABASE_URL = 'https://example-project.supabase.co';
 process.env.SUPABASE_ANON_KEY = 'anon-public-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'SERVICE-SECRET-MUST-NEVER-LEAK';
+process.env.STRIPE_SECRET_KEY = 'sk_test_FAKE-MUST-NEVER-LEAK';
+process.env.STRIPE_WEBHOOK_SECRET = 'whsec_testsecret';
+process.env.STRIPE_API_BASE = 'https://stripe.test';
 const server = require('../server.js');
 const mockJs = fs.readFileSync(path.join(__dirname, 'mock-supabase.js'), 'utf8');
 
@@ -69,8 +72,12 @@ const USERS = {
   const realFetch = global.fetch; const sent = [];
   const PC = { 'ME44TL': { latitude: 51.381, longitude: 0.527 }, 'NR11AA': { latitude: 52.63, longitude: 1.29 }, 'ME14AA': { latitude: 51.39, longitude: 0.50 } };
   let pcDown = false;
+  const stripeCalls = [], applied = []; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   global.fetch = (u, o) => {
     const url = String(u);
+    if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/apply_stripe_event') { applied.push({ u: url, o, body: JSON.parse(o.body) }); return Promise.resolve(new Response(JSON.stringify(applyResult), { status: applyStatus })); }
     if (url.startsWith('https://api.postcodes.io/postcodes/')) {
       if (pcDown) return Promise.resolve(new Response('x', { status: 500 }));
       const hit = PC[decodeURIComponent(url.split('/').pop()).replace(/\s/g, '')];
@@ -96,6 +103,52 @@ const USERS = {
   check('huge enquiry is refused', r.status === 413 || r.status === 429);
   r = await realFetch(base + '/api/enquiry', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'name=Sam&email=sam%40example.com', redirect: 'manual' });
   check('plain form post (no JavaScript) redirects back with a thank-you', r.status === 303 || r.status === 429);
+  // --- payments: Stripe Checkout and the Stripe webhook (Stripe and Supabase are faked) ---
+  {
+    const billing = require('../billing.js'); const crypto = require('crypto');
+    const co = (b) => realFetch(base + '/api/checkout', { method: 'POST', headers: Object.assign({ Authorization: 'Bearer user-token' }, b || {}) });
+    let rr = await co();
+    const sp = new URLSearchParams(stripeCalls[0] && stripeCalls[0].o.body);
+    check('pay: a signed-in head-office user is sent to a Stripe page', rr.status === 200 && (await rr.json()).url.startsWith('https://checkout.stripe.test/'));
+    check('pay: their company is looked up with their own token, not any shared key', sent.filter((x) => x.u.endsWith('/rpc/billing_info')).pop().o.headers.Authorization === 'Bearer user-token');
+    check('pay: 3 sites monthly = one first-site line and two extra-site lines, in GBP, as a subscription', sp.get('mode') === 'subscription' && sp.get('line_items[0][price_data][unit_amount]') === '1499' && sp.get('line_items[0][quantity]') === '1' && sp.get('line_items[1][price_data][unit_amount]') === '799' && sp.get('line_items[1][quantity]') === '2' && sp.get('line_items[0][price_data][currency]') === 'gbp' && sp.get('line_items[0][price_data][recurring][interval]') === 'month');
+    check('pay: the company is attached to the payment so we know who paid', sp.get('client_reference_id') === 'co-1' && sp.get('metadata[company_id]') === 'co-1' && sp.get('subscription_data[metadata][company_id]') === 'co-1' && sp.get('customer_email') === 'pat@acme.example');
+    check('pay: card only until Direct Debit is switched on in Stripe', sp.get('payment_method_types[0]') === 'card' && !sp.get('payment_method_types[1]'));
+    check('pay: Stripe is called with the secret key, which never appears in anything sent back', stripeCalls[0].o.headers.Authorization === 'Basic ' + Buffer.from('sk_test_FAKE-MUST-NEVER-LEAK:').toString('base64'));
+    billingRows = [Object.assign({}, billingRows[0], { sites: 1, billing_interval: 'annual' })]; await co(); const sp2 = new URLSearchParams(stripeCalls[1].o.body);
+    check('pay: 1 site yearly = £152.90 a year and no extra-site line', sp2.get('line_items[0][price_data][unit_amount]') === '15290' && sp2.get('line_items[0][price_data][recurring][interval]') === 'year' && !sp2.get('line_items[1][quantity]'));
+    rr = await realFetch(base + '/api/checkout', { method: 'POST' }); check('pay: no sign-in, no payment page', rr.status === 401);
+    rr = await co({ Origin: 'https://evil.example' }); check('pay: another website cannot start a payment', rr.status === 403);
+    billingAuthOk = false; rr = await co(); check('pay: an expired or false sign-in token is refused', rr.status === 401); billingAuthOk = true;
+    const saved = billingRows; billingRows = []; rr = await co(); check('pay: someone who is not a head-office user is refused', rr.status === 403);
+    billingRows = [Object.assign({}, saved[0], { subscription: 'active' })]; rr = await co(); check('pay: an account that has already paid is not charged again', rr.status === 409); billingRows = saved;
+    stripeFail = true; rr = await co(); check('pay: if Stripe refuses, the person gets a plain message, not an error dump', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
+    // webhook
+    const evt = (type, obj, id) => JSON.stringify({ id: id || 'evt_' + type, type, data: { object: obj } });
+    const sign = (body, secret, t) => { const ts = t || Math.floor(Date.now() / 1000); return 't=' + ts + ',v1=' + crypto.createHmac('sha256', secret || 'whsec_testsecret').update(ts + '.' + body).digest('hex'); };
+    const hook = (body, sig) => realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'stripe-signature': sig }, body });
+    const paidBody = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_1' });
+    rr = await hook(paidBody, sign(paidBody));
+    check('webhook: a correctly signed payment is passed to the database with the service key', rr.status === 200 && applied.length === 1 && applied[0].body.p_action === 'paid' && applied[0].body.p_company === 'co-1' && applied[0].body.p_customer === 'cus_1' && applied[0].o.headers.Authorization === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK');
+    rr = await hook(paidBody, sign(paidBody, 'whsec_wrong')); check('webhook: a message signed with the wrong secret is thrown away', rr.status === 400 && applied.length === 1);
+    rr = await hook(paidBody, ''); check('webhook: an unsigned message is thrown away', rr.status === 400 && applied.length === 1);
+    rr = await hook(paidBody, sign(paidBody, null, Math.floor(Date.now() / 1000) - 3600)); check('webhook: an old replayed message is thrown away', rr.status === 400 && applied.length === 1);
+    rr = await hook(paidBody.replace('co-1', 'co-2'), sign(paidBody)); check('webhook: a message changed after signing is thrown away', rr.status === 400 && applied.length === 1);
+    const dd = evt('checkout.session.completed', { payment_status: 'unpaid', client_reference_id: 'co-1', customer: 'cus_1' }, 'evt_dd');
+    rr = await hook(dd, sign(dd)); check('webhook: a Direct Debit that has not cleared yet opens nothing', rr.status === 200 && applied.length === 1);
+    const ddok = evt('checkout.session.async_payment_succeeded', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_1' }, 'evt_ddok');
+    rr = await hook(ddok, sign(ddok)); check('webhook: once the Direct Debit clears, the account opens', applied.length === 2 && applied[1].body.p_action === 'paid');
+    const fail = evt('invoice.payment_failed', { customer: 'cus_1', subscription: 'sub_1' }, 'evt_fail');
+    rr = await hook(fail, sign(fail)); check('webhook: a failed payment is passed on as failed, by customer', applied.length === 3 && applied[2].body.p_action === 'failed' && applied[2].body.p_customer === 'cus_1' && applied[2].body.p_company === null);
+    const del = evt('customer.subscription.deleted', { id: 'sub_1', customer: 'cus_1' }, 'evt_del');
+    rr = await hook(del, sign(del)); check('webhook: a cancelled subscription is passed on as cancelled', applied.length === 4 && applied[3].body.p_action === 'cancelled');
+    const other = evt('customer.created', { id: 'cus_9' }, 'evt_other'); rr = await hook(other, sign(other)); check('webhook: events we do not care about are accepted and ignored', rr.status === 200 && applied.length === 4);
+    applyStatus = 500; rr = await hook(paidBody, sign(paidBody)); check('webhook: if the database is down we answer with an error so Stripe tries again', rr.status === 500); applyStatus = 200;
+    check('billing helpers: signature check accepts a good one and rejects junk', billing.verifySignature('x', sign('x'), 'whsec_testsecret') && !billing.verifySignature('x', 'garbage', 'whsec_testsecret') && !billing.verifySignature('x', sign('x'), ''));
+    check('billing helpers: price for 100 sites is built without error and 101 is refused', (() => { try { billing.checkoutParams({ companyId: 'c', sites: 100, interval: 'monthly', origin: 'https://x' }); } catch { return false; } try { billing.checkoutParams({ companyId: 'c', sites: 101, interval: 'monthly', origin: 'https://x' }); return false; } catch { return true; } })());
+    const cfg = await (await realFetch(base + '/config.json')).text();
+    check('the Stripe and service keys are never sent to the browser', !cfg.includes('sk_test') && !cfg.includes('whsec') && !cfg.includes('SERVICE-SECRET'));
+  }
   // --- Managed Service postcode check ---
   const mc = async (pc) => { const x = await realFetch(base + '/api/managed-check?postcode=' + encodeURIComponent(pc)); return { s: x.status, j: await x.json() }; };
   let m = await mc('ME4 4TL'); check('a postcode inside the area is available', m.s === 200 && m.j.available === true && m.j.area === 'Medway (ME)' && m.j.radius_miles === 30);
@@ -473,7 +526,23 @@ const USERS = {
     // trial, payment failure, stop and cancellation screens
     t = await newPage(() => { window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
     await login(t.page, 'site@t'); await t.page.waitForSelector('text=One step left');
-    check('unpaid: a new customer sees only the payment step, nothing else', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#pay-now').isDisabled()) && (await t.page.locator('.card').innerText()).includes('opens as soon as your payment is confirmed'));
+    check('unpaid: a new customer sees only the payment step, with a working Pay now button', (await t.page.locator('.kv').count()) === 0 && !(await t.page.locator('#pay-now').isDisabled()) && (await t.page.locator('.card').innerText()).includes('opens as soon as your payment is confirmed'));
+    let payAuth = null; await t.page.route('**/api/checkout', (rt) => { payAuth = rt.request().headers().authorization; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
+    await t.page.click('#pay-now'); await t.page.waitForURL('**/healthz');
+    check('unpaid: Pay now asks the server for a payment page with the sign-in token and goes to it', payAuth === 'Bearer tok-site@t' && t.page.url().endsWith('/healthz'));
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
+    await t.page.route('**/api/checkout', (rt) => rt.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Online payment is not switched on yet.' }) }));
+    await login(t.page, 'site@t'); await t.page.waitForSelector('#pay-now'); await t.page.click('#pay-now'); await t.page.waitForSelector('#pay-msg .msg.err');
+    check('unpaid: if payment is not switched on the person is told plainly', (await t.page.locator('#pay-msg').innerText()).includes('not switched on'));
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
+    await t.page.goto(base + '/app/?paid=1'); await t.page.waitForSelector('#email'); await login(t.page, 'site@t'); await t.page.waitForSelector('text=Confirming your payment');
+    check('unpaid: coming back from Stripe says the payment is being confirmed, with no second Pay now button', (await t.page.locator('#pay-now').count()) === 0);
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
+    await t.page.goto(base + '/app/?paid=0'); await t.page.waitForSelector('#email'); await login(t.page, 'site@t'); await t.page.waitForSelector('text=not completed');
+    check('unpaid: backing out of Stripe says nothing was charged and lets them try again', (await t.page.locator('#pay-now').count()) === 1);
     await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'payment_failed', is_head: true, ends_at: '2026-11-15T00:00:00Z', days_left: 5 }; });
     await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');

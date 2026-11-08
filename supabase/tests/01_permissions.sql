@@ -568,3 +568,68 @@ insert into properties(company_id,name) values ('10000000-0000-0000-0000-0000000
 select 'names: site names too, and letters already capital are left alone' as test,
   (select name='West  Yard' from properties where company_id='10000000-0000-0000-0000-0000000000cc') and cap_words('ABC services') = 'ABC Services' as ok;
 rollback;
+
+-- Stripe payments (migration 0014) ----------------------------------------------------
+begin;
+update app_settings set value='true'::jsonb where key='self_signup_open';
+insert into auth.users(id,email,email_confirmed_at) values ('00000000-0000-0000-0000-0000000000b9','pay@pay.test', now());
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000b9', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  perform signup_company('Pay Co','Pam',3,'annual');
+  reset role;
+end $$;
+select * from chk('stripe: the Pay now page gets company, number of sites, interval and email', '00000000-0000-0000-0000-0000000000b9', 'aal1',
+  $$select (select sites=3 and billing_interval='annual' and email='pay@pay.test' and subscription='trial' from billing_info())$$);
+select * from chk('stripe: another company''s head office cannot see it', :'superA', 'aal2', $$select (select count(*)=1 from billing_info()) and (select sites=2 from billing_info())$$);
+select * from chk('stripe: a site user gets no billing information', :'siteAu', 'aal1', $$select count(*)=0 from billing_info()$$);
+do $$ declare r text; begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000b9', true);
+  begin perform apply_stripe_event('evt_x','checkout.session.completed',null,null,null,'paid'); raise exception 'a client applied a payment'; exception when insufficient_privilege then null; end;
+  reset role;
+  set local role anon;
+  begin perform apply_stripe_event('evt_x','checkout.session.completed',null,null,null,'paid'); raise exception 'anon applied a payment'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'stripe: neither a client nor a visitor can tell the system a payment was made' as test, true as ok;
+select 'stripe: before payment the company is unpaid with nothing open' as test, (select subscription='trial' from companies where name='Pay Co') as ok;
+do $$ declare r text; cid uuid; begin
+  select id into cid from companies where name='Pay Co';
+  set local role service_role;
+  r := apply_stripe_event('evt_1','checkout.session.completed',cid,'cus_1','sub_1','paid');
+  if r <> 'applied' then raise exception 'not applied: %', r; end if;
+  r := apply_stripe_event('evt_1','checkout.session.completed',cid,'cus_1','sub_1','paid');
+  if r <> 'duplicate' then raise exception 'duplicate processed: %', r; end if;
+  reset role;
+end $$;
+select 'stripe: a verified payment opens the account, records the Stripe ids and the monthly value (yearly 3 sites: 315.90 / 12)' as test,
+  (select subscription='active' and stripe_customer_id='cus_1' and stripe_subscription_id='sub_1' and monthly_value_pence=2633 from companies where name='Pay Co') as ok;
+select * from chk('stripe: the paid company is now open', '00000000-0000-0000-0000-0000000000b9', 'aal2', $$select (select count(*)=3 from properties) and (select state='ok' from my_access())$$);
+do $$ declare r text; cid uuid; begin
+  select id into cid from companies where name='Pay Co';
+  set local role service_role;
+  r := apply_stripe_event('evt_2','invoice.payment_failed',null,'cus_1',null,'failed');
+  if r <> 'applied' then raise exception 'failed not applied %', r; end if;
+  reset role;
+end $$;
+select 'stripe: a failed payment on a paid account starts the 7-day warning' as test, (select subscription='past_due' and payment_failed_at is not null from companies where name='Pay Co') as ok;
+do $$ declare r text; cid uuid; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_3','invoice.paid',null,'cus_1',null,'paid');
+  reset role;
+end $$;
+select 'stripe: paying the overdue invoice clears the warning' as test, (select subscription='active' and payment_failed_at is null from companies where name='Pay Co') as ok;
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_4','x',gen_random_uuid(),null,null,'paid');
+  if r <> 'unknown_company' then raise exception 'unknown company accepted %', r; end if;
+  begin perform apply_stripe_event('evt_5','x',null,'cus_1',null,'refund'); raise exception 'odd action accepted'; exception when invalid_parameter_value then null; end;
+  reset role;
+end $$;
+select 'stripe: an unknown company or an unknown kind of event is not accepted' as test, true as ok;
+update companies set subscription='trial', trial_ends_at = now(), payment_failed_at=null where name='Pay Co';
+do $$ begin set local role service_role; perform apply_stripe_event('evt_6','invoice.payment_failed',null,'cus_1',null,'failed'); reset role; end $$;
+select 'stripe: a failed FIRST payment leaves the sign-up unpaid, not past due' as test, (select subscription='trial' from companies where name='Pay Co') as ok;
+rollback;

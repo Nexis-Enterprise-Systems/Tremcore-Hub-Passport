@@ -9,6 +9,13 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const billing = require('./billing');
+// Payments. The Stripe secret key, the webhook secret and the Supabase service role key live ONLY in Railway settings; they never reach the browser.
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const STRIPE_API = (process.env.STRIPE_API_BASE || 'https://api.stripe.com').replace(/\/+$/, '');
+const STRIPE_METHODS = (process.env.STRIPE_PAYMENT_METHODS || 'card').split(',').map((x) => x.trim()).filter(Boolean);   // add bacs_debit once enabled in Stripe
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const TYPES = {
@@ -135,10 +142,65 @@ async function handleLookup(req, res, pathname, query) {
   } catch (e) { console.error('lookup error', e.message); return reply(502, { error: 'Sorry, we could not check that just now. Please call us.' }); }
 }
 
+
+// ---------- payments ----------
+const checkoutHits = new Map();
+function checkoutLimited(ip) { const now = Date.now(), a = (checkoutHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); checkoutHits.set(ip, a); return a.length > 10; }
+
+// The signed-in head-office user presses "Pay now". We look up THEIR company with THEIR OWN token (so they can only ever pay for their own company),
+// then ask Stripe for a payment page.
+async function handleCheckout(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const origin = req.headers.origin;
+  if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+  if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_ANON_KEY) return out(503, { error: 'Online payment is not switched on yet.' });
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (checkoutLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!m) return out(401, { error: 'Please sign in again.' });
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/billing_info', { method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return out(401, { error: 'Please sign in again.' });
+    const info = (await r.json())[0];
+    if (!info) return out(403, { error: 'Only the head-office user can pay.' });
+    if (info.subscription !== 'trial') return out(409, { error: 'This account is already set up for payment.' });
+    const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS });
+    const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
+      headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
+    const sj = await sr.json().catch(() => ({}));
+    if (!sr.ok || !sj.url) { console.error('stripe checkout failed', sr.status, sj && sj.error && sj.error.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
+    return out(200, { url: sj.url });
+  } catch (e) { console.error('checkout error', e.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
+}
+
+// Stripe tells us a payment happened. We only believe a message that carries Stripe's signature.
+async function handleWebhook(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  if (!STRIPE_WEBHOOK_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return out(503, { error: 'not configured' });
+  let raw; try { raw = await readBody(req, 1000000); } catch { return out(413, { error: 'too big' }); }
+  if (!billing.verifySignature(raw, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET)) return out(400, { error: 'bad signature' });
+  let ev; try { ev = JSON.parse(raw); } catch { return out(400, { error: 'bad json' }); }
+  const act = billing.eventToAction(ev);
+  if (!act) return out(200, { ignored: true });
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/apply_stripe_event', { method: 'POST',
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_event_id: act.eventId, p_event_type: act.type, p_company: act.company, p_customer: act.customer, p_subscription: act.subscription, p_action: act.action }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) { console.error('apply_stripe_event failed', r.status); return out(500, { error: 'try again' }); }   // Stripe will retry
+    const result = await r.json();
+    if (result === 'unknown_company') console.error('stripe event for an unknown company', act.eventId, act.type);
+    return out(200, { result });
+  } catch (e) { console.error('webhook error', e.message); return out(500, { error: 'try again' }); }
+}
+
 const server = http.createServer((req, res) => {
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return send(res, 400, 'Bad request'); }
   if (req.method === 'POST' && pathname === '/api/enquiry') return handleEnquiry(req, res);
+  if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
+  if (req.method === 'POST' && pathname === '/api/stripe-webhook') return handleWebhook(req, res);
   if (req.method === 'GET' && (pathname === '/api/managed-check' || pathname === '/api/postcode')) return handleLookup(req, res, pathname, new URL(req.url, 'http://x').searchParams);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
 

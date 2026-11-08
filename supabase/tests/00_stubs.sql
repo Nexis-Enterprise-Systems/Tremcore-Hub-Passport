@@ -2,6 +2,7 @@
 -- NOT for use on a real Supabase project (it already has all of this).
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
+do $$ begin create role service_role nologin; exception when duplicate_object then null; end $$;
 create schema auth;
 create table auth.users (id uuid primary key default gen_random_uuid(), email text, email_confirmed_at timestamptz);
 create function auth.uid() returns uuid language sql stable as
@@ -14,7 +15,7 @@ create table storage.objects (id uuid primary key default gen_random_uuid(), buc
 alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql immutable as
   $$ select string_to_array(name, '/') $$;
-grant usage on schema public, auth, storage to authenticated, anon;
+grant usage on schema public, auth, storage to authenticated, anon, service_role;
 alter default privileges in schema public grant all on tables to authenticated;
 grant all on storage.objects to authenticated;
 grant execute on all functions in schema auth to authenticated, anon;

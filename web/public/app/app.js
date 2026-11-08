@@ -220,6 +220,7 @@
       banner = h('div', { class: 'msg err', role: 'status' }, 'Your account is due to close on ' + fmtDate(a.ends_at) + '. After that you will not be able to sign in and your data will be removed.',
         a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async () => { await sb.rpc('withdraw_cancellation'); route(); } }, 'Keep my account')));
     }
+    if (location.search.includes('paid=')) history.replaceState(null, '', '/app/');
     let checksList = null;
     try {
       const it = (await sb.from('compliance_items').select('id,title,due_date').order('title')).data || [];
@@ -239,11 +240,30 @@
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }
 
-  // Stripe payment is built later; until then this page only explains. The account stays closed until the payment is confirmed.
-  function viewAwaitingPayment(a) {
-    show(h('div', { class: 'card' }, h('h1', {}, 'One step left: payment'),
-      h('p', {}, a.is_head ? 'Your account has been created. It opens as soon as your payment is confirmed.' : 'This account is waiting for its first payment. Please ask your head-office user.'),
-      a.is_head && h('button', { class: 'btn', id: 'pay-now', disabled: true }, 'Pay now (coming soon)'),
+  // Pay now: the server makes a Stripe payment page for THIS company (it looks the company up from the signed-in token), and we go there.
+  // When Stripe confirms the payment (a message to our server, not the browser coming back) the account opens.
+  let payChecks = 0;
+  async function viewAwaitingPayment(a) {
+    const q = new URLSearchParams(location.search).get('paid');
+    const box = h('div', { id: 'pay-msg' });
+    const confirming = q === '1' && payChecks < 20;
+    if (confirming) { payChecks += 1; setTimeout(route, 3000); }
+    const btn = h('button', { class: 'btn', id: 'pay-now', onclick: async (e) => {
+      await busy(e.target, async () => {
+        try {
+          const { data: { session } } = await sb.auth.getSession();
+          const r = await fetch('/api/checkout', { method: 'POST', headers: { Authorization: 'Bearer ' + ((session && session.access_token) || '') } });
+          const j = await r.json().catch(() => ({}));
+          if (r.ok && j.url) { location.href = j.url; return; }
+          message(box, 'err', j.error || 'Sorry, we could not start the payment. Please try again, or contact Tremcore.');
+        } catch { message(box, 'err', 'Sorry, we could not start the payment. Please try again, or contact Tremcore.'); }
+      });
+    } }, 'Pay now');
+    show(h('div', { class: 'card' }, h('h1', {}, confirming ? 'Confirming your payment' : 'One step left: payment'),
+      confirming ? h('p', {}, 'Thank you. We are waiting for your payment to be confirmed. This page updates by itself, usually within a few seconds.')
+        : h('p', {}, a.is_head ? 'Your account has been created. It opens as soon as your payment is confirmed.' : 'This account is waiting for its first payment. Please ask your head-office user.'),
+      q === '0' && h('div', { class: 'msg err', role: 'status' }, 'The payment was not completed. You have not been charged. You can try again when you are ready.'),
+      a.is_head && !confirming && btn, box,
       h('a', { class: 'btn ghost', href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }

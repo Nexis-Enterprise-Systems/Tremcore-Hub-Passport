@@ -90,7 +90,7 @@
   window.supabase = { createClient() { return {
     from,
     auth: {
-      async getSession() { return { data: { session: current ? { user: { id: 'user-' + current, email: current, user_metadata: (userRow() && userRow().meta) || {} } } : null } }; },
+      async getSession() { return { data: { session: current ? { access_token: 'tok-' + current, user: { id: 'user-' + current, email: current, user_metadata: (userRow() && userRow().meta) || {} } } : null } }; },
       async signUp({ email, password, options }) {
         rec('signUp', { email, meta: options && options.data, redirect: options && options.emailRedirectTo });
         if (M().signupError) return { data: {}, error: Object.assign({ message: M().signupError.message }, M().signupError) };
