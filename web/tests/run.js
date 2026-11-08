@@ -239,7 +239,7 @@ const USERS = {
     check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Revenue,Enquiries,Settings');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Revenue,Enquiries,Activity,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
@@ -351,6 +351,38 @@ const USERS = {
     if (t.problems.length) console.log(t.problems);
     await t.ctx.close();
 
+    // renewals and activity
+    {
+      const sd = seed();
+      sd.tables.compliance_items.push(
+        { id: 'q1', property_id: P3, grp: 'Fire safety', title: 'Fire extinguisher service', basis: 'standard', frequency_months: 12, due_date: day(12), notes: '' },
+        { id: 'q2', property_id: P3, grp: 'Gas', title: 'Gas safety certificate', basis: 'legal', frequency_months: 12, due_date: day(-3), notes: '' },
+        { id: 'q3', property_id: P3, grp: 'Electrical', title: 'Fixed wire test', basis: 'standard', frequency_months: 60, due_date: day(300), notes: '' });
+      sd.tables.renewal_tasks = [{ id: 'r1', item_id: 'q1', property_id: P3, stage: 'booking_required', booked_for: null, note: '', updated_at: '2026-11-01T10:00:00Z' }];
+      sd.tables.audit_log = [
+        { id: 1, at: '2026-11-07T09:00:00Z', actor: 'u1', property_id: P3, table_name: 'compliance_items', action: 'UPDATE', old_data: { title: 'Gas safety certificate', due_date: '2025-11-01' }, new_data: { title: 'Gas safety certificate', due_date: '2026-11-01' } },
+        { id: 2, at: '2026-11-08T09:00:00Z', actor: 'u2', property_id: P3, table_name: 'documents', action: 'INSERT', old_data: null, new_data: { filename: 'gas.pdf' } }];
+      const rt = await hubPage(sd), rp = rt.page;
+      await rp.click('.hubnav >> text=Renewals'); await rp.waitForSelector('text=Booking required (1)');
+      const needs = await rp.locator('section:has-text("with no renewal started")').innerText();
+      check('renewals lists only managed-client items that are due or overdue and have no renewal yet', needs.includes('Gas safety certificate') && !needs.includes('Fire extinguisher service') && !needs.includes('EICR') && !needs.includes('Fixed wire test'));
+      check('renewals shows the four stages, with the existing task under Booking required', (await rp.locator('section h2').allInnerTexts()).join('|').includes('Due soon (0)|Booking required (1)|Booked (0)|Completed (0)') && (await rp.locator('section:has-text("Booking required (1)")').innerText()).includes('Fire extinguisher service'));
+      await rp.click('button:has-text("Start renewal")'); await rp.waitForSelector('text=Due soon (1)');
+      const st = (await dbCalls(rp, "x.table==='renewal_tasks'&&x.op==='insert'"))[0];
+      check('starting a renewal creates a Due soon task for that item', st && st.payload.item_id === 'q2' && st.payload.stage === 'due_soon');
+      check('the item leaves the "no renewal yet" list once started', (await rp.locator('section:has-text("with no renewal started")').innerText()).includes('Everything due soon already'));
+      await rp.selectOption('select[aria-label="Stage for Fire extinguisher service"]', 'booked'); await rp.fill('input[aria-label="Booked for Fire extinguisher service"]', day(5));
+      await rp.locator('li:has-text("Fire extinguisher service") button:has-text("Save")').click(); await rp.waitForSelector('text=Booked (1)');
+      const up = (await dbCalls(rp, "x.table==='renewal_tasks'&&x.op==='update'"))[0];
+      check('moving a renewal to Booked saves the stage and the booked date', up && up.payload.stage === 'booked' && up.payload.booked_for === day(5));
+      await rp.click('.hubnav >> text=Activity'); await rp.waitForSelector('table');
+      const act = await rp.locator('table').innerText();
+      check('activity shows who changed what, newest first', act.includes('Changed the due date of “Gas safety certificate”') && act.includes('Uploaded the document gas.pdf') && act.includes('Leah Dunn') && act.includes('Tom Reed') && act.indexOf('gas.pdf') < act.indexOf('Changed the due date'));
+      check('no page or CSP errors on Renewals and Activity', rt.problems.length === 0);
+      if (rt.problems.length) console.log(rt.problems);
+      await rt.ctx.close();
+    }
+
     // a failing database call is explained, not a blank page
     t = await hubPage(); await t.page.evaluate(() => { window.__mock.dbError = { companies: 'permission denied' }; });
     await t.page.click('.hubnav >> text=Clients'); await t.page.waitForSelector('.msg.err');
@@ -458,7 +490,7 @@ const USERS = {
     await t.ctx.close();
 
     t = await hubPage(null, 'staffonly@t'); pg = t.page;
-    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Revenue,Enquiries');
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Revenue,Enquiries,Activity');
     await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
     check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
     await t.ctx.close();

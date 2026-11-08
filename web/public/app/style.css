@@ -112,3 +112,4 @@ td input,td select{height:40px;min-width:110px}
 .card a:not(.btn){color:var(--gold)}
 
 .plans{border:0;padding:0;margin:20px 0 0}.plans legend{font-weight:600;padding:0;margin-bottom:4px}.check.plan{align-items:flex-start;margin-top:10px}.check.plan input{margin-top:4px}
+.renewal{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.renewal.stack{flex-direction:column;align-items:stretch;gap:6px}.renewal .grow{flex:1;min-width:200px;text-decoration:none}.renewal.stack .row{justify-content:flex-start}.renewal input,.renewal select{width:auto;min-width:140px}

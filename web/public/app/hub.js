@@ -8,13 +8,14 @@
   const BILLING = { monthly: 'Monthly', annual: 'Yearly (15% off)' };
   const SUBS = { trial: 'Trial', active: 'Active', past_due: 'Past due', cancelled: 'Cancelled' };
   const BASIS = { legal: 'Legal', standard: 'Standard', best_practice: 'Best practice' };
+  const STAGES = { due_soon: 'Due soon', booking_required: 'Booking required', booked: 'Booked', completed: 'Completed' };
   const STATUS = { green: 'In date', amber: 'Due soon', red: 'Overdue', missing: 'Not entered' };
   const ENQ = { new: 'New', contacted: 'Contacted', demo_booked: 'Demo booked', won: 'Won', lost: 'Lost' };
   const SITES = { '1': '1 site', '2-5': '2 to 5 sites', '6-20': '6 to 20 sites', '20+': 'More than 20 sites' };
   const ROLE = { client_super: 'Head office', client_site: 'Site user', tremcore_admin: 'Tremcore administrator', tremcore_staff: 'Tremcore staff' };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['subscriptions', 'Subscriptions'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['settings', 'Settings']];
+  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
   const navFor = () => NAV.filter((n) => n[0] !== 'settings' || (ctx && ctx.req.role_name === 'tremcore_admin'));
 
   let ctx = null, token = 0;
@@ -445,6 +446,102 @@
           h('tbody', {}, top.length ? top.map((c) => h('tr', {}, h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name)), h('td', { class: 'num' }, money(c.monthly_value_pence)))) : [h('tr', {}, h('td', { colspan: '2', class: 'muted' }, 'No paying clients yet.'))]))))));
   }
 
+  // ---------- Renewals (work list for clients whose compliance Tremcore manages) ----------
+  async function pageRenewals(my) {
+    chrome('renewals', h('h1', {}, 'Renewals'), loading());
+    const [tasks, items, props, companies] = await Promise.all([
+      q(ctx.sb.from('renewal_tasks').select('*')),
+      q(ctx.sb.from('compliance_status').select('*')),
+      q(ctx.sb.from('properties').select('id,company_id,name')),
+      q(ctx.sb.from('companies').select('id,name,level,subscription'))]);
+    if (my !== token) return;
+    const managed = new Set(companies.filter((c) => c.level >= 2 && c.subscription !== 'cancelled').map((c) => c.id));
+    const propOf = Object.fromEntries(props.map((p) => [p.id, p]));
+    const coOf = Object.fromEntries(companies.map((c) => [c.id, c]));
+    const itemOf = Object.fromEntries(items.map((i) => [i.id, i]));
+    const mine = tasks.filter((t) => propOf[t.property_id] && managed.has(propOf[t.property_id].company_id) && itemOf[t.item_id]);
+    const openItem = new Set(mine.filter((t) => t.stage !== 'completed').map((t) => t.item_id));
+    const needs = items.filter((i) => (i.status === 'red' || i.status === 'amber') && propOf[i.property_id] && managed.has(propOf[i.property_id].company_id) && !openItem.has(i.id))
+      .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)));
+    const where = (propertyId) => { const p = propOf[propertyId]; return h('span', { class: 'muted block' }, (p && coOf[p.company_id] ? coOf[p.company_id].name + ' · ' : '') + (p ? p.name : '')); };
+    const reload = () => pageRenewals(++token);
+    const needRows = needs.map((i) => {
+      const out = h('span', { class: 'muted', role: 'status' });
+      const go = h('button', { class: 'btn ghost small', onclick: async () => {
+        await busy(go, async () => { try { await q(ctx.sb.from('renewal_tasks').insert({ item_id: i.id, property_id: i.property_id, stage: 'due_soon' })); await reload(); } catch (err) { out.replaceChildren('Not started: ' + err.message); } });
+      } }, 'Start renewal');
+      return h('li', { class: 'renewal' }, h('a', { class: 'grow', href: '#/sites/' + i.property_id }, h('strong', {}, i.title), where(i.property_id)),
+        badge(i.status, STATUS[i.status]), h('span', { class: 'muted' }, fmtDate(i.due_date)), go, out);
+    });
+    const card = (t) => {
+      const i = itemOf[t.item_id];
+      const stage = select(STAGES, t.stage), booked = text(t.booked_for || '', { type: 'date', 'aria-label': 'Booked for ' + i.title }), nt = text(t.note || '', { placeholder: 'Note (who, when, quote)', 'aria-label': 'Note for ' + i.title });
+      stage.setAttribute('aria-label', 'Stage for ' + i.title);
+      const out = h('span', { class: 'muted', role: 'status' });
+      const save = h('button', { class: 'btn ghost small', onclick: async () => {
+        if (!validDate(booked.value)) return out.replaceChildren('Check the booked date.');
+        await busy(save, async () => {
+          try { await q(ctx.sb.from('renewal_tasks').update({ stage: stage.value, booked_for: booked.value || null, note: nt.value.trim(), updated_at: new Date().toISOString() }).eq('id', t.id)); await reload(); }
+          catch (err) { out.replaceChildren('Not saved: ' + err.message); }
+        });
+      } }, 'Save');
+      return h('li', { class: 'renewal stack' },
+        h('div', { class: 'titlerow' }, h('a', { href: '#/sites/' + t.property_id }, h('strong', {}, i.title)), badge(i.status, STATUS[i.status])),
+        where(t.property_id), h('span', { class: 'muted' }, 'Due ' + fmtDate(i.due_date)),
+        h('div', { class: 'row' }, stage, booked, nt, save, out),
+        t.stage === 'completed' ? h('p', { class: 'hint' }, 'When the work is done, update the due date and upload the new certificate on the site page, so the traffic light turns green.') : null);
+    };
+    const col = (k) => {
+      let list = mine.filter((t) => t.stage === k).sort((a, b) => String(itemOf[a.item_id].due_date).localeCompare(String(itemOf[b.item_id].due_date)));
+      const total = list.length;
+      if (k === 'completed') list = list.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, 10);
+      return h('section', { class: 'card' }, h('h2', {}, STAGES[k] + ' (' + total + ')'),
+        list.length ? h('ul', { class: 'list' }, list.map(card)) : h('p', { class: 'muted' }, 'Nothing here.'));
+    };
+    chrome('renewals', h('h1', {}, 'Renewals'),
+      h('p', { class: 'muted' }, 'For clients on the Managed Service. Self-Managed clients arrange their own renewals.'),
+      h('div', { class: 'tiles' },
+        tile('Needs a renewal started', String(needs.length)), tile('Due soon', String(mine.filter((t) => t.stage === 'due_soon').length)),
+        tile('Booking required', String(mine.filter((t) => t.stage === 'booking_required').length)), tile('Booked', String(mine.filter((t) => t.stage === 'booked').length))),
+      h('section', { class: 'card' }, h('h2', {}, 'Due within 30 days or overdue, with no renewal started'),
+        needRows.length ? h('ul', { class: 'list' }, needRows) : h('p', { class: 'muted' }, 'Everything due soon already has a renewal in progress.')),
+      ['due_soon', 'booking_required', 'booked', 'completed'].map(col));
+  }
+
+  // ---------- Activity (who changed what) ----------
+  async function pageActivity(my) {
+    chrome('activity', h('h1', {}, 'Activity'), loading());
+    const [log, props, companies, people] = await Promise.all([
+      q(ctx.sb.from('audit_log').select('*').order('at', { ascending: false }).limit(100)),
+      q(ctx.sb.from('properties').select('id,company_id,name')),
+      q(ctx.sb.from('companies').select('id,name')),
+      q(ctx.sb.from('profiles').select('id,full_name'))]);
+    if (my !== token) return;
+    const propOf = Object.fromEntries(props.map((p) => [p.id, p])), coOf = Object.fromEntries(companies.map((c) => [c.id, c.name])), who = Object.fromEntries(people.map((p) => [p.id, p.full_name]));
+    const say = (r) => {
+      const n = r.new_data || {}, o = r.old_data || {}, a = r.action;
+      if (r.table_name === 'compliance_items') {
+        const t = '“' + (n.title || o.title || 'item') + '”';
+        if (a === 'INSERT') return 'Added ' + t;
+        if (a === 'DELETE') return 'Removed ' + t;
+        if (o.due_date !== n.due_date) return 'Changed the due date of ' + t + ' from ' + fmtDate(o.due_date) + ' to ' + fmtDate(n.due_date);
+        return 'Updated ' + t;
+      }
+      if (r.table_name === 'documents') return (a === 'DELETE' ? 'Removed the document ' : 'Uploaded the document ') + (n.filename || o.filename || '');
+      if (r.table_name === 'renewal_tasks') return a === 'INSERT' ? 'Started a renewal' : a === 'DELETE' ? 'Removed a renewal' : (o.stage !== n.stage ? 'Moved a renewal from ' + (STAGES[o.stage] || o.stage) + ' to ' + (STAGES[n.stage] || n.stage) : 'Updated a renewal');
+      return (a === 'INSERT' ? 'Added' : a === 'DELETE' ? 'Removed' : 'Updated') + ' a record (' + r.table_name + ')';
+    };
+    chrome('activity', h('h1', {}, 'Activity'),
+      h('p', { class: 'muted' }, 'The latest 100 changes to compliance items, documents and renewals, newest first. This record cannot be edited.'),
+      h('div', { class: 'tablewrap' }, h('table', {},
+        h('thead', {}, h('tr', {}, ['When', 'Who', 'Where', 'What'].map((x) => h('th', {}, x)))),
+        h('tbody', {}, log.length ? log.map((r) => { const p = propOf[r.property_id];
+          return h('tr', {}, h('td', {}, new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })),
+            h('td', {}, who[r.actor] || (r.actor ? 'A user' : 'The system')),
+            h('td', {}, p ? h('a', { href: '#/sites/' + p.id }, (coOf[p.company_id] ? coOf[p.company_id] + ' · ' : '') + p.name) : ''), h('td', {}, say(r))); })
+          : [h('tr', {}, h('td', { colspan: '4', class: 'muted' }, 'No changes recorded yet.'))]))));
+  }
+
   // ---------- Enquiries ----------
   async function pageEnquiries(my) {
     chrome('enquiries', h('h1', {}, 'Enquiries'), loading());
@@ -551,6 +648,8 @@
       else if (a === 'clients') await pageClients(my);
       else if (a === 'subscriptions') await pageSubscriptions(my);
       else if (a === 'revenue') await pageRevenue(my);
+      else if (a === 'renewals') await pageRenewals(my);
+      else if (a === 'activity') await pageActivity(my);
       else if (a === 'enquiries') await pageEnquiries(my);
       else if (a === 'settings' && ctx.req.role_name === 'tremcore_admin') await pageSettings(my);
       else await pageDashboard(my);
