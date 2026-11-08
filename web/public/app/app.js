@@ -350,8 +350,8 @@
     try { open = (await sb.rpc('signup_open')).data === true; } catch { open = false; }
     if (!open) {
       return show(h('div', { class: 'card' }, h('h1', {}, 'Sign-up is not open yet'),
-        h('p', { class: 'muted' }, 'We are not taking new accounts online just yet. Book a demo and we will get you started.'),
-        h('a', { class: 'btn', href: '/contact/' }, 'Book a demo'),
+        h('p', { class: 'muted' }, 'We are not taking new accounts online just yet. Please check back soon, or ask us a question.'),
+        h('a', { class: 'btn', href: '/contact/' }, 'Ask a question'),
         h('button', { class: 'btn ghost', onclick: () => viewLogin() }, 'Back to sign in')));
     }
     const box = h('div');
@@ -383,7 +383,7 @@
           const m = error.message || '';
           return message(box, 'err', error.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
             : /already/i.test(m) ? 'That email already has an account. Try signing in, or reset your password.'
-            : /signups? .*(not allowed|disabled)/i.test(m) ? 'Sign-up is not available right now. Please book a demo and we will help.'
+            : /signups? .*(not allowed|disabled)/i.test(m) ? 'Sign-up is not available right now. Please contact Tremcore and we will help.'
             : /password/i.test(m) ? m : 'Sorry, we could not create the account: ' + m);
         }
         pass.value = '';
@@ -414,7 +414,7 @@
 
   function viewSignupProblem(err) {
     const m = (err && err.message) || '';
-    const text = /signup_closed/.test(m) ? 'Sign-up is not open at the moment. Please book a demo and we will get you started.'
+    const text = /signup_closed/.test(m) ? 'Sign-up is not open at the moment. Please contact Tremcore and we will get you started.'
       : /email_not_confirmed/.test(m) ? 'Your email address has not been confirmed yet. Open the link we emailed you, then sign in again.'
       : /invalid_details/.test(m) ? 'Some of the details were not accepted. Please contact Tremcore and we will set you up.'
       : 'We could not finish setting up your account. Please contact Tremcore.';

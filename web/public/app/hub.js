@@ -548,7 +548,7 @@
     const rows = await q(ctx.sb.from('enquiries').select('*').order('created_at', { ascending: false }));
     if (my !== token) return;
     chrome('enquiries', h('h1', {}, 'Enquiries'),
-      h('p', { class: 'hint' }, 'From the “Book a demo” form on the website. Newest first.'),
+      h('p', { class: 'hint' }, 'From the “Contact us” form on the website. Newest first.'),
       rows.length ? rows.map((e) => {
         const st = select(ENQ, e.status), nt = area(e.notes), out = h('span', { class: 'muted', role: 'status' });
         st.setAttribute('aria-label', 'Status for ' + e.name); nt.setAttribute('aria-label', 'Notes for ' + e.name);
@@ -592,7 +592,7 @@
         h('div', { class: 'titlerow' }, h('h2', {}, 'Self-Managed sign-up'), badge(open ? 'green' : 'missing', open ? 'Open' : 'Closed')),
         h('p', {}, open
           ? 'Businesses can create their own Self-Managed account from the website and the sign-in page. Each one starts as a trial with no charge, and appears under Clients marked “Self sign-up”.'
-          : 'Sign-up is closed. The website shows only “Book a demo” and nobody can create an account for themselves.'),
+          : 'Sign-up is closed. Nobody can create an account for themselves yet, and the Sign up page says sign-up is not open.'),
         h('p', { class: 'hint' }, 'Before opening: in Supabase switch on email sign-ups and “Confirm email”, add the site address to the allowed redirect URLs, and have the Terms and Privacy pages checked and finished.'),
         btn, out),
       managedCard(base, radius));

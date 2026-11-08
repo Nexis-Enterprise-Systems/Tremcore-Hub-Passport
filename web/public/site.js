@@ -10,17 +10,6 @@
     var open = nav.classList.toggle('open'); mb.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
-  // Self-Managed sign-up buttons stay hidden unless Tremcore has switched sign-up on (a yes/no answer from the database).
-  var su = $$('[data-signup]');
-  if (su.length && window.fetch) {
-    fetch('/config.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (c) {
-      if (!c || !c.url || !c.anonKey) return null;
-      return fetch(c.url + '/rest/v1/rpc/signup_open', { method: 'POST', headers: { apikey: c.anonKey, Authorization: 'Bearer ' + c.anonKey, 'Content-Type': 'application/json' }, body: '{}' })
-        .then(function (r) { return r.ok ? r.json() : false; })
-        .then(function (open) { if (open === true) su.forEach(function (el) { el.hidden = false; }); });
-    }).catch(function () {});
-  }
-
   // donut: sweep is 0..1 of the sample split
   var SPLIT = [['--green', 0.55], ['--amber', 0.25], ['--red', 0.10], ['--grey', 0.10]];
   function paintDonut(el, sweep) {
@@ -138,7 +127,7 @@
           else { out.className = 'msg err'; out.textContent = (r.j && r.j.error) || 'Sorry, that did not send. Please try again or call us.'; }
         })
         .catch(function () { out.className = 'msg err'; out.textContent = 'Sorry, that did not send. Please check your connection and try again.'; })
-        .then(function () { go.disabled = false; go.textContent = 'Book my demo'; });
+        .then(function () { go.disabled = false; go.textContent = 'Send my question'; });
     });
   }
 })();

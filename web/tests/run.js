@@ -407,7 +407,7 @@ const USERS = {
     let t = await newPage(); // closed by default
     check('sign-in page offers no sign-up while it is closed', (await t.page.locator('text=Create an account').count()) === 0);
     await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('text=Sign-up is not open yet');
-    check('the sign-up address says "not open yet" and points to a demo while closed', (await t.page.locator('a[href="/contact/"]').count()) === 1 && (await t.page.locator('#su-email').count()) === 0);
+    check('the sign-up address says "not open yet" and points to the contact form while closed', (await t.page.locator('a[href="/contact/"]').count()) === 1 && (await t.page.locator('#su-email').count()) === 0);
     await t.ctx.close();
 
     t = await newPage(openMock);
@@ -574,7 +574,7 @@ const USERS = {
     let signupOpen = false;
     await pg.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: String(signupOpen) }));
     pg.on('console', (m) => { if (m.type() === 'error') probs.push(m.text()); }); pg.on('pageerror', (e) => probs.push(String(e)));
-    for (const [u, h] of [['/', 'Every certificate'], ['/passport/', 'The checks that keep a building safe'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'See it around your premises']]) {
+    for (const [u, h] of [['/', 'Every certificate'], ['/passport/', 'The checks that keep a building safe'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Ask us a question']]) {
       await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
     }
     await pg.goto(base + '/');
@@ -584,10 +584,10 @@ const USERS = {
     check('website does not offer the Managed Service for now (no card, no postcode box)', (await pg.locator('#managed').count()) === 0 && (await pg.locator('#area-check').count()) === 0 && !/Managed Service/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/contact/'); check('contact form offers only Self-Managed as a package', (await pg.locator('#f-pkg option').allInnerTexts()).join('|') === 'Not sure yet|Self-Managed');
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
-    check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
+    check('website has Sign up buttons everywhere and no "Book a demo" anywhere', (await pg.locator('[data-signup]:visible').count()) >= 2 && !/book (a|my) demo/i.test(await pg.locator('body').innerText()) && (await pg.locator('.hdr-actions [data-signup]').innerText()) === 'Sign up');
     check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
-    signupOpen = true; await pg.goto(base + '/what-you-get/'); await pg.waitForSelector('[data-signup]:visible');
-    check('website shows "Sign up" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
+    await pg.goto(base + '/what-you-get/');
+    check('website Sign up buttons lead to the sign-up page', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
     signupOpen = false;
     for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
     await pg.goto(base + '/');
