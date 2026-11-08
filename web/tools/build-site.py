@@ -10,7 +10,7 @@ PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path
 LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="#d4af55" stroke-width="1.4"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="#d4af55" stroke-width="1.4"/></svg>'
 NAV = [('/', 'Home'), ('/passport/', 'The passport'), ('/what-you-get/', 'What you get'), ('/how-it-works/', 'How it works'), ('/contact/', 'Contact')]
 
-SIGNUP = '<a class="btn solid" data-signup hidden href="/app/?signup=1">Sign up</a>'   # shown by site.js only while Tremcore has sign-up switched on
+SIGNUP = '<a class="btn solid" data-signup hidden href="/app/?signup=1">Start free trial</a>'   # shown by site.js only while Tremcore has sign-up switched on
 
 def page(path, title, desc, body, current, noindex=False):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)

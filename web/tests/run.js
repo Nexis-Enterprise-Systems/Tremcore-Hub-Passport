@@ -423,12 +423,11 @@ const USERS = {
     await p.fill('#su-pass', 'a-long-enough-password'); await go();
     check('sign-up will not go ahead without agreeing to the terms', (await p.locator('.msg.err').innerText()).includes('terms') && (await calls(p, 'signUp')).length === 0);
     check('terms and privacy links open the notices in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
-    check('sign-up offers monthly (ticked) or yearly billing, with prices excluding VAT', (await p.locator('input[name=su-billing]').count()) === 2 && (await p.locator('input[value=monthly]').isChecked()) && (await p.locator('.plans').innerText()).includes('£14.99') && (await p.locator('.plans').innerText()).includes('£152.90') && (await p.locator('.plans').innerText()).includes('£81.50') && (await p.locator('.plans').innerText()).includes('exclude VAT'));
-    await p.check('input[value=annual]');
+    check('sign-up says 7 days free, no card, shows prices excluding VAT and leaves monthly or yearly until they pay', (await p.locator('input[name=su-billing]').count()) === 0 && (await p.locator('.plans').innerText()).includes('No card needed') && (await p.locator('.plans').innerText()).includes('£14.99') && (await p.locator('.plans').innerText()).includes('save 15%') && (await p.locator('.plans').innerText()).includes('exclude VAT'));
+    check('the terms and privacy links are on the form and open in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
     await p.check('#su-terms'); await go(); await p.waitForSelector('text=Check your email');
     const su = (await calls(p, 'signUp'))[0];
     check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_site_name === 'Acme High Street' && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
-    check('the yearly choice is kept with the sign-up details', su.meta.signup_billing === 'annual');
     check('no company is created before the email is confirmed', (await calls(p, 'rpc:signup_company')).length === 0);
     check('the confirmation screen names the address', (await p.locator('strong').innerText()) === 'pat@acme.example');
     await p.click('text=Go to sign in'); await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('.msg.err');
@@ -436,7 +435,7 @@ const USERS = {
     await p.evaluate(() => { window.__mock.users['pat@acme.example'].confirmed = true; });
     await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('img.qr');
     const made = (await calls(p, 'rpc:signup_company'));
-    check('first confirmed sign-in creates the company once, with the saved details', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street' && made[0].p_billing === 'annual');
+    check('first confirmed sign-in creates the company once, with the saved details', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
     check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your account is ready').count()) === 1);
@@ -547,7 +546,7 @@ const USERS = {
     check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
     check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
     signupOpen = true; await pg.goto(base + '/what-you-get/'); await pg.waitForSelector('[data-signup]:visible');
-    check('website shows "Sign up" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
+    check('website shows "Start free trial" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
     signupOpen = false;
     for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
     await pg.goto(base + '/');
