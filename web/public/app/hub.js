@@ -591,7 +591,7 @@
       h('section', { class: 'card' },
         h('div', { class: 'titlerow' }, h('h2', {}, 'Self-Managed sign-up'), badge(open ? 'green' : 'missing', open ? 'Open' : 'Closed')),
         h('p', {}, open
-          ? 'Businesses can create their own Self-Managed account from the website and the sign-in page. Each one starts as a trial with no charge, and appears under Clients marked “Self sign-up”.'
+          ? 'Businesses can create their own Self-Managed account from the website and the sign-in page. Each one is created unpaid and cannot open anything until payment is confirmed. Until online payment is built, set the company to Active under Clients to let it in. They appear under Clients marked “Self sign-up”.'
           : 'Sign-up is closed. Nobody can create an account for themselves yet, and the Sign up page says sign-up is not open.'),
         h('p', { class: 'hint' }, 'Before opening: in Supabase switch on email sign-ups and “Confirm email”, add the site address to the allowed redirect URLs, and have the Terms and Privacy pages checked and finished.'),
         btn, out),
