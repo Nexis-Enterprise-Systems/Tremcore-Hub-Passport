@@ -12,7 +12,7 @@ Plain-English plan for what it costs to run Tremcore, how customers will pay, an
 | Cloudflare (address, security) | Free plan | |
 | Domain name | A few pounds a year | |
 
-**Rough total: about £30 to £50 a month.** That is covered by one or two paying customers. After that, each extra business costs almost nothing to host (a few certificates and some emails), so most of the price is margin. The real costs per customer are payment fees and your time on support.
+**Rough total: about £30 to £50 a month.** At the prices set on 8 Nov (£14.99 for the first location), that is covered by roughly 2 to 4 single-location customers. After that, each extra business costs almost nothing to host (a few certificates and some emails), so most of the price is margin. The real costs per customer are payment fees and your time on support.
 
 Not researched yet: solicitor's fee to finish the Terms and Privacy pages, insurance (professional indemnity is worth asking a broker about for a compliance product), and accountant time.
 
@@ -69,8 +69,10 @@ Prices here are examples only to show the fee, not suggestions. Paying a year at
 
 ## 7. Decisions needed from Aaron
 
-1. **How to charge:** a flat price per business, a price per site, or bands by number of sites (1 site, 2 to 5, 6 to 20, more)? Bands match the website's enquiry form and are the simplest to explain.
-2. **The prices.** Monthly, and the annual discount.
+Decided 8 Nov: price per location, £14.99 for the first and £7.99 for each extra. Still open:
+
+1. **VAT on the prices:** are £14.99 and £7.99 before or including VAT?
+2. **Annual billing:** offered, and what discount?
 3. **Trial:** how many days, and is a card or Direct Debit needed up front? (Needing none gets more sign-ups; needing one gets more real customers.)
 4. **If someone stops paying:** how long before the account goes read-only, and what do we say?
 5. **Supplier:** are you happy with Stripe only for now?
@@ -92,7 +94,7 @@ First location £14.99 a month, each extra location £7.99 a month. Estimated pa
 | Account | Bill | Card | Direct Debit |
 |---|---|---|---|
 | 1 location | £14.99 | about £0.53 (3.5%) | about £0.31 (2.1%) |
-| 3 locations | £30.97 | about £0.87 (2.8%) | about £0.62 (2.0%) |
-| 5 locations | £46.95 | about £1.12 (2.4%) | about £0.77 (1.6%) |
+| 3 locations | £30.97 | about £0.88 (2.8%) | about £0.53 (1.7%) |
+| 5 locations | £46.95 | about £1.23 (2.6%) | about £0.80 (1.7%) |
 
-The fixed 20p per payment is a bigger share at these prices, so offering **annual billing** and **Direct Debit** matters more. Running costs of about £30 to £50 a month are covered by roughly 3 to 4 single-location customers.
+The fixed 20p per payment is a bigger share at these prices, so offering **annual billing** and **Direct Debit** matters more. Running costs of about £30 to £50 a month are covered by roughly 2 to 4 single-location customers.
