@@ -44,6 +44,11 @@ function verifySignature(rawBody, header, secret, nowSeconds, toleranceSeconds) 
 }
 
 // What a verified Stripe event means for us. null = nothing to do.
+// Newer Stripe versions moved the subscription id on an invoice; accept both places.
+function invoiceSubscription(o) {
+  return o.subscription || (o.parent && o.parent.subscription_details && o.parent.subscription_details.subscription) || null;
+}
+
 function eventToAction(ev) {
   if (!ev || !ev.id || !ev.type || !ev.data || !ev.data.object) return null;
   const o = ev.data.object;
@@ -55,9 +60,9 @@ function eventToAction(ev) {
       if (o.payment_status !== 'paid') return null;
       return Object.assign(base, { action: 'paid', company: o.client_reference_id || (o.metadata && o.metadata.company_id) || null, subscription: o.subscription || null });
     case 'invoice.paid':
-      return Object.assign(base, { action: 'paid', subscription: o.subscription || null });
+      return Object.assign(base, { action: 'paid', subscription: invoiceSubscription(o) });
     case 'invoice.payment_failed':
-      return Object.assign(base, { action: 'failed' });
+      return Object.assign(base, { action: 'failed', subscription: invoiceSubscription(o) });
     case 'customer.subscription.deleted':
       return Object.assign(base, { action: 'cancelled', customer: o.customer || null, subscription: o.id || null });
     default:
