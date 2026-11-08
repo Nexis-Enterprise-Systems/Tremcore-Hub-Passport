@@ -224,6 +224,11 @@
     const email = h('input', { id: 'su-email', type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
     const pass = h('input', { id: 'su-pass', type: 'password', autocomplete: 'new-password', required: true, minlength: String(MIN_PASSWORD) });
     const terms = h('input', { id: 'su-terms', type: 'checkbox' });
+    const bill = (val, checked, title, detail) => h('label', { class: 'check plan' }, h('input', { type: 'radio', name: 'su-billing', value: val, checked }), h('span', {}, h('strong', {}, title), ' ', detail));
+    const billing = h('fieldset', { class: 'plans' }, h('legend', {}, 'How would you like to pay?'),
+      bill('monthly', true, 'Monthly', '£14.99 a month for your first site, £7.99 a month for each extra site'),
+      bill('annual', false, 'Yearly, save 15%', '£152.90 a year for your first site, £81.50 a year for each extra site'),
+      h('p', { class: 'muted small' }, 'Prices exclude VAT. Nothing is charged when you sign up. We will be in touch to confirm your plan.'));
     const btn = h('button', { class: 'btn', type: 'submit' }, 'Create my account');
     const form = h('form', { novalidate: true, onsubmit: async (e) => {
       e.preventDefault();
@@ -235,7 +240,7 @@
       await busy(btn, async () => {
         const { data, error } = await sb.auth.signUp({ email: v.email, password: pass.value, options: {
           emailRedirectTo: location.origin + '/app/',
-          data: { signup_company: v.company, signup_full_name: v.name, signup_site_name: v.site, signup_site_address: v.addr, terms_accepted_at: new Date().toISOString() } } });
+          data: { signup_company: v.company, signup_full_name: v.name, signup_site_name: v.site, signup_site_address: v.addr, terms_accepted_at: new Date().toISOString(), signup_billing: (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly' } } });
         if (error) {
           const m = error.message || '';
           return message(box, 'err', error.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
@@ -254,6 +259,7 @@
       h('label', { for: 'su-addr' }, 'Site address (optional)'), addr,
       h('label', { for: 'su-email' }, 'Work email'), email,
       h('label', { for: 'su-pass' }, 'Password'), pass,
+      billing,
       h('label', { class: 'check' }, terms, h('span', {}, 'I agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms'), ' and have read the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy notice'), '.')),
       btn, box,
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewLogin() }, 'I already have an account')));
@@ -297,7 +303,7 @@
     if (!error && !req && meta.signup_company && !finishingSignup) {
       finishingSignup = true;
       try {
-        const made = await sb.rpc('signup_company', { p_company: meta.signup_company, p_full_name: meta.signup_full_name, p_site_name: meta.signup_site_name, p_site_address: meta.signup_site_address || null });
+        const made = await sb.rpc('signup_company', { p_company: meta.signup_company, p_full_name: meta.signup_full_name, p_site_name: meta.signup_site_name, p_site_address: meta.signup_site_address || null, p_billing: meta.signup_billing === 'annual' ? 'annual' : 'monthly' });
         if (made.error) return viewSignupProblem(made.error);
         ({ data: rows, error } = await sb.rpc('auth_requirements'));
         req = rows && rows[0];

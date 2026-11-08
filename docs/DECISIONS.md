@@ -32,3 +32,4 @@
 - Hub stage 2: certificate upload and download on compliance items, renewal task stages (due soon, booking required, booked, completed), audit history view, delete or archive a client, Level 2 "areas we stipulate" once Aaron defines it.
 
 - **8 Nov 2026 — Pricing shape:** one price for the first business unit plus an extra price per additional unit (assumed: a unit = a site). **Prices: £14.99 a month for the first location, £7.99 a month for each additional location** (VAT treatment to confirm). Trial length and non-payment rules still to be set. See `docs/PAYMENTS-AND-COSTS.md` and `docs/BUILD-PROCESS-AND-GO-LIVE.md`.
+- **8 Nov 2026 — Prices exclude VAT; annual billing is 15% off.** Yearly: £152.90 for the first location and £81.50 for each extra (monthly £14.99 and £7.99). Customers choose monthly or yearly when they sign up; the choice is stored on the company (`billing_interval`, migration 0005) and shown in the hub. Taking payment comes later with Stripe.

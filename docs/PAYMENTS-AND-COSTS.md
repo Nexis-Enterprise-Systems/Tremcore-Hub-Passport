@@ -71,12 +71,11 @@ Prices here are examples only to show the fee, not suggestions. Paying a year at
 
 Decided 8 Nov: price per location, £14.99 for the first and £7.99 for each extra. Still open:
 
-1. **VAT on the prices:** are £14.99 and £7.99 before or including VAT?
-2. **Annual billing:** offered, and what discount?
+1. **Refund rule for yearly plans:** if someone cancels part-way through, keep access to the end of the year with no refund (suggested)?
 3. **Trial:** how many days, and is a card or Direct Debit needed up front? (Needing none gets more sign-ups; needing one gets more real customers.)
 4. **If someone stops paying:** how long before the account goes read-only, and what do we say?
 5. **Supplier:** are you happy with Stripe only for now?
-6. **VAT:** are you registered or will you register? Ask the accountant.
+6. **VAT:** are you registered or will you register? Prices are set excluding VAT. Ask the accountant.
 
 ## Sources
 
@@ -98,3 +97,7 @@ First location £14.99 a month, each extra location £7.99 a month. Estimated pa
 | 5 locations | £46.95 | about £1.23 (2.6%) | about £0.80 (1.7%) |
 
 The fixed 20p per payment is a bigger share at these prices, so offering **annual billing** and **Direct Debit** matters more. Running costs of about £30 to £50 a month are covered by roughly 2 to 4 single-location customers.
+
+## Update 8 Nov: annual billing set at 15% off
+
+Prices exclude VAT. Yearly: £152.90 for the first location (monthly £14.99, £179.88 a year) and £81.50 for each extra (monthly £7.99, £95.88 a year). Customers choose on the sign-up page.

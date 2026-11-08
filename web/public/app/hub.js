@@ -5,6 +5,7 @@
   'use strict';
 
   const LEVELS = { 1: 'Self-Managed', 2: 'Managed Service', 3: 'Property & Compliance Managed' };
+  const BILLING = { monthly: 'Monthly', annual: 'Yearly (15% off)' };
   const SUBS = { trial: 'Trial', active: 'Active', past_due: 'Past due', cancelled: 'Cancelled' };
   const BASIS = { legal: 'Legal', standard: 'Standard', best_practice: 'Best practice' };
   const STATUS = { green: 'In date', amber: 'Due soon', red: 'Overdue', missing: 'Not entered' };
@@ -167,6 +168,7 @@
       name: text(c.name, { required: true, autocomplete: 'off' }),
       level: select({ 1: LEVELS[1], 2: LEVELS[2] }, c.level),
       subscription: select(SUBS, c.subscription || 'trial'),
+      billing: select(BILLING, c.billing_interval || 'monthly'),
       value: text(((c.monthly_value_pence || 0) / 100).toFixed(2), { inputmode: 'decimal' }),
       contact_name: text(c.contact_name), contact_email: text(c.contact_email, { type: 'email' }), contact_phone: text(c.contact_phone, { type: 'tel' }),
       address: area(c.address), notes: area(c.notes),
@@ -182,7 +184,7 @@
       if (email && !EMAIL.test(email)) return note(box, 'err', 'Check the contact email address.');
       await busy(btn, async () => {
         try {
-          await onSave({ name, level: Number(f.level.value), subscription: f.subscription.value, monthly_value_pence: pence,
+          await onSave({ name, level: Number(f.level.value), subscription: f.subscription.value, billing_interval: f.billing.value, monthly_value_pence: pence,
             contact_name: f.contact_name.value.trim() || null, contact_email: email || null, contact_phone: f.contact_phone.value.trim() || null,
             address: f.address.value.trim() || null, notes: f.notes.value.trim() || null, require_mfa: f.mfa.checked }, box);
         } catch (err) { note(box, 'err', 'Could not save: ' + err.message); }
@@ -192,7 +194,8 @@
         field('c-name', 'Client name', f.name),
         field('c-level', 'Package', f.level, 'Level 3 is not being offered yet.'),
         field('c-sub', 'Subscription', f.subscription),
-        field('c-value', 'Monthly value (£)', f.value),
+        field('c-billing', 'Billing', f.billing),
+        field('c-value', 'Monthly value (£)', f.value, 'For yearly clients, enter the yearly price divided by 12.'),
         field('c-cname', 'Contact name', f.contact_name),
         field('c-cemail', 'Contact email', f.contact_email),
         field('c-cphone', 'Contact phone', f.contact_phone)),
@@ -261,7 +264,7 @@
     chrome('clients',
       h('p', {}, h('a', { href: '#/clients' }, '← All clients')),
       h('div', { class: 'titlerow' }, h('h1', {}, c.name), badge('sub-' + c.subscription, SUBS[c.subscription])),
-      c.source === 'self_signup' ? h('div', { class: 'msg ok' }, 'This client signed themselves up online. They are on a trial: contact ' + (c.contact_name || 'them') + (c.contact_email ? ' at ' + c.contact_email : '') + ' to agree the plan, then set the subscription to Active.') : null,
+      c.source === 'self_signup' ? h('div', { class: 'msg ok' }, 'This client signed themselves up online. They are on a trial: contact ' + (c.contact_name || 'them') + (c.contact_email ? ' at ' + c.contact_email : '') + ' to agree the plan, then set the subscription to Active. They chose ' + (c.billing_interval === 'annual' ? 'yearly billing (15% off)' : 'monthly billing') + '.') : null,
       h('section', { class: 'card' }, h('h2', {}, 'Client details'), clientForm(c, async (row, box) => {
         await q(ctx.sb.from('companies').update(row).eq('id', id)); Object.assign(c, row); note(box, 'ok', 'Saved.');
       })),
@@ -379,7 +382,7 @@
   // ---------- Subscriptions ----------
   async function pageSubscriptions(my) {
     chrome('subscriptions', h('h1', {}, 'Subscriptions'), loading());
-    const companies = await q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence').order('name', { ascending: true }));
+    const companies = await q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,billing_interval').order('name', { ascending: true }));
     if (my !== token) return;
     const mrr = companies.filter((c) => c.subscription === 'active').reduce((t, c) => t + (c.monthly_value_pence || 0), 0);
     const n = (fn) => String(companies.filter(fn).length);
@@ -387,21 +390,21 @@
       h('div', { class: 'tiles' },
         tile('Monthly recurring revenue (active)', money(mrr)), tile('Self-Managed', n((c) => c.level === 1 && c.subscription !== 'cancelled')),
         tile('Managed Service', n((c) => c.level === 2 && c.subscription !== 'cancelled')), tile('Past due', n((c) => c.subscription === 'past_due'))),
-      h('p', { class: 'hint' }, 'Subscriptions are recorded by hand for now. Automatic billing comes later.'),
+      h('p', { class: 'hint' }, 'Subscriptions are recorded by hand for now. Automatic billing comes later. The monthly value is what the client pays per month; for yearly clients, enter the yearly price divided by 12.'),
       h('div', { class: 'tablewrap' }, h('table', {},
-        h('thead', {}, h('tr', {}, ['Client', 'Package', 'Subscription', 'Monthly (£)', ''].map((x) => h('th', {}, x)))),
+        h('thead', {}, h('tr', {}, ['Client', 'Package', 'Subscription', 'Billing', 'Monthly (£)', ''].map((x) => h('th', {}, x)))),
         h('tbody', {}, companies.length ? companies.map((c) => {
-          const st = select(SUBS, c.subscription), val = text((c.monthly_value_pence / 100).toFixed(2), { inputmode: 'decimal' });
-          st.setAttribute('aria-label', 'Subscription for ' + c.name); val.setAttribute('aria-label', 'Monthly value for ' + c.name);
+          const st = select(SUBS, c.subscription), bl = select(BILLING, c.billing_interval || 'monthly'), val = text((c.monthly_value_pence / 100).toFixed(2), { inputmode: 'decimal' });
+          st.setAttribute('aria-label', 'Subscription for ' + c.name); bl.setAttribute('aria-label', 'Billing for ' + c.name); val.setAttribute('aria-label', 'Monthly value for ' + c.name);
           const out = h('span', { class: 'muted', role: 'status' });
           const save = h('button', { class: 'btn ghost small', onclick: async () => {
             const pence = parsePounds(val.value);
             if (pence === null) return out.replaceChildren('Enter pounds, e.g. 49.50');
-            await busy(save, async () => { try { await q(ctx.sb.from('companies').update({ subscription: st.value, monthly_value_pence: pence }).eq('id', c.id)); out.replaceChildren('Saved'); }
+            await busy(save, async () => { try { await q(ctx.sb.from('companies').update({ subscription: st.value, billing_interval: bl.value, monthly_value_pence: pence }).eq('id', c.id)); out.replaceChildren('Saved'); }
               catch (err) { out.replaceChildren('Not saved: ' + err.message); } });
           } }, 'Save');
-          return h('tr', {}, h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name)), h('td', {}, LEVELS[c.level]), h('td', {}, st), h('td', {}, val), h('td', {}, save, ' ', out));
-        }) : [h('tr', {}, h('td', { colspan: '5', class: 'muted' }, 'No clients yet.'))]))));
+          return h('tr', {}, h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name)), h('td', {}, LEVELS[c.level]), h('td', {}, st), h('td', {}, bl), h('td', {}, val), h('td', {}, save, ' ', out));
+        }) : [h('tr', {}, h('td', { colspan: '6', class: 'muted' }, 'No clients yet.'))]))));
   }
 
   // ---------- Revenue & growth ----------

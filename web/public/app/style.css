@@ -110,3 +110,5 @@ td input,td select{height:40px;min-width:110px}
 .btn[href]{text-decoration:none;text-align:center;line-height:48px}
 .btn.small[href]{line-height:40px}
 .card a:not(.btn){color:var(--gold)}
+
+.plans{border:0;padding:0;margin:20px 0 0}.plans legend{font-weight:600;padding:0;margin-bottom:4px}.check.plan{align-items:flex-start;margin-top:10px}.check.plan input{margin-top:4px}

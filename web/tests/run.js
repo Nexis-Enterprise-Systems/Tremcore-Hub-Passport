@@ -291,10 +291,11 @@ const USERS = {
     // subscriptions
     await p.click('.hubnav >> text=Subscriptions'); await p.waitForSelector('select[aria-label^="Subscription for"]');
     check('subscriptions page totals active clients only (49.00 + 59.50, trial excluded)', (await p.locator('.tiles').innerText()).includes('£108.50'));
-    await p.selectOption('select[aria-label="Subscription for Quay Offices Ltd"]', 'active'); await p.fill('input[aria-label="Monthly value for Quay Offices Ltd"]', '25');
+    await p.selectOption('select[aria-label="Subscription for Quay Offices Ltd"]', 'active'); await p.selectOption('select[aria-label="Billing for Quay Offices Ltd"]', 'annual'); await p.fill('input[aria-label="Monthly value for Quay Offices Ltd"]', '25');
     await p.locator('tr:has-text("Quay Offices") button:has-text("Save")').click(); await p.waitForSelector('tr:has-text("Quay Offices") >> text=Saved');
     const su = (await dbCalls(p, "x.table==='companies'&&x.op==='update'&&x.payload.monthly_value_pence===2500"))[0];
     check('subscription status and value are saved in pence', su && su.payload.subscription === 'active');
+    check('the billing choice (monthly or yearly) is saved too', su && su.payload.billing_interval === 'annual');
     await p.fill('input[aria-label="Monthly value for Quay Offices Ltd"]', 'lots'); await p.locator('tr:has-text("Quay Offices") button:has-text("Save")').click();
     check('bad subscription value is refused without saving', (await p.locator('tr:has-text("Quay Offices")').innerText()).includes('Enter pounds'));
 
@@ -365,9 +366,12 @@ const USERS = {
     await p.fill('#su-pass', 'a-long-enough-password'); await go();
     check('sign-up will not go ahead without agreeing to the terms', (await p.locator('.msg.err').innerText()).includes('terms') && (await calls(p, 'signUp')).length === 0);
     check('terms and privacy links open the notices in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
+    check('sign-up offers monthly (ticked) or yearly billing, with prices excluding VAT', (await p.locator('input[name=su-billing]').count()) === 2 && (await p.locator('input[value=monthly]').isChecked()) && (await p.locator('.plans').innerText()).includes('£14.99') && (await p.locator('.plans').innerText()).includes('£152.90') && (await p.locator('.plans').innerText()).includes('£81.50') && (await p.locator('.plans').innerText()).includes('exclude VAT'));
+    await p.check('input[value=annual]');
     await p.check('#su-terms'); await go(); await p.waitForSelector('text=Check your email');
     const su = (await calls(p, 'signUp'))[0];
     check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_site_name === 'Acme High Street' && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
+    check('the yearly choice is kept with the sign-up details', su.meta.signup_billing === 'annual');
     check('no company is created before the email is confirmed', (await calls(p, 'rpc:signup_company')).length === 0);
     check('the confirmation screen names the address', (await p.locator('strong').innerText()) === 'pat@acme.example');
     await p.click('text=Go to sign in'); await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('.msg.err');
@@ -375,7 +379,7 @@ const USERS = {
     await p.evaluate(() => { window.__mock.users['pat@acme.example'].confirmed = true; });
     await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('img.qr');
     const made = (await calls(p, 'rpc:signup_company'));
-    check('first confirmed sign-in creates the company once, with the saved details', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street');
+    check('first confirmed sign-in creates the company once, with the saved details', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street' && made[0].p_billing === 'annual');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
     check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your account is ready').count()) === 1);

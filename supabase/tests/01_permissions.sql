@@ -183,7 +183,8 @@ begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('00000000-0000-0000-0000-0000000000d1','new1@t', now()),
  ('00000000-0000-0000-0000-0000000000d2','unconfirmed@t', null),
- ('00000000-0000-0000-0000-0000000000d3','new3@t', now());
+ ('00000000-0000-0000-0000-0000000000d3','new3@t', now()),
+ ('00000000-0000-0000-0000-0000000000d4','new4@t', now());
 select 'sign-up is closed by default' as test, signup_open() = false as ok;
 do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
@@ -225,6 +226,9 @@ select * from chk('signup: new customer sees their own company and site after 2F
 select * from chk('signup: new customer cannot see anyone else', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select count(*)=0 from properties where company_id<>my_company()$$);
 select * from chk('signup: new customer is held to 2FA like any head-office user', '00000000-0000-0000-0000-0000000000d1', 'aal1', $$select count(*)=0 from properties$$);
 select * from chk('signup: new customer can edit their own Level 1 records', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select can_edit_property((select id from properties limit 1))$$);
+select 'signup: billing defaults to monthly when none is chosen' as test,
+  exists (select 1 from companies where name='Acme Cafes Ltd' and billing_interval='monthly') as ok;
+select * from chk('signup: new customer cannot change their own billing choice', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$with u as (update companies set billing_interval='annual' returning 1) select count(*)=0 from u$$);
 select * from chk('signup: new customer still cannot change their own package or price', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$with u as (update companies set level=3, monthly_value_pence=1 returning 1) select count(*)=0 from u$$);
 
 -- refusals
@@ -245,9 +249,21 @@ begin
   begin perform signup_company('Co','','Site'); raise exception 'empty name worked'; exception when invalid_parameter_value then null; end;
   begin perform signup_company('Co','Pat',''); raise exception 'empty site worked'; exception when invalid_parameter_value then null; end;
   begin perform signup_company(repeat('x',161),'Pat','Site'); raise exception 'long company worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Co','Pat','Site',null,'weekly'); raise exception 'odd billing choice worked'; exception when invalid_parameter_value then null; end;
   reset role;
 end $$;
 select 'signup: refuses a second company, an unconfirmed email and empty or oversized details' as test, true as ok;
 select 'signup: nothing half-created after refusals' as test,
   (select count(*) from companies where source='self_signup') = 1 and not exists (select 1 from profiles where id in ('00000000-0000-0000-0000-0000000000d2','00000000-0000-0000-0000-0000000000d3')) as ok;
+
+-- annual choice is recorded, and still carries no price or package of its own
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d4', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  perform signup_company('Annual Co','Sam','Annual Site',null,'annual');
+  reset role;
+end $$;
+select 'signup: annual billing choice is recorded, still a Level 1 trial with no charge' as test,
+  exists (select 1 from companies where name='Annual Co' and billing_interval='annual' and level=1 and subscription='trial' and monthly_value_pence=0) as ok;
 rollback;
