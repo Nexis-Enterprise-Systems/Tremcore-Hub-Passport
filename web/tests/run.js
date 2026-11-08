@@ -463,6 +463,38 @@ const USERS = {
     check('if sign-up was closed before the email was confirmed, the person is told and nothing is created', (await t.page.locator('.msg.err').innerText()).includes('not open at the moment') && (await t.page.locator('.hubbar').count()) === 0);
     await t.ctx.close();
 
+    // trial, payment failure, stop and cancellation screens
+    t = await newPage(() => { window.__mock.access = { state: 'trial', is_head: true, ends_at: '2026-11-15T00:00:00Z', days_left: 7 }; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
+    check('trial: a banner says how long is left and that no card is needed', (await t.page.locator('.msg.ok').innerText()).includes('7 days') && (await t.page.locator('.msg.ok').innerText()).includes('No card'));
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'payment_failed', is_head: true, ends_at: '2026-11-15T00:00:00Z', days_left: 5 }; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
+    const pf = await t.page.locator('.msg.err').innerText();
+    check('failed payment: the head-office user is warned, with the 7-day stop explained', pf.includes('did not go through') && pf.includes('5 days') && pf.includes('put on stop'));
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'payment_failed', is_head: false, ends_at: '2026-11-15T00:00:00Z', days_left: 5 }; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
+    check('failed payment: a site user is told to ask head office (no payment controls)', (await t.page.locator('.msg.err').innerText()).includes('head-office user') && (await t.page.locator('#cancel-start').count()) === 0);
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'stopped', is_head: true }; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('text=Your account is on stop');
+    check('stopped: only a stop message, Call Tremcore and Sign out are offered', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#call-tremcore').count()) === 1);
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: true }; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('#cancel-start');
+    await t.page.click('#cancel-start'); await t.page.waitForSelector('#cancel-confirm');
+    check('cancel: explains one month notice, data removal and that a year paid up front is not refunded', (await t.page.locator('.card').innerText()).includes('one month') && (await t.page.locator('.card').innerText()).includes('not refunded'));
+    await t.page.click('#cancel-confirm'); await t.page.waitForSelector('text=due to close on');
+    check('cancel: after giving notice the banner shows the end date and a Keep my account button', (await t.page.locator('button:has-text("Keep my account")').count()) === 1 && (await calls(t.page, 'rpc:request_cancellation')).length === 1);
+    await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#cancel-start');
+    check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.users['again@t'] = { password: 'correct-horse-battery', factor: false, profile: null, confirmed: true, meta: { signup_company: 'Again Co', signup_full_name: 'Al', signup_site_name: 'S' } }; window.__mock.signupRpcError = 'trial_already_used'; });
+    await login(t.page, 'again@t'); await t.page.waitForSelector('text=Almost there');
+    check('repeat trial: the person is told a trial was already used and nothing is created', (await t.page.locator('.msg.err').innerText()).includes('already been used'));
+    await t.ctx.close();
+
     // the staff hub: markers and the on/off switch
     t = await hubPage(); let pg = t.page;
     check('hub dashboard counts self sign-ups still on trial', (await pg.locator('.tile:has-text("Self sign-ups to follow up")').innerText()).includes('1'));

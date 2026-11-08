@@ -181,10 +181,10 @@ rollback;
 -- Self-Managed sign-up (migration 0004) --------------------------------------
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
- ('00000000-0000-0000-0000-0000000000d1','new1@t', now()),
+ ('00000000-0000-0000-0000-0000000000d1','new1@acme.test', now()),
  ('00000000-0000-0000-0000-0000000000d2','unconfirmed@t', null),
  ('00000000-0000-0000-0000-0000000000d3','new3@t', now()),
- ('00000000-0000-0000-0000-0000000000d4','new4@t', now());
+ ('00000000-0000-0000-0000-0000000000d4','new4@annual.test', now());
 select 'sign-up is closed by default' as test, signup_open() = false as ok;
 do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
@@ -217,7 +217,7 @@ do $$ begin
   reset role;
 end $$;
 select 'signup: creates a Level 1 trial company with no charge, no matter what is asked' as test,
-  exists (select 1 from companies where name='Acme Cafes Ltd' and level=1 and subscription='trial' and monthly_value_pence=0 and source='self_signup' and contact_email='new1@t') as ok;
+  exists (select 1 from companies where name='Acme Cafes Ltd' and level=1 and subscription='trial' and monthly_value_pence=0 and source='self_signup' and contact_email='new1@acme.test') as ok;
 select 'signup: person becomes the head-office user with full rights' as test,
   exists (select 1 from profiles p join companies c on c.id=p.company_id where p.id='00000000-0000-0000-0000-0000000000d1' and p.role='client_super' and p.perm='full' and c.name='Acme Cafes Ltd') as ok;
 select 'signup: first site is created under that company' as test,
@@ -290,4 +290,124 @@ do $$ begin
   reset role;
 end $$;
 select 'managed area: enquiries may ask about Managed Service and nothing unknown' as test, true as ok;
+rollback;
+
+-- Trial, repeat-trial block, payment failure, cancellation (migration 0007) -------------
+begin;
+update app_settings set value='true'::jsonb where key='self_signup_open';
+insert into auth.users(id,email,email_confirmed_at) values
+ ('00000000-0000-0000-0000-0000000000e1','owner@bigco.co.uk', now()),
+ ('00000000-0000-0000-0000-0000000000e2','other.person@BigCo.co.uk', now()),
+ ('00000000-0000-0000-0000-0000000000e3','Jo.Smith+one@gmail.com', now()),
+ ('00000000-0000-0000-0000-0000000000e4','josmith@gmail.com', now()),
+ ('00000000-0000-0000-0000-0000000000e5','someone.else@gmail.com', now());
+do $$ begin
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e1', true);
+  perform signup_company('BigCo','Owner','HQ');
+  reset role;
+end $$;
+select 'trial: new sign-up gets a 7-day trial' as test,
+  (select trial_ends_at between now() + interval '6 days 23 hours' and now() + interval '7 days 1 hour' from companies where name='BigCo') as ok;
+do $$ begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e2', true);
+  begin perform signup_company('BigCo Two','Other','HQ2'); raise exception 'second trial from same domain worked'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'trial: a second trial from the same company email domain is refused (any capitals)' as test, true as ok;
+do $$ begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e3', true);
+  perform signup_company('Jo Trading','Jo','Shop');
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e5', true);
+  perform signup_company('Someone Else Trading','Sam','Shop');
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e4', true);
+  begin perform signup_company('Jo Again','Jo','Shop2'); raise exception 'same gmail address trialled twice'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'trial: free webmail is checked by exact address, so two gmail users can each try, but not the same person twice' as test, true as ok;
+select 'trial: the register keeps only a fingerprint, and clients cannot read it' as test,
+  not exists (select 1 from trial_registry where key_hash like '%bigco%') as ok;
+select 'trial: clients have no access to the trial register at all' as test, not has_table_privilege('authenticated','trial_registry','select') as ok;
+
+-- the access state follows the dates
+select * from chk('trial: during the trial the passport opens and the app is told how long is left', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=1 from properties) and (select state='trial' and days_left between 6 and 7 and is_head from my_access())$$);
+update companies set trial_ends_at = now() - interval '1 minute' where name='BigCo';
+select * from chk('trial: after 7 days with no payment the account sees nothing', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=0 from properties) and (select count(*)=0 from companies) and (select state='stopped' from my_access())$$);
+select * from chk('trial: an ended trial cannot be used to edit records either', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select not can_edit_property((select id from properties where company_id=(select id from companies where name='BigCo') limit 1))$$);
+update companies set subscription='active' where name='BigCo';
+select 'billing: marking a company paid clears the trial end' as test, (select trial_ends_at is null and payment_failed_at is null from companies where name='BigCo') as ok;
+select * from chk('billing: paid company is open again', '00000000-0000-0000-0000-0000000000e1', 'aal2', $$select (select count(*)=1 from properties) and (select state='ok' from my_access())$$);
+
+-- payment failure: warning first, then a full stop after 7 days
+update companies set subscription='past_due' where name='BigCo';
+select 'billing: a failed payment records the date' as test, (select payment_failed_at is not null from companies where name='BigCo') as ok;
+select * from chk('billing: during the 7 days the head-office user is warned and still has access', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=1 from properties) and (select state='payment_failed' and is_head and days_left between 6 and 7 from my_access())$$);
+update companies set payment_failed_at = now() - interval '8 days' where name='BigCo';
+select * from chk('billing: 7 days after a failed payment the account is stopped, nothing visible', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=0 from properties) and (select count(*)=0 from compliance_items) and (select state='stopped' from my_access())$$);
+update companies set subscription='active' where name='BigCo';
+select * from chk('billing: paying up reopens it straight away', '00000000-0000-0000-0000-0000000000e1', 'aal2', $$select (select count(*)=1 from properties)$$);
+
+-- Tremcore staff are never locked out, and other companies are untouched
+update companies set subscription='past_due', payment_failed_at = now() - interval '30 days' where name='BigCo';
+select * from chk('stop: Tremcore staff can still see a stopped company', :'staff', 'aal2', $$select count(*)=1 from properties where company_id=(select id from companies where name='BigCo')$$);
+select * from chk('stop: another company is not affected', :'superA', 'aal2', $$select count(*)=2 from properties$$);
+update companies set subscription='active' where name='BigCo';
+
+-- cancellation notice
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a3', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  begin perform request_cancellation(); raise exception 'site user cancelled'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'cancel: a site user cannot give notice (checked by calling the function)' as test, true as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000e1', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  begin perform request_cancellation(); raise exception 'cancelled without 2FA'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'cancel: giving notice needs 2FA' as test, true as ok;
+select * from chk('cancel: head office gives notice and gets one month', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select request_cancellation() between now() + interval '27 days' and now() + interval '32 days'$$);
+select * from chk('cancel: during the notice they keep access and are told when it ends', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=1 from properties) and (select state='cancelling' and is_head from my_access())$$);
+select 'cancel: data removal is scheduled shortly after the notice ends' as test,
+  (select delete_after > access_ends_at and delete_after <= access_ends_at + interval '15 days' from companies where name='BigCo') as ok;
+select * from chk('cancel: asking twice does not extend the notice', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select request_cancellation() < now() + interval '32 days')$$);
+select * from chk('cancel: notice can be withdrawn before it ends', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select (withdraw_cancellation() is null) is not null)$$);
+select * from chk('cancel: after withdrawing, the account is back to normal', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select state='ok' from my_access())$$);
+-- after the notice ends the account is stopped, nothing visible
+select * from chk('cancel: give notice again', '00000000-0000-0000-0000-0000000000e1', 'aal2', $$select (select request_cancellation() is not null)$$);
+update companies set access_ends_at = now() - interval '1 minute' where name='BigCo';
+select * from chk('cancel: when the notice ends the account sees nothing at all', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select count(*)=0 from properties) and (select count(*)=0 from companies) and (select state='stopped' from my_access())$$);
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000e1', true);
+  perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform withdraw_cancellation(); raise exception 'stopped account withdrew notice'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'cancel: a stopped account cannot withdraw the notice' as test, true as ok;
+-- annual, paid up front: notice runs to the later of one month or the end of the paid year
+update companies set access_ends_at=null, cancel_requested_at=null, delete_after=null, billing_interval='annual', paid_until = now() + interval '200 days' where name='BigCo';
+select * from chk('cancel: annual customer keeps access to the end of the paid year', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$select (select request_cancellation() > now() + interval '199 days')$$);
+-- clients cannot set these dates themselves
+select * from chk('billing: a client cannot edit trial or payment dates', '00000000-0000-0000-0000-0000000000e1', 'aal2',
+  $$with u as (update companies set trial_ends_at = now() + interval '5 years', access_ends_at=null returning 1) select count(*)=0 from u$$);
 rollback;

@@ -187,19 +187,61 @@
       !required && h('button', { class: 'btn ghost', onclick: () => { wantEnroll = false; route(); } }, 'Not now')));
   }
 
-  function viewHome(req, hasFactor) {
+  const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const daysWord = (n) => n === 1 ? '1 day' : n + ' days';
+
+  async function viewHome(req, hasFactor) {
     // Tremcore staff land in the management hub (hub.js). Everyone else sees the holding page until their passport is built.
     if ((req.role_name === 'tremcore_admin' || req.role_name === 'tremcore_staff') && window.TCHub) {
       return window.TCHub.mount({ sb, root, req, hasFactor, signOut });
     }
+    let a = { state: 'ok' };
+    try { const r = await sb.rpc('my_access'); if (r.data && r.data[0]) a = r.data[0]; } catch { /* treated as ok; the database still decides what is visible */ }
+    if (a.state === 'stopped') return viewStopped(a);
+    let banner = null;
+    if (a.state === 'payment_failed') {
+      banner = a.is_head
+        ? h('div', { class: 'msg err', role: 'alert' }, h('strong', {}, 'Your latest payment did not go through. '), 'Please update your payment details. If it is not paid within ' + daysWord(a.days_left) + ' (by ' + fmtDate(a.ends_at) + '), your account will be put on stop and nobody at your company will be able to access anything.')
+        : h('div', { class: 'msg err', role: 'alert' }, 'A payment for this account has failed. Please ask your head-office user to fix it, or the account will be put on stop by ' + fmtDate(a.ends_at) + '.');
+    } else if (a.state === 'trial') {
+      banner = h('div', { class: 'msg ok' }, 'Your free trial ends in ' + daysWord(a.days_left) + ' (' + fmtDate(a.ends_at) + '). No card is needed for the trial.');
+    } else if (a.state === 'cancelling') {
+      banner = h('div', { class: 'msg err', role: 'status' }, 'Your account is due to close on ' + fmtDate(a.ends_at) + '. After that you will not be able to sign in and your data will be removed.',
+        a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async () => { await sb.rpc('withdraw_cancellation'); route(); } }, 'Keep my account')));
+    }
     show(h('div', { class: 'card' },
       h('h1', {}, 'Welcome' + (req.full_name ? ', ' + req.full_name.split(' ')[0] : '')),
+      banner,
       h('p', { class: 'muted' }, 'You are signed in.'),
       h('div', { class: 'kv' }, h('span', {}, 'Access'), h('span', {}, ROLE_LABEL[req.role_name] || req.role_name)),
       h('div', { class: 'kv' }, h('span', {}, '2FA'), h('span', { class: 'badge ' + (hasFactor ? 'on' : 'off') }, hasFactor ? 'On' : 'Off')),
       h('p', { class: 'muted', style: null }, 'Your account is ready. Your compliance passport will appear here as soon as it is switched on.'),
       !hasFactor && h('button', { class: 'btn ghost', onclick: () => { wantEnroll = true; route(); } }, 'Set up 2FA'),
+      a.is_head && a.state !== 'cancelling' && h('button', { class: 'btn ghost', id: 'cancel-start', onclick: () => viewCancel() }, 'Cancel my subscription'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
+  }
+
+  function viewStopped(a) {
+    show(h('div', { class: 'card' }, h('h1', {}, 'Your account is on stop'),
+      h('p', { class: 'muted' }, 'You cannot open anything in this account at the moment.'),
+      h('p', {}, a.is_head ? 'If a payment failed or your trial has ended, please contact Tremcore. If your notice period has ended, the account is closed and your data is being removed.'
+        : 'Please ask your head-office user, or contact Tremcore.'),
+      h('a', { class: 'btn', href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'),
+      h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
+  }
+
+  function viewCancel() {
+    const msg = h('div', { id: 'cancel-msg' });
+    show(h('div', { class: 'card' }, h('h1', {}, 'Cancel my subscription'),
+      h('p', {}, 'We need one month\u2019s notice. You keep full access until the notice ends. After that you will not be able to sign in and all your data will be removed.'),
+      h('p', { class: 'muted' }, 'If you have paid for a year up front, you keep access to the end of the year you paid for and that payment is not refunded (see the Terms). Please download or save anything you need before the end date.'),
+      msg,
+      h('button', { class: 'btn', id: 'cancel-confirm', onclick: async () => {
+        const r = await sb.rpc('request_cancellation');
+        if (r.error) { msg.replaceChildren(h('div', { class: 'msg err', role: 'alert' }, 'We could not record your notice. Please contact Tremcore.')); return; }
+        route();
+      } }, 'Give my notice'),
+      h('button', { class: 'btn ghost', onclick: () => route() }, 'Go back')));
   }
 
 
@@ -278,6 +320,7 @@
     const m = (err && err.message) || '';
     const text = /signup_closed/.test(m) ? 'Sign-up is not open at the moment. Please book a demo and we will get you started.'
       : /email_not_confirmed/.test(m) ? 'Your email address has not been confirmed yet. Open the link we emailed you, then sign in again.'
+      : /trial_already_used/.test(m) ? 'A free trial has already been used with this email address or company email domain. Please sign in to your existing account, or call Tremcore and we will help.'
       : /invalid_details/.test(m) ? 'Some of the details were not accepted. Please contact Tremcore and we will set you up.'
       : 'We could not finish setting up your account. Please contact Tremcore.';
     show(h('div', { class: 'card' }, h('h1', {}, 'Almost there'), h('div', { class: 'msg err', role: 'alert' }, text),

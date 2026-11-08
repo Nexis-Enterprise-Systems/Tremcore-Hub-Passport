@@ -129,6 +129,9 @@
     },
     async rpc(name, args) {
       rec('rpc:' + name, args || null);
+      if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
+      if (name === 'request_cancellation') { rec('cancel', 'x'); if (M().cancelError) return { data: null, error: { message: 'x' } }; M().access = { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 }; return { data: '2026-12-08T00:00:00Z' }; }
+      if (name === 'withdraw_cancellation') { M().access = { state: 'ok', is_head: true }; return { data: null }; }
       if (name === 'signup_open') return { data: M().signupOpen === true };
       if (name === 'signup_company') {
         if (M().signupRpcError) return { data: null, error: { message: M().signupRpcError } };
