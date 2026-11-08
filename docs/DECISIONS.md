@@ -31,4 +31,4 @@
 - Admin screen to reset a client's 2FA and to invite users (needs a server-side secret key). The hub's client page shows the people list read-only until this exists.
 - Hub stage 2: certificate upload and download on compliance items, renewal task stages (due soon, booking required, booked, completed), audit history view, delete or archive a client, Level 2 "areas we stipulate" once Aaron defines it.
 
-- **8 Nov 2026 — Pricing shape:** one price for the first business unit plus an extra price per additional unit (assumed: a unit = a site). Prices, trial length and non-payment rules still to be set. See `docs/PAYMENTS-AND-COSTS.md` and `docs/BUILD-PROCESS-AND-GO-LIVE.md`.
+- **8 Nov 2026 — Pricing shape:** one price for the first business unit plus an extra price per additional unit (assumed: a unit = a site). **Prices: £14.99 a month for the first location, £7.99 a month for each additional location** (VAT treatment to confirm). Trial length and non-payment rules still to be set. See `docs/PAYMENTS-AND-COSTS.md` and `docs/BUILD-PROCESS-AND-GO-LIVE.md`.

@@ -6,7 +6,8 @@ Covers **Self-Managed (Level 1) going live on the web**. Tick items off as we go
 
 - One price for the first **business unit**, plus an extra price for each additional unit.
 - **Assumption to confirm:** a "business unit" = one **site / location** (what the passport calls a property). If you mean something else (a separate company, say), tell me before billing is built.
-- Prices are still to be set (see item 4 in the go-live list).
+- **Prices (set 8 Nov):** first location £14.99 a month; each additional location £7.99 a month. Still to confirm: whether these are ex-VAT or inc-VAT.
+- Examples: 1 site £14.99, 3 sites £30.97, 5 sites £46.95, 10 sites £86.90 a month.
 - How it works in the system: Stripe holds one product with a "first unit" price and an "each extra unit" price. The number of sites on the account is the quantity. Adding a site raises the bill, so the app will show the new price and ask the customer to confirm first. Removing a site lowers it from the next bill.
 - Sign-up trial: covers the first unit only (to be confirmed).
 
@@ -58,8 +59,9 @@ Stages 1 to 3 are the heart of it. 5 comes after you've seen 1 to 3 working, as 
 ### D. Money
 - [ ] Stripe account opened (company details, bank account, identity checks)
 - [ ] Direct Debit switched on in Stripe
-- [ ] Decision: price for the first business unit
-- [ ] Decision: price for each additional unit
+- [x] Decision: price for the first business unit (£14.99 a month)
+- [x] Decision: price for each additional unit (£7.99 a month)
+- [ ] Decision: are these prices ex-VAT or inc-VAT
 - [ ] Decision: monthly only, or annual too (and the annual discount)
 - [ ] Decision: trial length, and whether payment details are needed to start
 - [ ] Decision: how long after a missed payment before an account goes read-only

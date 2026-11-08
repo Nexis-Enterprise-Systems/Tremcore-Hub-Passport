@@ -84,3 +84,15 @@ Prices here are examples only to show the fee, not suggestions. Paying a year at
 - Supabase: https://focusreactive.com/blog/supabase-price/ · https://makerkit.dev/blog/saas/supabase-pricing
 - Email: https://automationatlas.io/answers/resend-free-tier-explained-2026/ · https://www.suprsend.com/post/resend-alternatives
 - VAT: https://avask.com/blog/uk-vat-threshold-2026/ · https://salarytax.uk/vat-registration-2026-27-thresholds-and-deadlines
+
+## Update 8 Nov: prices set
+
+First location £14.99 a month, each extra location £7.99 a month. Estimated payment fees (Stripe Billing included, approximate):
+
+| Account | Bill | Card | Direct Debit |
+|---|---|---|---|
+| 1 location | £14.99 | about £0.53 (3.5%) | about £0.31 (2.1%) |
+| 3 locations | £30.97 | about £0.87 (2.8%) | about £0.62 (2.0%) |
+| 5 locations | £46.95 | about £1.12 (2.4%) | about £0.77 (1.6%) |
+
+The fixed 20p per payment is a bigger share at these prices, so offering **annual billing** and **Direct Debit** matters more. Running costs of about £30 to £50 a month are covered by roughly 3 to 4 single-location customers.
