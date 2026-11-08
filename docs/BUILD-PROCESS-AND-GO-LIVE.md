@@ -81,8 +81,7 @@ Stages 1 to 3 are the heart of it. 5 comes after you've seen 1 to 3 working, as 
 - [ ] Real company number, registered address, phone and email put on the website (placeholders today)
 
 ### F. Website
-- [ ] Managed Service postcode check tried with a Medway postcode (should say available) and a far-away one (should say not available)
-- [ ] Managed Service price decided and wording on the website agreed
+- [ ] (Parked) Managed Service is switched off on the website; before switching it on: set a price, try the postcode check with a Medway and a far-away postcode
 - [ ] Phone number, email, address and company number replaced (no placeholders left)
 - [ ] Self-Managed "Sign up" button tried on a phone and a computer
 - [ ] "Ask a question" form delivers to the right inbox
