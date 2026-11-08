@@ -12,10 +12,10 @@ insert into auth.users(id,email) values
  ('00000000-0000-0000-0000-0000000000b1','superB@t'),
  ('00000000-0000-0000-0000-0000000000c1','superC@t'),
  ('00000000-0000-0000-0000-0000000000a5','siteA_full@t');
-insert into companies(id,name,level,require_mfa) values
- ('10000000-0000-0000-0000-00000000000a','Company A (L1)',1,false),
- ('10000000-0000-0000-0000-00000000000b','Company B (L2)',2,false),
- ('10000000-0000-0000-0000-00000000000c','Company C (L3)',3,false);
+insert into companies(id,name,level,require_mfa,extra_seats) values
+ ('10000000-0000-0000-0000-00000000000a','Company A (L1)',1,false,5),
+ ('10000000-0000-0000-0000-00000000000b','Company B (L2)',2,false,0),
+ ('10000000-0000-0000-0000-00000000000c','Company C (L3)',3,false,0);
 insert into properties(id,company_id,name) values
  ('20000000-0000-0000-0000-0000000000a1','10000000-0000-0000-0000-00000000000a','A site 1'),
  ('20000000-0000-0000-0000-0000000000a2','10000000-0000-0000-0000-00000000000a','A site 2'),
@@ -410,4 +410,36 @@ select * from chk('cancel: annual customer keeps access to the end of the paid y
 -- clients cannot set these dates themselves
 select * from chk('billing: a client cannot edit trial or payment dates', '00000000-0000-0000-0000-0000000000e1', 'aal2',
   $$with u as (update companies set trial_ends_at = now() + interval '5 years', access_ends_at=null returning 1) select count(*)=0 from u$$);
+rollback;
+
+-- Included users and paid extras (migration 0008) -----------------------------------
+begin;
+insert into companies(id,name,level,require_mfa) values ('10000000-0000-0000-0000-0000000000f1','Seats Co',1,false);
+insert into properties(id,company_id,name) values ('20000000-0000-0000-0000-0000000000f1','10000000-0000-0000-0000-0000000000f1','Seats site 1');
+insert into auth.users(id,email) values
+ ('00000000-0000-0000-0000-0000000000f1','s1@seats.test'),('00000000-0000-0000-0000-0000000000f2','s2@seats.test'),
+ ('00000000-0000-0000-0000-0000000000f3','s3@seats.test'),('00000000-0000-0000-0000-0000000000f4','s4@seats.test');
+insert into profiles(id,full_name,role,company_id,perm) values
+ ('00000000-0000-0000-0000-0000000000f1','Admin','client_super','10000000-0000-0000-0000-0000000000f1','full'),
+ ('00000000-0000-0000-0000-0000000000f2','Manager','client_site','10000000-0000-0000-0000-0000000000f1','full');
+select 'seats: the price includes one site, a super admin and a manager' as test, true as ok;
+do $$ begin
+  begin insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000f3','Third','client_site','10000000-0000-0000-0000-0000000000f1','view'); raise exception 'third user allowed on one site'; exception when insufficient_privilege then null; end;
+end $$;
+select 'seats: a third sign-in user is refused on a one-site company' as test, true as ok;
+insert into properties(company_id,name) values ('10000000-0000-0000-0000-0000000000f1','Seats site 2');
+insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000f3','Third','client_site','10000000-0000-0000-0000-0000000000f1','view');
+select 'seats: each extra site adds one more user' as test, true as ok;
+do $$ begin
+  begin insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000f4','Fourth','client_site','10000000-0000-0000-0000-0000000000f1','view'); raise exception 'fourth allowed'; exception when insufficient_privilege then null; end;
+end $$;
+update companies set extra_seats=1 where id='10000000-0000-0000-0000-0000000000f1';
+insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000f4','Fourth','client_site','10000000-0000-0000-0000-0000000000f1','view');
+select 'seats: a goodwill seat granted by Tremcore allows one more' as test, true as ok;
+select 'extras: catalogue has Toolbox Talks at 3.99 and Staff Sign In/Out at 4.99' as test,
+  (select price_pence from extras where code='toolbox_talks')=399 and (select price_pence from extras where code='staff_signin')=499 as ok;
+insert into company_extras(company_id,extra_code,price_pence) values ('10000000-0000-0000-0000-00000000000a','toolbox_talks',399);
+select * from chk('extras: a client sees its own extras', :'superA', 'aal2', $$select count(*)=1 from company_extras$$);
+select * from chk('extras: another company sees none of them', :'superB', 'aal2', $$select count(*)=0 from company_extras$$);
+select * from deny('extras: a client cannot switch an extra on for itself', :'superA', 'aal2', $$insert into company_extras(company_id,extra_code,price_pence) values ('10000000-0000-0000-0000-00000000000a','staff_signin',0)$$);
 rollback;
