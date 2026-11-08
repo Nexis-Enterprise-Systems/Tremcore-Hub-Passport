@@ -447,6 +447,7 @@ const USERS = {
     check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
     check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
+    check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
     signupOpen = true; await pg.goto(base + '/what-you-get/'); await pg.waitForSelector('[data-signup]:visible');
     check('website shows "Sign up" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
     signupOpen = false;
