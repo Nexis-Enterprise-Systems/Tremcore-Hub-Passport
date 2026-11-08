@@ -6,7 +6,7 @@
 
   const LEVELS = { 1: 'Self-Managed', 2: 'Managed Service', 3: 'Property & Compliance Managed' };
   const BILLING = { monthly: 'Monthly', annual: 'Yearly (15% off)' };
-  const SUBS = { trial: 'Trial', active: 'Active', past_due: 'Past due', cancelled: 'Cancelled' };
+  const SUBS = { trial: 'Unpaid (awaiting payment)', active: 'Active', past_due: 'Past due', cancelled: 'Cancelled' };
   const BASIS = { legal: 'Legal', standard: 'Standard', best_practice: 'Best practice' };
   const STAGES = { due_soon: 'Due soon', booking_required: 'Booking required', booked: 'Booked', completed: 'Completed' };
   const STATUS = { green: 'In date', amber: 'Due soon', red: 'Overdue', missing: 'Not entered' };
@@ -73,6 +73,9 @@
     el.id = id;
     return h('div', { class: 'f' }, h('label', { for: id }, label), el, hint && h('p', { class: 'hint' }, hint));
   }
+  // Names start every word with a capital letter (the database does the same on save).
+  const titleCase = (t) => String(t || '').replace(/(^|[\s\-'])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  const nameBox = (v, extra) => { const el = text(v, extra); el.addEventListener('blur', () => { el.value = titleCase(el.value.trim()); }); return el; };
   const text = (v, extra) => h('input', Object.assign({ type: 'text', value: v == null ? '' : v }, extra || {}));
   const area = (v) => h('textarea', { rows: '3' }, v == null ? '' : v);
   function select(options, current) {
@@ -166,12 +169,12 @@
   function clientForm(c, onSave) {
     const box = h('div');
     const f = {
-      name: text(c.name, { required: true, autocomplete: 'off' }),
+      name: nameBox(c.name, { required: true, autocomplete: 'off' }),
       level: select({ 1: LEVELS[1], 2: LEVELS[2] }, c.level),
       subscription: select(SUBS, c.subscription || 'trial'),
       billing: select(BILLING, c.billing_interval || 'monthly'),
       value: text(((c.monthly_value_pence || 0) / 100).toFixed(2), { inputmode: 'decimal' }),
-      contact_name: text(c.contact_name), contact_email: text(c.contact_email, { type: 'email' }), contact_phone: text(c.contact_phone, { type: 'tel' }),
+      contact_name: nameBox(c.contact_name), contact_email: text(c.contact_email, { type: 'email' }), contact_phone: text(c.contact_phone, { type: 'tel' }),
       address: area(c.address), notes: area(c.notes),
       mfa: h('input', { type: 'checkbox', checked: !!c.require_mfa })
     };
@@ -259,7 +262,7 @@
       try { const made = await q(ctx.sb.from('properties').insert({ company_id: id, name, address: sa.value.trim() || null }).select().single());
         location.hash = '#/sites/' + made.id; } catch (err) { note(siteBox, 'err', 'Could not add the site: ' + err.message); }
     } });
-    const sn = text('', { placeholder: 'Site name', 'aria-label': 'New site name' }), sa = text('', { placeholder: 'Address (optional)', 'aria-label': 'New site address' });
+    const sn = nameBox('', { placeholder: 'Site name', 'aria-label': 'New site name' }), sa = text('', { placeholder: 'Address (optional)', 'aria-label': 'New site address' });
     addSite.append(sn, sa, h('button', { class: 'btn small', type: 'submit' }, 'Add site'));
     const saved = h('div');
     chrome('clients',

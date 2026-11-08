@@ -4,7 +4,7 @@ Run:  python3 web/tools/build-site.py     (the generated pages are committed, so
 Placeholders in [SQUARE BRACKETS] must be replaced before launch (see docs/DECISIONS.md)."""
 import os
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public')
-PHONE, EMAIL, HOURS, ADDR, CO = '', 'hello@tremcore.co.uk', '', 'Goldfinch Grove, Rochester, Kent, ME3 8FX', '[COMPANY NUMBER]'
+PHONE, EMAIL, HOURS, ADDR, CO = '', 'hello@tremcore.co.uk', '', 'Goldfinch Grove, Rochester, Kent, ME3 8FX', '17507064'
 # Phone and opening hours are left out of the pages until they are filled in above (no placeholder text on the live site).
 PHONE_P = f'<p>{PHONE}</p>' if PHONE else ''
 OR_CALL = f'{OR_CALL}' if PHONE else ''

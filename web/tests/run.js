@@ -415,8 +415,11 @@ const USERS = {
     check('sign-in page offers sign-up once Tremcore opens it', true);
     await t.page.click('text=Create an account'); await t.page.waitForSelector('#su-email');
     const p = t.page, go = () => p.click('button[type=submit]');
-    await go(); check('sign-up needs name, business and first site', (await p.locator('.msg.err').innerText()).includes('first site'));
-    await p.fill('#su-name', 'Pat Jones'); await p.fill('#su-company', 'Acme Cafes Ltd'); await p.fill('#su-site', 'Acme High Street'); await p.fill('#su-email', 'nope');
+    await go(); check('sign-up needs name and business name', (await p.locator('.msg.err').innerText()).includes('business name'));
+    check('sign-up asks for a number of sites, and has no site name or address box and no "work" email wording', (await p.locator('#su-sites').count()) === 1 && (await p.locator('#su-site').count()) === 0 && (await p.locator('#su-addr').count()) === 0 && !/work email/i.test(await p.locator('.card').innerText()));
+    await p.fill('#su-name', 'pat jones'); await p.fill('#su-company', 'acme cafes Ltd'); await p.fill('#su-sites', '3'); await p.fill('#su-email', 'nope');
+    await p.press('#su-name', 'Tab'); await p.press('#su-company', 'Tab');
+    check('names get a capital on every word as you leave the box', (await p.inputValue('#su-name')) === 'Pat Jones' && (await p.inputValue('#su-company')) === 'Acme Cafes Ltd');
     await go(); check('sign-up checks the email address', (await p.locator('.msg.err').innerText()).includes('email'));
     await p.fill('#su-email', 'pat@acme.example'); await p.fill('#su-pass', 'short'); await go();
     check('sign-up asks for at least 12 characters', (await p.locator('.msg.err').innerText()).includes('at least 12'));
@@ -424,11 +427,14 @@ const USERS = {
     check('sign-up will not go ahead without agreeing to the terms', (await p.locator('.msg.err').innerText()).includes('terms') && (await calls(p, 'signUp')).length === 0);
     check('terms and privacy links open the notices in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
     check('sign-up offers monthly (ticked) or yearly, prices excluding VAT, and says there is no trial', (await p.locator('input[name=su-billing]').count()) === 2 && (await p.locator('input[value=monthly]').isChecked()) && (await p.locator('.plans').innerText()).includes('£14.99') && (await p.locator('.plans').innerText()).includes('£152.90') && (await p.locator('.plans').innerText()).includes('exclude VAT') && !/free trial/i.test(await p.locator('.card').innerText()));
+    check('the price follows the number of sites: 3 sites is £30.97 a month or £315.90 a year', (await p.locator('#su-monthly').innerText()).includes('£30.97') && (await p.locator('#su-annual').innerText()).includes('£315.90'));
+    await p.fill('#su-sites', '1'); check('1 site is £14.99 a month or £152.90 a year', (await p.locator('#su-monthly').innerText()).includes('£14.99') && (await p.locator('#su-annual').innerText()).includes('£152.90'));
+    await p.fill('#su-sites', '3');
     await p.check('input[value=annual]');
     check('the terms and privacy links are on the form and open in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
     await p.check('#su-terms'); await go(); await p.waitForSelector('text=Check your email');
     const su = (await calls(p, 'signUp'))[0];
-    check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_site_name === 'Acme High Street' && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
+    check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_sites === 3 && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
     check('the yearly choice is kept with the sign-up details', su.meta.signup_billing === 'annual');
     check('no company is created before the email is confirmed', (await calls(p, 'rpc:signup_company')).length === 0);
     check('the confirmation screen names the address', (await p.locator('strong').innerText()) === 'pat@acme.example');
@@ -437,7 +443,7 @@ const USERS = {
     await p.evaluate(() => { window.__mock.users['pat@acme.example'].confirmed = true; });
     await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('img.qr');
     const made = (await calls(p, 'rpc:signup_company'));
-    check('first confirmed sign-in creates the company once, with the saved details and billing choice', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street' && made[0].p_billing === 'annual');
+    check('first confirmed sign-in creates the company once, with the saved details and billing choice', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_sites === 3 && made[0].p_billing === 'annual');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
     check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your account is ready').count()) === 1);
@@ -448,7 +454,7 @@ const USERS = {
     // existing email, closed-at-the-last-moment, and a signup rule refusal
     t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.users['taken@example.com'] = { password: 'x', factor: false, profile: null, confirmed: true }; });
     await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
-    const fill = async (pg, mail) => { await pg.fill('#su-name', 'Pat'); await pg.fill('#su-company', 'Co'); await pg.fill('#su-site', 'Site'); await pg.fill('#su-email', mail); await pg.fill('#su-pass', 'a-long-enough-password'); await pg.check('#su-terms'); await pg.click('button[type=submit]'); };
+    const fill = async (pg, mail) => { await pg.fill('#su-name', 'Pat'); await pg.fill('#su-company', 'Co'); await pg.fill('#su-sites', '1'); await pg.fill('#su-email', mail); await pg.fill('#su-pass', 'a-long-enough-password'); await pg.check('#su-terms'); await pg.click('button[type=submit]'); };
     await fill(t.page, 'taken@example.com'); await t.page.waitForSelector('.msg.err');
     check('an email that already has an account is told so, kindly', (await t.page.locator('.msg.err').innerText()).includes('already has an account'));
     await t.page.evaluate(() => { window.__mock.signupError = { status: 429, message: 'rate' }; });
@@ -492,14 +498,16 @@ const USERS = {
     check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
     await t.ctx.close();
     // first-run set-up: contact details and tick the core checks
-    const setupSeed = () => { window.__mock.tables = { companies: [{ id: 'c1', name: 'Acme Cafes Ltd', setup_completed_at: null }],
+    const setupSeed = () => { window.__mock.tables = { companies: [{ id: 'c1', name: 'Acme Cafes Ltd', setup_completed_at: null }], properties: [{ id: 's1', name: 'Site 1', address: null }, { id: 's2', name: 'Site 2', address: null }],
       core_checks: ['Fire Risk Assessment', 'Fire Alarm Testing & Maintenance', 'Fire Extinguisher Maintenance', 'Emergency Light Testing', 'Electrical Installation Condition Reporting (EICR)', 'PAT Testing', 'Asbestos Management Survey / Register', 'Legionella (water) Risk Management', 'Gas Safety Inspection & Maintenance', 'F-Gas'].map((label, i) => ({ code: 'c' + i, label, sort: i })) }; };
     t = await newPage(setupSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#st-go');
     check('set-up: a new head-office user is asked for details and shown the ten core checks, none ticked', (await t.page.locator('input[name=core]').count()) === 10 && (await t.page.locator('input[name=core]:checked').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Fire Risk Assessment') && (await t.page.locator('.card').innerText()).includes('F-Gas'));
+    check('set-up: one row per site to name, with no name filled in yet', (await t.page.locator('[data-site-row]').count()) === 2 && (await t.page.locator('[data-site-row] input').first().inputValue()) === '');
+    await t.page.fill('[data-site-row=s1] input >> nth=0', 'high street shop'); await t.page.fill('[data-site-row=s1] input >> nth=1', '1 High St'); await t.page.press('[data-site-row=s1] input >> nth=0', 'Tab');
     await t.page.fill('#st-phone', '01634 000000'); await t.page.check('input[value=c0]'); await t.page.check('input[value=c5]');
     await t.page.click('#st-go'); await t.page.waitForSelector('text=Your checks');
     const fs = (await calls(t.page, 'rpc:finish_setup'))[0];
-    check('set-up: only the ticked checks and the details are sent', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000');
+    check('set-up: only the ticked checks and the details are sent, with the site names capitalised and the unnamed one left as it was', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000' && fs.p_sites[0].name === 'High Street Shop' && fs.p_sites[0].address === '1 High St' && fs.p_sites[1].name === 'Site 2');
     check('set-up: the ticked checks appear as "Not entered yet" (never green), and set-up is not asked again', (await t.page.locator('.kv:has-text("PAT Testing") .badge').innerText()) === 'Not entered yet' && (await t.page.locator('#st-go').count()) === 0);
     await t.ctx.close();
     t = await newPage(setupSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#st-go'); await t.page.click('#st-all');

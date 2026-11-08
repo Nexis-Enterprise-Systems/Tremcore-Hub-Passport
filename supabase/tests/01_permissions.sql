@@ -190,7 +190,7 @@ do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
   perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
   set local role authenticated;
-  begin perform signup_company('Acme','Pat','Main site'); raise exception 'sign-up worked while closed';
+  begin perform signup_company('Acme','Pat',1); raise exception 'sign-up worked while closed';
   exception when insufficient_privilege then null; end;
   reset role;
 end $$;
@@ -198,7 +198,7 @@ select 'signup: refused while switched off' as test, true as ok;
 do $$ begin
   set local role anon;
   begin perform count(*) from app_settings; raise exception 'anon read settings'; exception when insufficient_privilege then null; end;
-  begin perform signup_company('X','Y','Z'); raise exception 'anon signed up'; exception when insufficient_privilege then null; end;
+  begin perform signup_company('X','Y',1); raise exception 'anon signed up'; exception when insufficient_privilege then null; end;
   reset role;
 end $$;
 select 'signup: anonymous visitors cannot read settings or call sign-up' as test, true as ok;
@@ -213,15 +213,17 @@ do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
   perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
   set local role authenticated;
-  perform signup_company('  Acme Cafes Ltd ','Pat Jones','Acme High Street','1 High Street');
+  perform signup_company('  acme cafes Ltd ','pat jones',1);
   reset role;
 end $$;
 select 'signup: creates a Level 1 trial company with no charge, no matter what is asked' as test,
   exists (select 1 from companies where name='Acme Cafes Ltd' and level=1 and subscription='trial' and monthly_value_pence=0 and source='self_signup' and contact_email='new1@acme.test') as ok;
 select 'signup: person becomes the head-office user with full rights' as test,
   exists (select 1 from profiles p join companies c on c.id=p.company_id where p.id='00000000-0000-0000-0000-0000000000d1' and p.role='client_super' and p.perm='full' and c.name='Acme Cafes Ltd') as ok;
-select 'signup: first site is created under that company' as test,
-  exists (select 1 from properties pr join companies c on c.id=pr.company_id where c.name='Acme Cafes Ltd' and pr.name='Acme High Street' and pr.address='1 High Street') as ok;
+select 'signup: names are tidied so every word starts with a capital' as test,
+  exists (select 1 from profiles where id='00000000-0000-0000-0000-0000000000d1' and full_name='Pat Jones') as ok;
+select 'signup: the chosen number of sites is created unnamed (Site 1), to be named later' as test,
+  exists (select 1 from properties pr join companies c on c.id=pr.company_id where c.name='Acme Cafes Ltd' and pr.name='Site 1' and pr.address is null) as ok;
 update companies set subscription='active' where name='Acme Cafes Ltd';   -- payment confirmed (Stripe, later)
 select * from chk('signup: new customer sees their own company and site after 2FA', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select (select count(*) from companies)=1 and (select count(*) from properties)=1$$);
 select * from chk('signup: new customer cannot see anyone else', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select count(*)=0 from properties where company_id<>my_company()$$);
@@ -240,17 +242,17 @@ begin
   -- again, same person
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
   set local role authenticated;
-  begin perform signup_company('Second','Pat','Site'); raise exception 'second sign-up worked'; exception when unique_violation then null; end;
+  begin perform signup_company('Second','Pat',1); raise exception 'second sign-up worked'; exception when unique_violation then null; end;
   -- email not confirmed
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d2', true);
-  begin perform signup_company('Ghost Ltd','Ghost','Site'); raise exception 'unconfirmed email worked'; exception when insufficient_privilege then null; end;
+  begin perform signup_company('Ghost Ltd','Ghost',1); raise exception 'unconfirmed email worked'; exception when insufficient_privilege then null; end;
   -- bad details
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d3', true);
-  begin perform signup_company('','Pat','Site'); raise exception 'empty company worked'; exception when invalid_parameter_value then null; end;
-  begin perform signup_company('Co','','Site'); raise exception 'empty name worked'; exception when invalid_parameter_value then null; end;
-  begin perform signup_company('Co','Pat',''); raise exception 'empty site worked'; exception when invalid_parameter_value then null; end;
-  begin perform signup_company(repeat('x',161),'Pat','Site'); raise exception 'long company worked'; exception when invalid_parameter_value then null; end;
-  begin perform signup_company('Co','Pat','Site',null,'weekly'); raise exception 'odd billing choice worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('','Pat',1); raise exception 'empty company worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Co','',1); raise exception 'empty name worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Co','Pat',0); raise exception 'empty site worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company(repeat('x',161),'Pat',1); raise exception 'long company worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Co','Pat',1,'weekly'); raise exception 'odd billing choice worked'; exception when invalid_parameter_value then null; end;
   reset role;
 end $$;
 select 'signup: refuses a second company, an unconfirmed email and empty or oversized details' as test, true as ok;
@@ -262,7 +264,7 @@ do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d4', true);
   perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
   set local role authenticated;
-  perform signup_company('Annual Co','Sam','Annual Site',null,'annual');
+  perform signup_company('Annual Co','Sam',1,'annual');
   reset role;
 end $$;
 select 'signup: annual billing choice is recorded, still a Level 1 trial with no charge' as test,
@@ -306,7 +308,7 @@ do $$ begin
   perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
   set local role authenticated;
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e1', true);
-  perform signup_company('BigCo','Owner','HQ');
+  perform signup_company('BigCo','Owner',1);
   reset role;
 end $$;
 select 'sign-up: there is no free trial; a new company starts unpaid with nothing open' as test,
@@ -318,11 +320,23 @@ select * from chk('sign-up: an unpaid company cannot edit anything', '00000000-0
 do $$ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e2', true);
-  perform signup_company('BigCo Second Site','Other','HQ2');
+  perform signup_company('BigCo Second Site','Other',1);
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000e3', true);
-  perform signup_company('Jo Trading','Jo','Shop');
+  perform signup_company('Jo Trading','Jo',1);
   reset role;
 end $$;
+do $$ begin
+  insert into auth.users(id,email,email_confirmed_at) values ('00000000-0000-0000-0000-0000000000ea','multi@multi.test', now()),('00000000-0000-0000-0000-0000000000eb','bad@multi.test', now());
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000ea', true);
+  set local role authenticated;
+  perform signup_company('multi co','Mia',3);
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000eb', true);
+  begin perform signup_company('Bad','Bo',0); raise exception 'zero sites'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Bad','Bo',101); raise exception 'too many sites'; exception when invalid_parameter_value then null; end;
+  reset role;
+end $$;
+select 'sign-up: the number of sites chosen is created (3 unnamed sites); 0 or 101 is refused' as test,
+  (select count(*)=3 and string_agg(name, ',' order by name)='Site 1,Site 2,Site 3' from properties where company_id=(select id from companies where name='Multi Co')) as ok;
 select 'sign-up: two people at the same company domain, or two Gmail users, can each sign up (nothing is free to abuse)' as test, true as ok;
 update companies set subscription='active' where name='BigCo';
 select 'billing: confirming payment opens the account and clears the unpaid marker' as test, (select trial_ends_at is null and payment_failed_at is null from companies where name='BigCo') as ok;
@@ -539,5 +553,18 @@ do $$ begin
   reset role;
 end $$;
 select 'setup: an unknown check is refused, and a site user cannot run the set-up' as test, true as ok;
+select * from chk('setup: sites are named and given addresses in the first-run set-up, tidied to capitals', :'superA', 'aal2',
+  $$select finish_setup(null,null,array[]::text[], '[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St"}]'::jsonb)=0$$);
+select 'setup: the site was renamed' as test, exists (select 1 from properties where id='20000000-0000-0000-0000-0000000000a1' and name='High Street Shop' and address='1 High St') as ok;
 select 'setup: another company got nothing' as test, (select count(*)=0 from compliance_items where property_id='20000000-0000-0000-0000-0000000000b1' and title='Fire Risk Assessment') as ok;
+rollback;
+
+-- Names are tidied wherever they are saved (migration 0013) --------------------------
+begin;
+insert into companies(id,name,contact_name) values ('10000000-0000-0000-0000-0000000000cc','  tidy builders ltd','sam o''brien-smith');
+select 'names: business and contact names get a capital on every word' as test,
+  (select name='Tidy Builders Ltd' and contact_name='Sam O''Brien-Smith' from companies where id='10000000-0000-0000-0000-0000000000cc') as ok;
+insert into properties(company_id,name) values ('10000000-0000-0000-0000-0000000000cc','west  yard');
+select 'names: site names too, and letters already capital are left alone' as test,
+  (select name='West  Yard' from properties where company_id='10000000-0000-0000-0000-0000000000cc') and cap_words('ABC services') = 'ABC Services' as ok;
 rollback;

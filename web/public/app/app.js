@@ -15,6 +15,14 @@
   let suppressSignedOut = false; // true while we sign out on purpose and show our own message afterwards
   let wantEnroll = false;   // true when an optional user chose "Set up 2FA"
 
+  // Capital letter at the start of every word (after a space, hyphen or apostrophe); other letters are left as typed. The database does the same on save.
+  const titleCase = (t) => String(t || '').replace(/(^|[\s\-'])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  const tidy = (input) => { input.addEventListener('blur', () => { input.value = titleCase(input.value.trim()); }); return input; };
+  // Prices in pence, excluding VAT: first site then each extra site; yearly is 15% off.
+  const PRICE = { monthly: [1499, 799], annual: [15290, 8150] };
+  const pounds = (p) => '\u00a3' + (p / 100).toFixed(2);
+  const totalFor = (n, interval) => PRICE[interval][0] + PRICE[interval][1] * Math.max(0, n - 1);
+
   // ---------- tiny DOM helper (text only: nothing is ever inserted as HTML) ----------
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -267,6 +275,8 @@
   // ---------- First-run set-up: contact details, then tick the core checks that apply ----------
   async function viewSetup(co) {
     const checks = ((await sb.from('core_checks').select('code,label').order('sort')).data) || [];
+    const mySites = ((await sb.from('properties').select('id,name,address').order('name')).data) || [];
+    const siteRows = mySites.map((x) => ({ id: x.id, name: tidy(h('input', { 'aria-label': 'Name of ' + x.name, maxlength: '160', value: /^Site \d+$/.test(x.name) ? '' : x.name, placeholder: x.name })), address: h('input', { 'aria-label': 'Address of ' + x.name, maxlength: '300', value: x.address || '', autocomplete: 'off' }), was: x.name }));
     const box = h('div', { id: 'setup-msg' });
     const phone = h('input', { id: 'st-phone', type: 'tel', autocomplete: 'tel', maxlength: '40' });
     const addr = h('input', { id: 'st-addr', autocomplete: 'street-address', maxlength: '300' });
@@ -277,7 +287,8 @@
       e.preventDefault();
       const codes = [...root.querySelectorAll('input[name=core]:checked')].map((i) => i.value);
       await busy(btn, async () => {
-        const r = await sb.rpc('finish_setup', { p_phone: phone.value.trim() || null, p_address: addr.value.trim() || null, p_codes: codes });
+        const sitesOut = siteRows.map((x) => ({ id: x.id, name: titleCase(x.name.value.trim()) || x.was, address: x.address.value.trim() || null }));
+        const r = await sb.rpc('finish_setup', { p_phone: phone.value.trim() || null, p_address: addr.value.trim() || null, p_codes: codes, p_sites: sitesOut });
         if (r.error) return message(box, 'err', 'Sorry, we could not save that. Please try again, or contact Tremcore.');
         route();
       });
@@ -285,6 +296,9 @@
       h('h3', {}, 'About your business'),
       h('label', { for: 'st-phone' }, 'Business phone number (optional)'), phone,
       h('label', { for: 'st-addr' }, 'Business address (optional)'), addr,
+      h('h3', {}, mySites.length === 1 ? 'Your site' : 'Your sites'),
+      h('p', { class: 'muted small' }, 'Give each site a name and, if you like, its address. You can change these later.'),
+      ...siteRows.map((x, i) => h('div', { class: 'member', 'data-site-row': x.id }, h('label', {}, 'Site ' + (i + 1) + ' name'), x.name, h('label', {}, 'Address (optional)'), x.address)),
       h('h3', {}, 'Which compliance checks apply to your premises?'),
       h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
       h('div', { class: 'checklist' }, ...boxes), all, btn, box);
@@ -324,7 +338,7 @@
       return card;
     });
 
-    const iname = h('input', { id: 'inv-name', maxlength: '120' }), imail = h('input', { id: 'inv-email', type: 'email', inputmode: 'email', maxlength: '200' });
+    const iname = tidy(h('input', { id: 'inv-name', maxlength: '120' })), imail = h('input', { id: 'inv-email', type: 'email', inputmode: 'email', maxlength: '200' });
     const iperm = permSelect('update', 'inv-perm'), isites = siteChecks([], 'new');
     const full = s.used >= s.allowed;
     const invite = h('form', { class: 'member', novalidate: true, onsubmit: async (e) => {
@@ -334,7 +348,7 @@
       if (r.error) return message(box, 'err', TEAM_ERR(r.error));
       viewTeam('Invitation saved for ' + imail.value.trim() + '. Send them this link: ' + location.origin + '/app/?invite=1 . They must sign up with that same email address.');
     } }, h('h3', {}, 'Add a person'), full && h('p', { class: 'muted' }, 'All ' + s.allowed + ' users in your plan are in use. Each extra site includes one more user.'),
-      h('label', { for: 'inv-name' }, 'Their name'), iname, h('label', { for: 'inv-email' }, 'Their work email'), imail,
+      h('label', { for: 'inv-name' }, 'Their name'), iname, h('label', { for: 'inv-email' }, 'Their email address'), imail,
       h('label', { for: 'inv-perm' }, 'What they can do'), iperm, h('p', { class: 'muted small' }, 'Which sites can they see?'), isites,
       h('button', { class: 'btn', type: 'submit', id: 'inv-go', disabled: full }, 'Save invitation'));
 
@@ -353,7 +367,7 @@
   // The invited person creates their own login here. Nothing is created in the company until they confirm their email and sign in.
   async function viewInviteSignup() {
     const box = h('div');
-    const name = h('input', { id: 'iv-name', autocomplete: 'name', required: true, maxlength: '120' });
+    const name = tidy(h('input', { id: 'iv-name', autocomplete: 'name', required: true, maxlength: '120' }));
     const email = h('input', { id: 'iv-email', type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
     const pass = h('input', { id: 'iv-pass', type: 'password', autocomplete: 'new-password', required: true, minlength: String(MIN_PASSWORD) });
     const terms = h('input', { id: 'iv-terms', type: 'checkbox' });
@@ -371,7 +385,7 @@
         if (data && data.session) return route();
         viewCheckEmail(email.value.trim());
       });
-    } }, h('label', { for: 'iv-name' }, 'Your name'), name, h('label', { for: 'iv-email' }, 'Your work email (the address you were invited on)'), email,
+    } }, h('label', { for: 'iv-name' }, 'Your name'), name, h('label', { for: 'iv-email' }, 'Your email address (the one you were invited on)'), email,
       h('label', { for: 'iv-pass' }, 'Choose a password'), pass,
       h('label', { class: 'check' }, terms, h('span', {}, 'I agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms and conditions'), ' and have read the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy notice'), '.')),
       btn, box, h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewLogin() }, 'I already have a login')));
@@ -392,30 +406,36 @@
         h('button', { class: 'btn ghost', onclick: () => viewLogin() }, 'Back to sign in')));
     }
     const box = h('div');
-    const name = h('input', { id: 'su-name', autocomplete: 'name', required: true, maxlength: '120' });
-    const company = h('input', { id: 'su-company', autocomplete: 'organization', required: true, maxlength: '160' });
-    const site = h('input', { id: 'su-site', required: true, maxlength: '160' });
-    const addr = h('input', { id: 'su-addr', autocomplete: 'street-address', maxlength: '300' });
+    const name = tidy(h('input', { id: 'su-name', autocomplete: 'name', required: true, maxlength: '120' }));
+    const company = tidy(h('input', { id: 'su-company', autocomplete: 'organization', required: true, maxlength: '160' }));
+    const sites = h('input', { id: 'su-sites', type: 'number', min: '1', max: '100', step: '1', value: '1', inputmode: 'numeric', required: true });
     const email = h('input', { id: 'su-email', type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
     const pass = h('input', { id: 'su-pass', type: 'password', autocomplete: 'new-password', required: true, minlength: String(MIN_PASSWORD) });
     const terms = h('input', { id: 'su-terms', type: 'checkbox' });
+    const count = () => { const n = Math.floor(Number(sites.value)); return n >= 1 && n <= 100 ? n : 0; };
+    const monthlyTxt = h('span', { id: 'su-monthly' }), annualTxt = h('span', { id: 'su-annual' });
+    const refresh = () => { const n = count();
+      monthlyTxt.textContent = n ? pounds(totalFor(n, 'monthly')) + ' a month' : 'Choose 1 to 100 sites';
+      annualTxt.textContent = n ? pounds(totalFor(n, 'annual')) + ' a year' : ''; };
+    sites.addEventListener('input', refresh); refresh();
     const bill = (val, checked, title, detail) => h('label', { class: 'check plan' }, h('input', { type: 'radio', name: 'su-billing', value: val, checked }), h('span', {}, h('strong', {}, title), ' ', detail));
     const billing = h('fieldset', { class: 'plans' }, h('legend', {}, 'How would you like to pay?'),
-      bill('monthly', true, 'Monthly', '\u00a314.99 a month for your first site, \u00a37.99 a month for each extra site'),
-      bill('annual', false, 'Yearly, save 15%', '\u00a3152.90 a year for your first site, \u00a381.50 a year for each extra site'),
-      h('p', { class: 'muted small' }, 'Prices exclude VAT. Your first site includes a head-office user and one manager; each extra site includes one more user. Payment is taken when you sign up and your account opens as soon as it is confirmed.'));
+      bill('monthly', true, 'Monthly', monthlyTxt),
+      bill('annual', false, 'Yearly, save 15%', annualTxt),
+      h('p', { class: 'muted small' }, '\u00a314.99 a month for your first site and \u00a37.99 a month for each extra site (yearly: \u00a3152.90 and \u00a381.50). Prices exclude VAT. Your first site includes a head-office user and one manager; each extra site includes one more user. Payment is taken when you sign up and your account opens as soon as it is confirmed.'));
     const btn = h('button', { class: 'btn', type: 'submit' }, 'Sign up and pay');
     const form = h('form', { novalidate: true, onsubmit: async (e) => {
       e.preventDefault();
-      const v = { name: name.value.trim(), company: company.value.trim(), site: site.value.trim(), addr: addr.value.trim(), email: email.value.trim() };
-      if (!v.name || !v.company || !v.site) return message(box, 'err', 'Please fill in your name, your business name and your first site.');
+      const v = { name: titleCase(name.value.trim()), company: titleCase(company.value.trim()), sites: count(), email: email.value.trim() };
+      if (!v.name || !v.company) return message(box, 'err', 'Please fill in your name and your business name.');
+      if (!v.sites) return message(box, 'err', 'Please choose how many sites you want to sign up, from 1 to 100.');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) return message(box, 'err', 'Please check your email address.');
       if (pass.value.length < MIN_PASSWORD) return message(box, 'err', 'Use at least ' + MIN_PASSWORD + ' characters for your password. A few random words work well.');
       if (!terms.checked) return message(box, 'err', 'Please tick the box to agree to the terms and privacy notice.');
       await busy(btn, async () => {
         const { data, error } = await sb.auth.signUp({ email: v.email, password: pass.value, options: {
           emailRedirectTo: location.origin + '/app/',
-          data: { signup_company: v.company, signup_full_name: v.name, signup_site_name: v.site, signup_site_address: v.addr, terms_accepted_at: new Date().toISOString(), signup_billing: (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly' } } });
+          data: { signup_company: v.company, signup_full_name: v.name, signup_sites: v.sites, terms_accepted_at: new Date().toISOString(), signup_billing: (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly' } } });
         if (error) {
           const m = error.message || '';
           return message(box, 'err', error.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
@@ -430,9 +450,9 @@
     } },
       h('label', { for: 'su-name' }, 'Your name'), name,
       h('label', { for: 'su-company' }, 'Business name'), company,
-      h('label', { for: 'su-site' }, 'Your first site'), site,
-      h('label', { for: 'su-addr' }, 'Site address (optional)'), addr,
-      h('label', { for: 'su-email' }, 'Work email'), email,
+      h('label', { for: 'su-sites' }, 'How many sites do you want to sign up?'), sites,
+      h('p', { class: 'muted small' }, 'You can name your sites and add their addresses after you sign up.'),
+      h('label', { for: 'su-email' }, 'Email address'), email,
       h('label', { for: 'su-pass' }, 'Password'), pass,
       billing,
       h('label', { class: 'check' }, terms, h('span', {}, 'I am signing up for a business and agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms and conditions'), '. I have read the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy notice'), '. (Both open in a new tab.)')),
@@ -478,7 +498,7 @@
     if (!error && !req && meta.signup_company && !finishingSignup) {
       finishingSignup = true;
       try {
-        const made = await sb.rpc('signup_company', { p_company: meta.signup_company, p_full_name: meta.signup_full_name, p_site_name: meta.signup_site_name, p_site_address: meta.signup_site_address || null, p_billing: meta.signup_billing === 'annual' ? 'annual' : 'monthly' });
+        const made = await sb.rpc('signup_company', { p_company: meta.signup_company, p_full_name: meta.signup_full_name, p_sites: Number(meta.signup_sites) || 1, p_billing: meta.signup_billing === 'annual' ? 'annual' : 'monthly' });
         if (made.error) return viewSignupProblem(made.error);
         ({ data: rows, error } = await sb.rpc('auth_requirements'));
         req = rows && rows[0];
