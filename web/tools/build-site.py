@@ -4,7 +4,12 @@ Run:  python3 web/tools/build-site.py     (the generated pages are committed, so
 Placeholders in [SQUARE BRACKETS] must be replaced before launch (see docs/DECISIONS.md)."""
 import os
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public')
-PHONE, EMAIL, HOURS, ADDR, CO = '[YOUR PHONE NUMBER]', '[YOUR EMAIL ADDRESS]', '[YOUR OPENING HOURS]', '[REGISTERED OFFICE ADDRESS]', '[COMPANY NUMBER]'
+PHONE, EMAIL, HOURS, ADDR, CO = '', 'hello@tremcore.co.uk', '', 'Goldfinch Grove, Rochester, Kent, ME3 8FX', '[COMPANY NUMBER]'
+# Phone and opening hours are left out of the pages until they are filled in above (no placeholder text on the live site).
+PHONE_P = f'<p>{PHONE}</p>' if PHONE else ''
+OR_CALL = f'{OR_CALL}' if PHONE else ''
+PHONE_DT = f'<div><dt>Phone</dt><dd>{PHONE}</dd></div>' if PHONE else ''
+HOURS_DT = f'<div><dt>Opening hours</dt><dd>{HOURS}</dd></div>' if HOURS else ''
 ARROW = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>'
 LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="#d4af55" stroke-width="1.4"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="#d4af55" stroke-width="1.4"/></svg>'
@@ -40,7 +45,7 @@ def page(path, title, desc, body, current, noindex=False):
 <footer><div class="wrap">
   <div><img src="/img/logo-full.png" alt="Tremcore Ltd" width="150" height="115"><p>Compliance passports for commercial premises.</p></div>
   <nav aria-label="Footer">{foot}<a href="/app/">Login</a></nav>
-  <div><p>{PHONE}</p><p>{EMAIL}</p><p>{ADDR}</p></div>
+  <div>{PHONE_P}<p>{EMAIL}</p><p>{ADDR}</p></div>
   <div class="legal"><span>&copy; 2026 Tremcore Ltd. Company number {CO}.</span></div>
 </div></footer>
 <script src="/site.js"></script>
@@ -52,7 +57,7 @@ def page(path, title, desc, body, current, noindex=False):
     open(os.path.join(d, 'index.html'), 'w').write(html)
 
 def cta(h, p):
-    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}<a class="btn ghost" href="/contact/">Ask a question</a><span class="small">or call {PHONE}</span></div></div></section>'
+    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}<a class="btn ghost" href="/contact/">Ask a question</a>{OR_CALL}</div></div></section>'
 
 ITEMS = [('g','Fire risk assessment','Mar 2027','In date'),('a','Fire alarm service and test','in 12 days','Due in 12d'),('r','Portable appliance testing','4 days ago','Overdue 4d'),('m','Kitchen extract cleaning','Not entered','No date'),('g','Legionella risk assessment','Jan 2027','In date'),('g','Emergency lighting test','Feb 2027','In date')]
 items = ''.join(f'<li{" class=fade" if i==5 else ""}><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></li>' for i,(c,t,d,l) in enumerate(ITEMS))
@@ -131,7 +136,7 @@ how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it wor
 ('Can I see it before I decide?','Watch the short preview on this site. The passport is simple to use, and we are adding short training videos so you can learn it at your own pace. If you have a question first, ask us.'),
 ('How much does it cost?','Pricing is agreed per company. Get in touch and we will put a quote together for the package you are interested in.')]) + '</div></div></section>' + cta('Have a question we haven&rsquo;t answered?','Ask us on a short call. There&rsquo;s no need to work it out alone.')
 contact = f'''<section class="sec"><div class="wrap contact"><div><div class="eyebrow">Contact us</div><h2 class="h2">Ask us a question</h2><p class="lead">Tell us a little about your properties and which package interests you. We&rsquo;ll get back to you to arrange a time for a walkthrough.</p>
-<dl class="cd"><div><dt>Phone</dt><dd>{PHONE}</dd></div><div><dt>Email</dt><dd>{EMAIL}</dd></div><div><dt>Opening hours</dt><dd>{HOURS}</dd></div></dl></div>
+<dl class="cd">{PHONE_DT}<div><dt>Email</dt><dd>{EMAIL}</dd></div><div><dt>Address</dt><dd>{ADDR}</dd></div>{HOURS_DT}</dl></div>
 <form class="f card" id="enquiry" method="post" action="/api/enquiry"><div class="two"><div><label class="lbl" for="f-name">Your name</label><input class="fld" id="f-name" name="name" type="text" autocomplete="name" required maxlength="120"></div><div><label class="lbl" for="f-company">Company</label><input class="fld" id="f-company" name="company" type="text" autocomplete="organization" maxlength="160"></div></div>
 <div class="two"><div><label class="lbl" for="f-email">Email</label><input class="fld" id="f-email" name="email" type="email" autocomplete="email" required maxlength="200"></div><div><label class="lbl" for="f-phone">Phone</label><input class="fld" id="f-phone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div></div>
 <div class="two"><div><label class="lbl" for="f-sites">Number of properties</label><select class="fld" id="f-sites" name="sites"><option value="1">1</option><option value="2-5">2 to 5</option><option value="6-20">6 to 20</option><option value="20+">More than 20</option></select></div><div><label class="lbl" for="f-pkg">Package</label><select class="fld" id="f-pkg" name="package"><option value="">Not sure yet</option><option value="1">Self-Managed</option>''' + ('<option value="2">Managed Service (near Medway)</option>' if SHOW_MANAGED else '') + '''</select></div></div>
