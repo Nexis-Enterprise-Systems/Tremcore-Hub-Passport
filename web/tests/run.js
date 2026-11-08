@@ -443,7 +443,10 @@ const USERS = {
     await pg.goto(base + '/');
     check('hero donut is painted', (await pg.locator('[data-donut]').first().evaluate((e) => e.style.background)).includes('conic-gradient'));
     // demo
-    await pg.goto(base + '/what-you-get/'); await pg.click('.poster .play');
+    await pg.goto(base + '/what-you-get/');
+    check('demo dashboard is complete before play: donut painted and 80%', (await pg.locator('#d-donut').evaluate((e) => e.style.background)).includes('conic-gradient') && (await pg.locator('#d-pct').innerText()) === '80');
+    await pg.click('.poster .play'); await pg.waitForTimeout(700);
+    check('demo dashboard does not build up while playing: still 80% and the same full ring', (await pg.locator('#d-pct').innerText()) === '80' && (await pg.locator('#d-donut').evaluate((e) => e.style.background)).includes('55%'));
     await pg.waitForFunction(() => document.querySelector('#d-cap b').textContent !== 'Your dashboard', null, { timeout: 8000 });
     check('demo plays through to the next scene by itself', (await pg.locator('#d-cap b').innerText()) === 'Add a certificate');
     await pg.click('.chap button:nth-child(4)'); check('demo chapter buttons jump', (await pg.locator('#d-cap b').innerText()) === 'There is more to see');

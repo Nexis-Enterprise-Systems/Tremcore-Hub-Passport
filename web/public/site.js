@@ -47,13 +47,14 @@
     var fmt = function (ms) { var s = Math.floor(ms / 1000); return '0:' + (s < 10 ? '0' : '') + s; };
     var future = new Date(Date.now() + 182 * 864e5).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     if (dateTxt) dateTxt.textContent = future;
+    // The dashboard is shown complete from the first moment (no build-up): paint it once, before anything plays.
+    paintDonut(donut, 1); pct.textContent = '80';
     function render() {
       var si = Math.min(3, Math.floor(t / SCENE)), p = (t % SCENE) / SCENE;
       if (t >= TOTAL) { si = 3; p = 1; }
       scenes.forEach(function (s, i) { s.classList.toggle('on', i === si); });
       chap.forEach(function (c, i) { c.setAttribute('aria-pressed', i === si ? 'true' : 'false'); });
       cap.querySelector('b').textContent = CAPS[si][0]; cap.querySelector('span').textContent = CAPS[si][1];
-      if (si === 0) { var sw = Math.min(1, p / 0.8); paintDonut(donut, sw); pct.textContent = Math.round(80 * sw); }
       if (si === 1) {
         var ok = p >= 0.7; upPill.textContent = ok ? 'In date' : 'Due in 12d'; upPill.className = 'pill ' + (ok ? 'g' : 'a');
         upFile.classList.toggle('hid', p < 0.2); upDate.classList.toggle('hid', p < 0.4); upDone.classList.toggle('hid', p < 0.82);
