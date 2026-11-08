@@ -148,3 +148,5 @@ html.lock{overflow:hidden}
   .poster .play{width:60px;height:60px}
 }
 @keyframes popfade{from{opacity:0}to{opacity:1}}
+
+.center-head{text-align:center}.center-head .lead{margin-left:auto;margin-right:auto}.wrap>.plan-card{margin-left:auto;margin-right:auto}

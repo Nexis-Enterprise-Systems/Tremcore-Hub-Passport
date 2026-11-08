@@ -115,7 +115,7 @@ managed_html = '''<article class="plan-card" id="managed"><div class="eyebrow">T
 '''
 row_open = '<div class="plan-row">' if SHOW_MANAGED else ''
 row_close = '</div>' if SHOW_MANAGED else ''
-what = f'''<section class="sec"><div class="wrap"><div class="eyebrow">What you get</div><h2 class="h2">One passport, quoted to suit your premises</h2><p class="lead">Tell us about your sites and we&rsquo;ll put together a quote that fits.</p>
+what = f'''<section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What you get</div><h2 class="h2">One passport, quoted to suit your premises</h2><p class="lead">Tell us about your sites and we&rsquo;ll put together a quote that fits.</p></div>
 {row_open}<article class="plan-card"><div class="eyebrow">The Compliance Passport</div><h3 class="h3" style="font-size:36px">Self-Managed</h3><p style="color:var(--mute)">For businesses that want to keep their own records and arrange their own inspections.</p>
 <ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li><li>A Call Tremcore button whenever you need help</li></ul>
 <div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px">{SIGNUP}<a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn ghost" href="/contact/?package=1">Ask a question</a></div></div></article>
