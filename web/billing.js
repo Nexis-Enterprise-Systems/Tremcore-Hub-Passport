@@ -25,7 +25,8 @@ function checkoutParams({ companyId, sites, interval, email, origin, methods }) 
     q.set(`line_items[${i}][price_data][recurring][interval]`, per);
     q.set(`line_items[${i}][price_data][product_data][name]`, name);
   });
-  (methods && methods.length ? methods : ['card']).forEach((m, i) => q.set(`payment_method_types[${i}]`, m));
+  // Stripe now picks payment methods from the Dashboard settings; only send a list if one was set on purpose.
+  (methods || []).forEach((m, i) => q.set(`payment_method_types[${i}]`, m));
   q.set('success_url', origin + '/app/?paid=1');
   q.set('cancel_url', origin + '/app/?paid=0');
   return q;

@@ -15,7 +15,7 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const STRIPE_API = (process.env.STRIPE_API_BASE || 'https://api.stripe.com').replace(/\/+$/, '');
-const STRIPE_METHODS = (process.env.STRIPE_PAYMENT_METHODS || 'card').split(',').map((x) => x.trim()).filter(Boolean);   // add bacs_debit once enabled in Stripe
+const STRIPE_METHODS = (process.env.STRIPE_PAYMENT_METHODS || '').split(',').map((x) => x.trim()).filter(Boolean);   // normally empty: Stripe uses the methods switched on in its Dashboard
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const TYPES = {
