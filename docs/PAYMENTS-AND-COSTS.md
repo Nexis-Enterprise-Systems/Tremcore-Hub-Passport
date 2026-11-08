@@ -42,7 +42,7 @@ Prices here are examples only to show the fee, not suggestions. Paying a year at
 - One supplier, one dashboard, and the customer gets Stripe's ready-made "manage your subscription" page (update card, download invoices, cancel).
 - It records straight into the hub, so the Revenue page fills itself in.
 - It costs a little more than GoCardless on Direct Debit (about 20p to 60p a bill at these prices), but saves building and running two systems. We can add GoCardless later if volume makes it worthwhile.
-- Offer **annual billing** at a discount (for example two months free). It improves cash flow and fewer payments means fewer failures.
+- Offer **annual billing** at 15% off (decided 8 Nov). It improves cash flow and fewer payments means fewer failures.
 - Start in Stripe's **test mode** against your "TREMCORE Test" project, so nobody is charged while we try it.
 
 ## 4. How it would work for a customer
@@ -72,10 +72,10 @@ Prices here are examples only to show the fee, not suggestions. Paying a year at
 Decided 8 Nov: price per location, £14.99 for the first and £7.99 for each extra. Still open:
 
 1. **Refund rule for yearly plans:** if someone cancels part-way through, keep access to the end of the year with no refund (suggested)?
-3. **Trial:** how many days, and is a card or Direct Debit needed up front? (Needing none gets more sign-ups; needing one gets more real customers.)
-4. **If someone stops paying:** how long before the account goes read-only, and what do we say?
-5. **Supplier:** are you happy with Stripe only for now?
-6. **VAT:** are you registered or will you register? Prices are set excluding VAT. Ask the accountant.
+2. **Trial:** how many days, and is a card or Direct Debit needed up front? (Needing none gets more sign-ups; needing one gets more real customers.)
+3. **If someone stops paying:** how long before the account goes read-only, and what do we say?
+4. **Supplier:** are you happy with Stripe only for now?
+5. **VAT:** are you registered or will you register? Prices are set excluding VAT. Ask the accountant.
 
 ## Sources
 
