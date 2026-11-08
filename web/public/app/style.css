@@ -117,3 +117,5 @@ td input,td select{height:40px;min-width:110px}
 .member{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
 .member .sites{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0}
 .member select{max-width:100%}
+.checklist{margin:10px 0}
+.checklist .check{padding:6px 0}

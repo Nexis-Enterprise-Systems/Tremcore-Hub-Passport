@@ -491,6 +491,21 @@ const USERS = {
     await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#cancel-start');
     check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
     await t.ctx.close();
+    // first-run set-up: contact details and tick the core checks
+    const setupSeed = () => { window.__mock.tables = { companies: [{ id: 'c1', name: 'Acme Cafes Ltd', setup_completed_at: null }],
+      core_checks: ['Fire Risk Assessment', 'Fire Alarm Testing & Maintenance', 'Fire Extinguisher Maintenance', 'Emergency Light Testing', 'Electrical Installation Condition Reporting (EICR)', 'PAT Testing', 'Asbestos Management Survey / Register', 'Legionella (water) Risk Management', 'Gas Safety Inspection & Maintenance', 'F-Gas'].map((label, i) => ({ code: 'c' + i, label, sort: i })) }; };
+    t = await newPage(setupSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#st-go');
+    check('set-up: a new head-office user is asked for details and shown the ten core checks, none ticked', (await t.page.locator('input[name=core]').count()) === 10 && (await t.page.locator('input[name=core]:checked').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Fire Risk Assessment') && (await t.page.locator('.card').innerText()).includes('F-Gas'));
+    await t.page.fill('#st-phone', '01634 000000'); await t.page.check('input[value=c0]'); await t.page.check('input[value=c5]');
+    await t.page.click('#st-go'); await t.page.waitForSelector('text=Your checks');
+    const fs = (await calls(t.page, 'rpc:finish_setup'))[0];
+    check('set-up: only the ticked checks and the details are sent', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000');
+    check('set-up: the ticked checks appear as "Not entered yet" (never green), and set-up is not asked again', (await t.page.locator('.kv:has-text("PAT Testing") .badge').innerText()) === 'Not entered yet' && (await t.page.locator('#st-go').count()) === 0);
+    await t.ctx.close();
+    t = await newPage(setupSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#st-go'); await t.page.click('#st-all');
+    check('set-up: Tick all ticks everything', (await t.page.locator('input[name=core]:checked').count()) === 10);
+    await t.ctx.close();
+
     // team page: the head-office user chooses who can do what
     const teamSeed = () => { window.__mock.tables = { properties: [{ id: 's1', name: 'High Street' }, { id: 's2', name: 'Station Road' }] };
       window.__mock.team = { summary: { used: 2, allowed: 3, require_mfa: false },

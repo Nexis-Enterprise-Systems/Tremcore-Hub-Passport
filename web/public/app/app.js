@@ -199,6 +199,10 @@
     try { const r = await sb.rpc('my_access'); if (r.data && r.data[0]) a = r.data[0]; } catch { /* treated as ok; the database still decides what is visible */ }
     if (a.state === 'awaiting_payment') return viewAwaitingPayment(a);
     if (a.state === 'stopped') return viewStopped(a);
+    if (a.is_head) {
+      let co = null; try { co = (await sb.from('companies').select('name,setup_completed_at').maybeSingle()).data; } catch { co = null; }
+      if (co && co.setup_completed_at === null) return viewSetup(co);
+    }
     let banner = null;
     if (a.state === 'payment_failed') {
       banner = a.is_head
@@ -208,13 +212,19 @@
       banner = h('div', { class: 'msg err', role: 'status' }, 'Your account is due to close on ' + fmtDate(a.ends_at) + '. After that you will not be able to sign in and your data will be removed.',
         a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async () => { await sb.rpc('withdraw_cancellation'); route(); } }, 'Keep my account')));
     }
+    let checksList = null;
+    try {
+      const it = (await sb.from('compliance_items').select('id,title,due_date').order('title')).data || [];
+      if (it.length) { const seen = new Set(); checksList = h('div', { class: 'checklist' }, h('h3', {}, 'Your checks'), ...it.filter((x) => !seen.has(x.title) && seen.add(x.title)).map((x) => h('div', { class: 'kv' }, h('span', {}, x.title), h('span', { class: 'badge off' }, x.due_date ? 'Date entered' : 'Not entered yet')))); }
+    } catch { checksList = null; }
     show(h('div', { class: 'card' },
       h('h1', {}, 'Welcome' + (req.full_name ? ', ' + req.full_name.split(' ')[0] : '')),
       banner,
       h('p', { class: 'muted' }, 'You are signed in.'),
       h('div', { class: 'kv' }, h('span', {}, 'Access'), h('span', {}, ROLE_LABEL[req.role_name] || req.role_name)),
       h('div', { class: 'kv' }, h('span', {}, '2FA'), h('span', { class: 'badge ' + (hasFactor ? 'on' : 'off') }, hasFactor ? 'On' : 'Off')),
-      h('p', { class: 'muted', style: null }, 'Your account is ready. Your compliance passport will appear here as soon as it is switched on.'),
+      checksList,
+      !checksList && h('p', { class: 'muted', style: null }, 'Your account is ready. Your compliance passport will appear here as soon as it is switched on.'),
       !hasFactor && h('button', { class: 'btn ghost', onclick: () => { wantEnroll = true; route(); } }, 'Set up 2FA'),
       a.is_head && h('button', { class: 'btn', id: 'team-open', onclick: () => viewTeam() }, 'Manage my team'),
       a.is_head && a.state !== 'cancelling' && h('button', { class: 'btn ghost', id: 'cancel-start', onclick: () => viewCancel() }, 'Cancel my subscription'),
@@ -253,6 +263,33 @@
       h('button', { class: 'btn ghost', onclick: () => route() }, 'Go back')));
   }
 
+
+  // ---------- First-run set-up: contact details, then tick the core checks that apply ----------
+  async function viewSetup(co) {
+    const checks = ((await sb.from('core_checks').select('code,label').order('sort')).data) || [];
+    const box = h('div', { id: 'setup-msg' });
+    const phone = h('input', { id: 'st-phone', type: 'tel', autocomplete: 'tel', maxlength: '40' });
+    const addr = h('input', { id: 'st-addr', autocomplete: 'street-address', maxlength: '300' });
+    const boxes = checks.map((c) => h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'core', value: c.code }), h('span', {}, c.label)));
+    const all = h('button', { type: 'button', class: 'linkbtn', id: 'st-all', onclick: () => root.querySelectorAll('input[name=core]').forEach((i) => { i.checked = true; }) }, 'Tick all');
+    const btn = h('button', { class: 'btn', type: 'submit', id: 'st-go' }, 'Finish set-up');
+    const form = h('form', { novalidate: true, onsubmit: async (e) => {
+      e.preventDefault();
+      const codes = [...root.querySelectorAll('input[name=core]:checked')].map((i) => i.value);
+      await busy(btn, async () => {
+        const r = await sb.rpc('finish_setup', { p_phone: phone.value.trim() || null, p_address: addr.value.trim() || null, p_codes: codes });
+        if (r.error) return message(box, 'err', 'Sorry, we could not save that. Please try again, or contact Tremcore.');
+        route();
+      });
+    } },
+      h('h3', {}, 'About your business'),
+      h('label', { for: 'st-phone' }, 'Business phone number (optional)'), phone,
+      h('label', { for: 'st-addr' }, 'Business address (optional)'), addr,
+      h('h3', {}, 'Which compliance checks apply to your premises?'),
+      h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
+      h('div', { class: 'checklist' }, ...boxes), all, btn, box);
+    show(h('div', { class: 'card wide' }, h('h1', {}, 'Welcome to your passport' + (co && co.name ? ', ' + co.name : '')), h('p', { class: 'muted' }, 'Two quick things to set up.'), form));
+  }
 
   // ---------- Team: the head-office user decides who can do what ----------
   const PERM_LABEL = { view: 'View only', update: 'Can update records', full: 'Full control of their sites' };

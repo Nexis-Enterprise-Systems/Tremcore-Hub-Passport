@@ -132,6 +132,12 @@
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
       if (name === 'request_cancellation') { rec('cancel', 'x'); if (M().cancelError) return { data: null, error: { message: 'x' } }; M().access = { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 }; return { data: '2026-12-08T00:00:00Z' }; }
       if (name === 'withdraw_cancellation') { M().access = { state: 'ok', is_head: true }; return { data: null }; }
+      if (name === 'finish_setup') {
+        if (M().setupError) return { data: null, error: { message: 'x' } };
+        const c = (db().companies || [])[0]; if (c) c.setup_completed_at = new Date().toISOString();
+        db().compliance_items = (db().compliance_items || []).concat((args.p_codes || []).map((code) => ({ id: 'i-' + code, title: (db().core_checks.find((x) => x.code === code) || {}).label, due_date: null })));
+        return { data: (args.p_codes || []).length };
+      }
       if (name === 'team_members') return { data: M().team.members };
       if (name === 'team_pending') return { data: M().team.pending };
       if (name === 'team_summary') return { data: [M().team.summary] };
