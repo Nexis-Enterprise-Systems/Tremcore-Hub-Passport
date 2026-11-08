@@ -454,6 +454,37 @@ const USERS = {
     await pg.keyboard.press('Escape'); check('Escape closes the pop-out', (await pg.locator('#demo-player').getAttribute('role')) === null);
     await pg.goto(base + '/what-you-get/?play=1'); await pg.waitForSelector('#demo-player.pop');
     check('Watch preview link opens the pop-out and plays', (await pg.locator('#d-toggle span').innerText()) === 'Pause');
+
+    // phone: the walkthrough opens full screen by itself when play is pressed
+    {
+      const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); const mp = await mctx.newPage();
+      await mp.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: 'false' }));
+      await mp.goto(base + '/what-you-get/');
+      check('on a phone the walkthrough starts in the page, not popped out', (await mp.locator('#demo-player').getAttribute('role')) === null);
+      check('demo chapter buttons are at least 44px tall to tap', (await mp.locator('.chap button').first().boundingBox()).height >= 44);
+      await mp.tap('.poster .play'); await mp.waitForSelector('#demo-player.pop');
+      const bx = await mp.locator('#demo-player').boundingBox();
+      check('pressing play on a phone opens the walkthrough as a full-screen dialog', (await mp.locator('#demo-player').getAttribute('role')) === 'dialog' && Math.round(bx.width) === 390 && Math.round(bx.height) === 844);
+      check('it plays straight away and the page behind cannot scroll', (await mp.locator('#d-toggle span').innerText()) === 'Pause' && (await mp.evaluate(() => document.documentElement.classList.contains('lock'))));
+      check('the full-screen walkthrough has a close button big enough to tap', (await mp.locator('#d-close').boundingBox()).height >= 44);
+      await mp.tap('#d-close'); await mp.waitForFunction(() => !document.querySelector('#demo-player.pop'));
+      check('closing it returns to the page and frees scrolling', (await mp.evaluate(() => !document.documentElement.classList.contains('lock'))));
+      await mp.tap('.chap button:nth-child(3)'); await mp.waitForSelector('#demo-player.pop');
+      check('choosing a chapter on a phone also opens it full screen', (await mp.locator('#d-cap b').innerText()) === 'Reminders');
+      await mp.tap('#d-close');
+      await mp.setViewportSize({ width: 844, height: 390 }); await mp.tap('.chap button:nth-child(1)'); await mp.waitForSelector('#demo-player.pop');
+      const lb = await mp.locator('#demo-player').boundingBox();
+      check('a phone turned sideways also gets the full-screen walkthrough', Math.round(lb.width) === 844 && Math.round(lb.height) === 390);
+      await mctx.close();
+    }
+    // a computer keeps the walkthrough in the page until Pop out is pressed
+    {
+      const dctx = await browser.newContext({ viewport: { width: 1280, height: 900 } }); const dp = await dctx.newPage();
+      await dp.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: 'false' }));
+      await dp.goto(base + '/what-you-get/'); await dp.click('.poster .play'); await dp.waitForTimeout(300);
+      check('on a computer, pressing play does not pop the walkthrough out', (await dp.locator('#demo-player').getAttribute('role')) === null);
+      await dctx.close();
+    }
     // contact form, using a faked server reply
     await pg.goto(base + '/contact/');
     await pg.route('**/api/enquiry', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));

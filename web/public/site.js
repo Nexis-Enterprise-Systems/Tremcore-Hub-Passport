@@ -40,6 +40,9 @@
     var SCENE = 5000, TOTAL = 20000, TICK = 200;
     var CAPS = [['Your dashboard', 'Every property in one traffic-light view.'], ['Add a certificate', 'Upload it, set the date and the status updates.'], ['Reminders', 'An email arrives before anything lapses.'], ['There is more to see', 'Book a walkthrough to see the rest.']];
     var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // On a phone the walkthrough opens full screen by itself when someone presses play (same query as the CSS).
+    var phoneQ = window.matchMedia && matchMedia('(max-width: 700px), (pointer: coarse) and (max-height: 500px)');
+    var isPhone = function () { return !!(phoneQ && phoneQ.matches); };
     var t = 0, timer = null, popped = false, lastFocus = null;
     var scenes = $$('.scene', demo), chap = $$('.chap button', demo), btn = $('#d-toggle'), bar = $('#d-bar'), prog = $('#d-prog'), tl = $('#d-time');
     var poster = $('.poster', demo), cap = $('#d-cap'), donut = $('#d-donut'), pct = $('#d-pct');
@@ -71,20 +74,23 @@
       if (t >= TOTAL) t = 0; stop();
       timer = setInterval(function () { t += TICK; if (t >= TOTAL) { t = TOTAL; stop(); } render(); }, TICK); render();
     }
-    function toggle() { if (timer) { stop(); render(); } else play(); }
+    function start() { if (isPhone() && !popped) openPop(); play(); }
+    function toggle() { if (timer) { stop(); render(); } else start(); }
     btn.addEventListener('click', toggle);
-    $('.poster .play', demo).addEventListener('click', play);
-    chap.forEach(function (c, i) { c.addEventListener('click', function () { t = i * SCENE; play(); }); });
+    $('.poster .play', demo).addEventListener('click', start);
+    chap.forEach(function (c, i) { c.addEventListener('click', function () { t = i * SCENE; start(); }); });
 
     var bd = null, closeBtn = $('#d-close'), popBtn = $('#d-pop');
     function openPop() {
       if (popped) return; popped = true; lastFocus = document.activeElement;
       bd = document.createElement('div'); bd.className = 'backdrop'; bd.addEventListener('click', closePop); document.body.appendChild(bd);
+      document.documentElement.classList.add('lock');
       demo.classList.add('pop'); demo.setAttribute('role', 'dialog'); demo.setAttribute('aria-modal', 'true'); demo.setAttribute('aria-label', 'Walkthrough');
       closeBtn.focus();
     }
     function closePop() {
       if (!popped) return; popped = false; if (bd) { bd.remove(); bd = null; }
+      document.documentElement.classList.remove('lock');
       demo.classList.remove('pop'); demo.removeAttribute('role'); demo.removeAttribute('aria-modal'); demo.removeAttribute('aria-label');
       if (lastFocus && lastFocus.focus) lastFocus.focus();
     }
