@@ -19,6 +19,7 @@ const USERS = {
   'staff@t': { password: 'correct-horse-battery', factor: false, profile: { role_name: 'tremcore_admin', full_name: 'Aaron Loveday', mfa_required: true } },
   'staff2fa@t': { password: 'correct-horse-battery', factor: true, profile: { role_name: 'tremcore_admin', full_name: 'Aaron Loveday', mfa_required: true } },
   'site@t': { password: 'correct-horse-battery', factor: false, profile: { role_name: 'client_site', full_name: 'Leah Dunn', mfa_required: false } },
+  'staffonly@t': { password: 'correct-horse-battery', factor: true, profile: { role_name: 'tremcore_staff', full_name: 'Sam Staff', mfa_required: true } },
   'noprofile@t': { password: 'correct-horse-battery', factor: false, profile: null }
 };
 
@@ -177,12 +178,14 @@ const USERS = {
 
   // ---------- management hub ----------
   const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
-  const C1 = '00000000-0000-4000-9000-000000000001', C2 = '00000000-0000-4000-9000-000000000002';
+  const C1 = '00000000-0000-4000-9000-000000000001', C2 = '00000000-0000-4000-9000-000000000002', C3 = '00000000-0000-4000-9000-000000000003';
   const P1 = '00000000-0000-4000-a000-000000000001', P2 = '00000000-0000-4000-a000-000000000002', P3 = '00000000-0000-4000-a000-000000000003';
   const seed = () => ({ tables: {
     companies: [
       { id: C1, name: 'Harbour Cafe Group', level: 1, subscription: 'active', monthly_value_pence: 4900, require_mfa: false, contact_email: 'ops@harbour.example', created_at: '2026-10-01' },
-      { id: C2, name: 'Quay Offices Ltd', level: 2, subscription: 'trial', monthly_value_pence: 0, require_mfa: true, created_at: '2026-10-02' }],
+      { id: C2, name: 'Quay Offices Ltd', level: 2, subscription: 'trial', monthly_value_pence: 0, require_mfa: true, created_at: '2026-10-02' },
+      { id: C3, name: 'Online Bakery Ltd', level: 1, subscription: 'trial', monthly_value_pence: 0, require_mfa: false, source: 'self_signup', contact_name: 'Bea Baker', contact_email: 'bea@bakery.example', created_at: '2026-11-08' }],
+    app_settings: [{ key: 'self_signup_open', value: false }],
     properties: [{ id: P1, company_id: C1, name: 'Harbour Cafe Ipswich', address: '1 Quay Road' }, { id: P2, company_id: C1, name: 'Harbour Cafe Colchester' }, { id: P3, company_id: C2, name: 'Quay House' }],
     compliance_items: [
       { id: 'i1', property_id: P1, grp: 'Fire safety', title: 'Fire risk assessment', basis: 'legal', frequency_months: 12, due_date: day(120), notes: '' },
@@ -198,9 +201,9 @@ const USERS = {
       { id: 'e2', created_at: '2026-11-01T10:00:00Z', name: 'Older Lead', company: '', email: 'old@lead.example', phone: '', sites: null, package_interest: null, message: '', status: 'contacted', notes: 'Called Monday' }]
   } });
   const dbCalls = (p, f) => p.evaluate((fn) => window.__calls.filter((c) => c[0] === 'db').map((c) => c[1]).filter((x) => new Function('x', 'return ' + fn)(x)), f);
-  async function hubPage(seedOverride) {
+  async function hubPage(seedOverride, who) {
     const t = await newPage((sd) => { window.__mock.tables = sd.tables; }, seedOverride || seed());
-    await login(t.page, 'staff2fa@t'); await t.page.waitForSelector('#code');
+    await login(t.page, who || 'staff2fa@t'); await t.page.waitForSelector('#code');
     await t.page.fill('#code', '123456'); await t.page.click('button[type=submit]'); await t.page.waitForSelector('.hubbar');
     await t.page.waitForSelector('.tiles');
     return t;
@@ -208,14 +211,14 @@ const USERS = {
   {
     let t = await hubPage();
     const p = t.page;
-    check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('2 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('1'));
+    check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Enquiries');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Enquiries,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
-    check('clients list shows both clients with package and site counts', (await p.locator('tbody tr').count()) === 2 && (await p.locator('tbody').innerText()).includes('Managed Service'));
+    check('clients list shows every client with package and site counts', (await p.locator('tbody tr').count()) === 3 && (await p.locator('tbody').innerText()).includes('Managed Service'));
     await p.fill('input[type=search]', 'quay'); check('search narrows the client list', (await p.locator('tbody tr').count()) === 1);
     await p.fill('input[type=search]', 'zzz'); check('search with no match says so', (await p.locator('tbody').innerText()).includes('No clients match'));
     await p.fill('input[type=search]', '');
@@ -332,9 +335,98 @@ const USERS = {
     await t.ctx.close();
   }
 
+  // ---------- Self-Managed sign-up ----------
+  {
+    const openMock = () => { window.__mock.signupOpen = true; };
+    const calls = (p, name) => p.evaluate((n) => window.__calls.filter((c) => c[0] === n).map((c) => c[1]), name);
+    let t = await newPage(); // closed by default
+    check('sign-in page offers no sign-up while it is closed', (await t.page.locator('text=Create an account').count()) === 0);
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('text=Sign-up is not open yet');
+    check('the sign-up address says "not open yet" and points to a demo while closed', (await t.page.locator('a[href="/contact/"]').count()) === 1 && (await t.page.locator('#su-email').count()) === 0);
+    await t.ctx.close();
+
+    t = await newPage(openMock);
+    await t.page.waitForSelector('text=Create an account');
+    check('sign-in page offers sign-up once Tremcore opens it', true);
+    await t.page.click('text=Create an account'); await t.page.waitForSelector('#su-email');
+    const p = t.page, go = () => p.click('button[type=submit]');
+    await go(); check('sign-up needs name, business and first site', (await p.locator('.msg.err').innerText()).includes('first site'));
+    await p.fill('#su-name', 'Pat Jones'); await p.fill('#su-company', 'Acme Cafes Ltd'); await p.fill('#su-site', 'Acme High Street'); await p.fill('#su-email', 'nope');
+    await go(); check('sign-up checks the email address', (await p.locator('.msg.err').innerText()).includes('email'));
+    await p.fill('#su-email', 'pat@acme.example'); await p.fill('#su-pass', 'short'); await go();
+    check('sign-up asks for at least 12 characters', (await p.locator('.msg.err').innerText()).includes('at least 12'));
+    await p.fill('#su-pass', 'a-long-enough-password'); await go();
+    check('sign-up will not go ahead without agreeing to the terms', (await p.locator('.msg.err').innerText()).includes('terms') && (await calls(p, 'signUp')).length === 0);
+    check('terms and privacy links open the notices in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
+    await p.check('#su-terms'); await go(); await p.waitForSelector('text=Check your email');
+    const su = (await calls(p, 'signUp'))[0];
+    check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_site_name === 'Acme High Street' && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
+    check('no company is created before the email is confirmed', (await calls(p, 'rpc:signup_company')).length === 0);
+    check('the confirmation screen names the address', (await p.locator('strong').innerText()) === 'pat@acme.example');
+    await p.click('text=Go to sign in'); await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('.msg.err');
+    check('signing in before confirming the email is explained', (await p.locator('.msg.err').innerText()).includes('confirm your email'));
+    await p.evaluate(() => { window.__mock.users['pat@acme.example'].confirmed = true; });
+    await login(p, 'pat@acme.example', 'a-long-enough-password'); await p.waitForSelector('img.qr');
+    const made = (await calls(p, 'rpc:signup_company'));
+    check('first confirmed sign-in creates the company once, with the saved details', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_site_name === 'Acme High Street');
+    check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
+    await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
+    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your account is ready').count()) === 1);
+    check('no page or CSP errors through the whole sign-up', t.problems.length === 0);
+    if (t.problems.length) console.log(t.problems);
+    await t.ctx.close();
+
+    // existing email, closed-at-the-last-moment, and a signup rule refusal
+    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.users['taken@example.com'] = { password: 'x', factor: false, profile: null, confirmed: true }; });
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
+    const fill = async (pg, mail) => { await pg.fill('#su-name', 'Pat'); await pg.fill('#su-company', 'Co'); await pg.fill('#su-site', 'Site'); await pg.fill('#su-email', mail); await pg.fill('#su-pass', 'a-long-enough-password'); await pg.check('#su-terms'); await pg.click('button[type=submit]'); };
+    await fill(t.page, 'taken@example.com'); await t.page.waitForSelector('.msg.err');
+    check('an email that already has an account is told so, kindly', (await t.page.locator('.msg.err').innerText()).includes('already has an account'));
+    await t.page.evaluate(() => { window.__mock.signupError = { status: 429, message: 'rate' }; });
+    await fill(t.page, 'x@y.example'); await t.page.waitForFunction(() => document.querySelector('.msg.err').innerText.includes('Too many'));
+    check('too many attempts is explained', true);
+    await t.page.evaluate(() => { window.__mock.signupError = { message: 'Signups not allowed for this instance' }; });
+    await fill(t.page, 'x@y.example'); await t.page.waitForFunction(() => document.querySelector('.msg.err').innerText.includes('not available'));
+    check('Supabase sign-ups being switched off is explained', true);
+    await t.ctx.close();
+
+    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.users['late@t'] = { password: 'correct-horse-battery', factor: false, profile: null, confirmed: true, meta: { signup_company: 'Late Co', signup_full_name: 'Lee', signup_site_name: 'S' } }; window.__mock.signupRpcError = 'signup_closed'; });
+    await login(t.page, 'late@t'); await t.page.waitForSelector('text=Almost there');
+    check('if sign-up was closed before the email was confirmed, the person is told and nothing is created', (await t.page.locator('.msg.err').innerText()).includes('not open at the moment') && (await t.page.locator('.hubbar').count()) === 0);
+    await t.ctx.close();
+
+    // the staff hub: markers and the on/off switch
+    t = await hubPage(); let pg = t.page;
+    check('hub dashboard counts self sign-ups still on trial', (await pg.locator('.tile:has-text("Self sign-ups to follow up")').innerText()).includes('1'));
+    await pg.click('.hubnav >> text=Clients'); await pg.waitForSelector('table');
+    check('clients who signed themselves up are marked', (await pg.locator('tr:has-text("Online Bakery") .badge.new').innerText()) === 'Self sign-up');
+    await pg.click('a:has-text("Online Bakery Ltd")'); await pg.waitForSelector('.msg.ok');
+    check('their page tells staff who to contact and what to do next', (await pg.locator('.msg.ok').innerText()).includes('bea@bakery.example') && (await pg.locator('.msg.ok').innerText()).includes('Active'));
+    await pg.click('.hubnav >> text=Settings'); await pg.waitForSelector('text=Self-Managed sign-up');
+    check('settings shows sign-up as closed with what to do before opening', (await pg.locator('.badge:has-text("Closed")').count()) === 1 && (await pg.locator('.hint').innerText()).includes('Confirm email'));
+    await pg.click('button:has-text("Open sign-up")'); await pg.waitForSelector('.badge:has-text("Open")');
+    const sw = (await dbCalls(pg, "x.table==='app_settings'&&x.op==='update'"))[0];
+    check('opening sign-up changes only the sign-up setting', sw.payload.value === true && sw.filters[0] === 'key=self_signup_open');
+    await pg.click('button:has-text("Close sign-up")'); await pg.waitForSelector('.badge:has-text("Closed")');
+    check('sign-up can be closed again', true);
+    await pg.evaluate(() => { window.__mock.tables.app_settings = []; });
+    await pg.click('.hubnav >> text=Dashboard'); await pg.click('.hubnav >> text=Settings'); await pg.waitForSelector('text=Self-Managed sign-up');
+    await pg.click('button:has-text("Open sign-up")'); await pg.waitForSelector('.msg.err');
+    check('if the database refuses the change, staff are told it was not changed', (await pg.locator('.msg.err').innerText()).includes('Not changed'));
+    await t.ctx.close();
+
+    t = await hubPage(null, 'staffonly@t'); pg = t.page;
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Enquiries');
+    await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
+    check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
+    await t.ctx.close();
+  }
+
   // website
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } }); const pg = await ctx.newPage(); const probs = [];
+    let signupOpen = false;
+    await pg.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: String(signupOpen) }));
     pg.on('console', (m) => { if (m.type() === 'error') probs.push(m.text()); }); pg.on('pageerror', (e) => probs.push(String(e)));
     for (const [u, h] of [['/', 'Every certificate'], ['/passport/', 'The checks that keep a building safe'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'See it around your premises']]) {
       await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
@@ -342,6 +434,13 @@ const USERS = {
     await pg.goto(base + '/');
     check('website shows no passport sign-in', (await pg.locator('text=Sign in').count()) === 0 && (await pg.locator('a[href="/app/"]').count()) >= 1);
     check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
+    await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
+    check('website sign-up buttons stay hidden while sign-up is closed', (await pg.locator('[data-signup]:visible').count()) === 0 && (await pg.locator('[data-signup]').count()) >= 1);
+    signupOpen = true; await pg.goto(base + '/what-you-get/'); await pg.waitForSelector('[data-signup]:visible');
+    check('website shows "Create an account" once sign-up is open, linking to the app', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
+    signupOpen = false;
+    for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
+    await pg.goto(base + '/');
     check('hero donut is painted', (await pg.locator('[data-donut]').first().evaluate((e) => e.style.background)).includes('conic-gradient'));
     // demo
     await pg.goto(base + '/what-you-get/'); await pg.click('.poster .play');

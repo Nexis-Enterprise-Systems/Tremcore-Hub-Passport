@@ -90,11 +90,19 @@
   window.supabase = { createClient() { return {
     from,
     auth: {
-      async getSession() { return { data: { session: current ? { user: { id: 'user-' + current, email: current } } : null } }; },
+      async getSession() { return { data: { session: current ? { user: { id: 'user-' + current, email: current, user_metadata: (userRow() && userRow().meta) || {} } } : null } }; },
+      async signUp({ email, password, options }) {
+        rec('signUp', { email, meta: options && options.data, redirect: options && options.emailRedirectTo });
+        if (M().signupError) return { data: {}, error: Object.assign({ message: M().signupError.message }, M().signupError) };
+        if (M().users[email]) return { data: {}, error: { status: 422, message: 'User already registered' } };
+        M().users[email] = { password, factor: false, profile: null, confirmed: false, meta: options && options.data };
+        return { data: { user: { email }, session: null }, error: null };
+      },
       async signInWithPassword({ email, password }) {
         rec('signIn', email);
         const u = M().users[email];
         if (!u || u.password !== password) return { error: { status: 400, message: 'Invalid login credentials' } };
+        if (u.confirmed === false) return { error: { status: 400, code: 'email_not_confirmed', message: 'Email not confirmed' } };
         current = email; aal = 'aal1'; return { data: {} };
       },
       async signOut() { current = null; aal = 'aal1'; if (cb) cb('SIGNED_OUT'); return {}; },
@@ -119,7 +127,15 @@
         }
       }
     },
-    async rpc(name) {
+    async rpc(name, args) {
+      rec('rpc:' + name, args || null);
+      if (name === 'signup_open') return { data: M().signupOpen === true };
+      if (name === 'signup_company') {
+        if (M().signupRpcError) return { data: null, error: { message: M().signupRpcError } };
+        if (!userRow()) return { data: null, error: { message: 'not_signed_in' } };
+        userRow().profile = { role_name: 'client_super', full_name: args.p_full_name, company_id: 'c-new', level: 1, mfa_required: true };
+        return { data: 'c-new', error: null };
+      }
       if (name !== 'auth_requirements' || !userRow() || !userRow().profile) return { data: [] };
       return { data: [userRow().profile] };
     }

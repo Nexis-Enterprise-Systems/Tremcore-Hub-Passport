@@ -177,3 +177,77 @@ do $$ begin
 end $$;
 select 'enquiries: database rejects a bad email and a visitor-set status' as test, true as ok;
 rollback;
+
+-- Self-Managed sign-up (migration 0004) --------------------------------------
+begin;
+insert into auth.users(id,email,email_confirmed_at) values
+ ('00000000-0000-0000-0000-0000000000d1','new1@t', now()),
+ ('00000000-0000-0000-0000-0000000000d2','unconfirmed@t', null),
+ ('00000000-0000-0000-0000-0000000000d3','new3@t', now());
+select 'sign-up is closed by default' as test, signup_open() = false as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  begin perform signup_company('Acme','Pat','Main site'); raise exception 'sign-up worked while closed';
+  exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'signup: refused while switched off' as test, true as ok;
+do $$ begin
+  set local role anon;
+  begin perform count(*) from app_settings; raise exception 'anon read settings'; exception when insufficient_privilege then null; end;
+  begin perform signup_company('X','Y','Z'); raise exception 'anon signed up'; exception when insufficient_privilege then null; end;
+  reset role;
+end $$;
+select 'signup: anonymous visitors cannot read settings or call sign-up' as test, true as ok;
+select * from chk('settings: client cannot read', :'superA', 'aal2', 'select count(*)=0 from app_settings');
+select * from chk('settings: client cannot switch sign-up on', :'superA', 'aal2', $$with u as (update app_settings set value='true'::jsonb returning 1) select count(*)=0 from u$$);
+select * from chk('settings: staff without 2FA cannot switch sign-up on', :'staff', 'aal1', $$with u as (update app_settings set value='true'::jsonb returning 1) select count(*)=0 from u$$);
+select * from chk('settings: administrator with 2FA can switch sign-up on', :'staff', 'aal2', $$with u as (update app_settings set value='true'::jsonb returning 1) select count(*)=1 from u$$);
+select 'signup: now open to everyone' as test, signup_open() as ok;
+
+-- open: happy path
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  perform signup_company('  Acme Cafes Ltd ','Pat Jones','Acme High Street','1 High Street');
+  reset role;
+end $$;
+select 'signup: creates a Level 1 trial company with no charge, no matter what is asked' as test,
+  exists (select 1 from companies where name='Acme Cafes Ltd' and level=1 and subscription='trial' and monthly_value_pence=0 and source='self_signup' and contact_email='new1@t') as ok;
+select 'signup: person becomes the head-office user with full rights' as test,
+  exists (select 1 from profiles p join companies c on c.id=p.company_id where p.id='00000000-0000-0000-0000-0000000000d1' and p.role='client_super' and p.perm='full' and c.name='Acme Cafes Ltd') as ok;
+select 'signup: first site is created under that company' as test,
+  exists (select 1 from properties pr join companies c on c.id=pr.company_id where c.name='Acme Cafes Ltd' and pr.name='Acme High Street' and pr.address='1 High Street') as ok;
+select * from chk('signup: new customer sees their own company and site after 2FA', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select (select count(*) from companies)=1 and (select count(*) from properties)=1$$);
+select * from chk('signup: new customer cannot see anyone else', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select count(*)=0 from properties where company_id<>my_company()$$);
+select * from chk('signup: new customer is held to 2FA like any head-office user', '00000000-0000-0000-0000-0000000000d1', 'aal1', $$select count(*)=0 from properties$$);
+select * from chk('signup: new customer can edit their own Level 1 records', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$select can_edit_property((select id from properties limit 1))$$);
+select * from chk('signup: new customer still cannot change their own package or price', '00000000-0000-0000-0000-0000000000d1', 'aal2', $$with u as (update companies set level=3, monthly_value_pence=1 returning 1) select count(*)=0 from u$$);
+
+-- refusals
+do $$
+declare r text;
+begin
+  perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  -- again, same person
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true);
+  set local role authenticated;
+  begin perform signup_company('Second','Pat','Site'); raise exception 'second sign-up worked'; exception when unique_violation then null; end;
+  -- email not confirmed
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d2', true);
+  begin perform signup_company('Ghost Ltd','Ghost','Site'); raise exception 'unconfirmed email worked'; exception when insufficient_privilege then null; end;
+  -- bad details
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d3', true);
+  begin perform signup_company('','Pat','Site'); raise exception 'empty company worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Co','','Site'); raise exception 'empty name worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company('Co','Pat',''); raise exception 'empty site worked'; exception when invalid_parameter_value then null; end;
+  begin perform signup_company(repeat('x',161),'Pat','Site'); raise exception 'long company worked'; exception when invalid_parameter_value then null; end;
+  reset role;
+end $$;
+select 'signup: refuses a second company, an unconfirmed email and empty or oversized details' as test, true as ok;
+select 'signup: nothing half-created after refusals' as test,
+  (select count(*) from companies where source='self_signup') = 1 and not exists (select 1 from profiles where id in ('00000000-0000-0000-0000-0000000000d2','00000000-0000-0000-0000-0000000000d3')) as ok;
+rollback;

@@ -105,3 +105,8 @@ td input,td select{height:40px;min-width:110px}
 .quote{border-left:3px solid var(--gold);padding-left:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .enq .grid2{margin-top:8px}
 .hubmain{overflow-wrap:anywhere}
+
+.badge.new{background:#2a2410;color:#ffd666;border:1px solid #6b5a1a}
+.btn[href]{text-decoration:none;text-align:center;line-height:48px}
+.btn.small[href]{line-height:40px}
+.card a:not(.btn){color:var(--gold)}

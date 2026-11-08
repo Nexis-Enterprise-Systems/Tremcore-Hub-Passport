@@ -10,7 +10,9 @@ PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path
 LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="#d4af55" stroke-width="1.4"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="#d4af55" stroke-width="1.4"/></svg>'
 NAV = [('/', 'Home'), ('/passport/', 'The passport'), ('/what-you-get/', 'What you get'), ('/how-it-works/', 'How it works'), ('/contact/', 'Contact')]
 
-def page(path, title, desc, body, current):
+SIGNUP = '<a class="btn ghost" data-signup hidden href="/app/?signup=1">Create an account</a>'   # shown by site.js only while Tremcore has sign-up switched on
+
+def page(path, title, desc, body, current, noindex=False):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)
     foot = ''.join('<a href="%s">%s</a>' % (h, l) for h, l in NAV)
     html = f'''<!doctype html>
@@ -20,7 +22,7 @@ def page(path, title, desc, body, current):
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<meta name="theme-color" content="#0c0b09">
+<meta name="theme-color" content="#0c0b09">{'<meta name="robots" content="noindex">' if noindex else ''}
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:type" content="website">
 <link rel="icon" href="/img/favicon.png">
 <link rel="stylesheet" href="/site.css">
@@ -50,7 +52,7 @@ def page(path, title, desc, body, current):
     open(os.path.join(d, 'index.html'), 'w').write(html)
 
 def cta(h, p):
-    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row"><a class="btn solid" href="/contact/">Book a demo {ARROW}</a><span class="small">or call {PHONE}</span></div></div></section>'
+    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row"><a class="btn solid" href="/contact/">Book a demo {ARROW}</a>{SIGNUP}<span class="small">or call {PHONE}</span></div></div></section>'
 
 ITEMS = [('g','Fire risk assessment','Mar 2027','In date'),('a','Fire alarm service and test','in 12 days','Due in 12d'),('r','Portable appliance testing','4 days ago','Overdue 4d'),('m','Kitchen extract cleaning','Not entered','No date'),('g','Legionella risk assessment','Jan 2027','In date'),('g','Emergency lighting test','Feb 2027','In date')]
 items = ''.join(f'<li{" class=fade" if i==5 else ""}><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></li>' for i,(c,t,d,l) in enumerate(ITEMS))
@@ -106,7 +108,7 @@ demo = f'''<div class="demo-head"><div><div class="eyebrow">See it in action</di
 what = f'''<section class="sec"><div class="wrap"><div class="eyebrow">What you get</div><h2 class="h2">One passport, quoted to suit your premises</h2><p class="lead">Tell us about your sites and we&rsquo;ll put together a quote that fits.</p>
 <article class="plan-card"><div class="eyebrow">The Compliance Passport</div><h3 class="h3" style="font-size:36px">Self-Managed</h3><p style="color:var(--mute)">For businesses that want to keep their own records and arrange their own inspections.</p>
 <ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li><li>A Call Tremcore button whenever you need help</li></ul>
-<div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px"><a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn solid" href="/contact/?package=1">Book a demo</a></div></div></article>
+<div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px"><a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn solid" href="/contact/?package=1">Book a demo</a>{SIGNUP}</div></div></article>
 <div id="demo">{demo}</div></div></section>''' + cta('Want to see it around your premises?','Tell us about your premises and we&rsquo;ll show you how it would work.')
 how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it works</div><h2 class="h2">Simple to start. Easy to live with.</h2>
 <ol class="steps"><li><span class="no">01</span><div class="h3">Tell us about your premises</div><p>A short call to understand your sites and what you need to keep track of.</p></li><li><span class="no">02</span><div class="h3">We set up your passport</div><p>Each property gets its own passport, ready to use on your phone or computer.</p></li><li><span class="no">03</span><div class="h3">Stay on top of it</div><p>Keep your records up to date and watch the colours stay green.</p></li></ol></div></section>
@@ -128,9 +130,31 @@ contact = f'''<section class="sec"><div class="wrap contact"><div><div class="ey
 <button class="btn solid" id="f-go" type="submit">Book my demo</button><div id="f-out" role="status"></div>
 <p class="small" style="margin:0">We only use your details to reply to this enquiry.</p></form></div></section>'''
 
+
+DRAFT = '<div class="quote" role="note"><b>Draft for review.</b> This page is a working draft and has not been checked by a solicitor. It is not in force until Tremcore Ltd has reviewed and finalised it. Items in [SQUARE BRACKETS] are still to be completed.</div>'
+privacy = f'''<section class="sec"><div class="wrap narrow"><div class="eyebrow">Privacy notice</div><h1 class="h2">How Tremcore uses your information</h1>{DRAFT}
+<h3>Who we are</h3><p>Tremcore Ltd, company number {CO}, {ADDR}. Questions about your information: {EMAIL}.</p>
+<h3>What we collect</h3><p>When you enquire or create an account: your name, work email, phone number (if you give one), business name, and the names and addresses of your sites. Once you use the passport: the compliance records, dates, notes, certificates and photographs you or we add for your sites, and a record of changes made to them.</p>
+<h3>Why we use it</h3><p>To reply to your enquiry, to set up and run your account and passport, to send reminders and service messages, to give you support, and to keep the service secure. [LEGAL BASIS TO BE CONFIRMED.]</p>
+<h3>Who can see it</h3><p>People you authorise at your company, and Tremcore staff who need access to support you. Each company can only see its own records. We use trusted providers to host the service, store files and send email: [PROVIDERS AND DATA LOCATION TO BE CONFIRMED].</p>
+<h3>How long we keep it</h3><p>[RETENTION PERIOD TO BE CONFIRMED.]</p>
+<h3>Your rights</h3><p>You can ask to see, correct or delete your information, or object to how we use it, by contacting {EMAIL}. You can also complain to the Information Commissioner&rsquo;s Office.</p>
+</div></section>'''
+terms = f'''<section class="sec"><div class="wrap narrow"><div class="eyebrow">Terms of use</div><h1 class="h2">Terms for the Self-Managed Compliance Passport</h1>{DRAFT}
+<h3>What the service is</h3><p>The Compliance Passport is a record-keeping tool. It helps you store certificates, track due dates and receive reminders. It does not carry out inspections, and nothing in it is legal, health and safety or fire-safety advice.</p>
+<h3>Your responsibilities</h3><p>You are responsible for deciding which checks apply to your premises, arranging them, keeping your records accurate and up to date, and for the compliance of your premises. The checks and labels shown are examples and must be confirmed for your own premises and risk assessment.</p>
+<h3>Your account</h3><p>Keep your sign-in details and your authenticator app secure. 2FA is required for head-office users. Tell us straight away if you think someone else has access.</p>
+<h3>Trial and charges</h3><p>[TRIAL LENGTH, PRICE AND PAYMENT TERMS TO BE CONFIRMED.] Tremcore will agree your plan with you before any charge is made.</p>
+<h3>Your content</h3><p>Your records and documents remain yours. You allow us to store and process them to provide the service.</p>
+<h3>Acceptable use</h3><p>Do not misuse the service, try to access other companies&rsquo; information, or upload unlawful or harmful material.</p>
+<h3>Our liability and ending the agreement</h3><p>[TO BE COMPLETED WITH LEGAL ADVICE.]</p>
+</div></section>'''
+
 page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of every certificate, due date and reminder across your commercial properties.', home, '/')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')
 page('/how-it-works/', 'How it works | Tremcore', 'Simple to start, easy to live with. Common questions answered.', how, '/how-it-works/')
 page('/contact/', 'Book a demo | Tremcore', 'Tell us about your properties and we will arrange a walkthrough.', contact, '/contact/')
 print('built 5 pages')
+page('/privacy/', 'Privacy notice (draft) | Tremcore', 'How Tremcore uses your information.', privacy, '/privacy/', noindex=True)
+page('/terms/', 'Terms of use (draft) | Tremcore', 'Terms for the Self-Managed Compliance Passport.', terms, '/terms/', noindex=True)

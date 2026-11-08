@@ -14,8 +14,12 @@
 | 2026-11-07 | 2FA recovery: Supabase TOTP has no backup codes, so a lost phone is handled by a Tremcore admin resetting the factor after identity checks. |
 | 2026-11-07 | Website lives at the main address (`/`); the passport sign-in moved to `/app/`. Website uses system fonts for now (no third-party requests); enquiries are saved to the `enquiries` table and read in the hub. |
 | 2026-11-07 | Management hub stage 1 lives inside `/app/` for Tremcore staff only (`hub.js`): dashboard, clients, sites, compliance items, manual subscriptions, enquiries. Package picker offers Levels 1 and 2 only. Every read and write goes through Supabase as the signed-in staff member, so row-level security decides what is allowed. No database change was needed. |
+| 2026-11-08 | Self-Managed sign-up (migration 0004). Anyone can create an account only as a **Level 1 trial** at no charge; package, price and 2FA settings are fixed by the database, never chosen by the person. It is **closed by default** and Tremcore administrators switch it on or off in the hub under Settings. Email must be confirmed first. Sign-up details are kept with the login until the emailed link is used, then the first sign-in creates the company, head-office user and first site. Self sign-ups are marked in the hub; Tremcore agrees the plan and sets the subscription to Active by hand. The public site shows "Create an account" buttons only while sign-up is open. |
+| 2026-11-08 | Terms and Privacy pages exist at `/terms/` and `/privacy/` as clearly marked **drafts for legal review** (not indexed, not linked from the footer). Sign-up must not be opened to the public until they are reviewed and finished. |
 
 ## Open
+- Before opening sign-up: in Supabase switch on email sign-ups and Confirm email, add the live address to the allowed redirect URLs, and choose an email provider (Supabase's built-in email is rate-limited and only for testing). Review the Terms and Privacy drafts. Decide trial length, price wording and what happens when a trial ends.
+- What a self-signed client sees after sign-in is a holding page until the Level 1 passport (records, certificates, reminders) is built: that is the next build.
 - Onboarding flow style (client invite and setup / guided first run / Tremcore's sales-to-signed process).
 - Email provider for reminders and job alerts.
 - Billing: manual subscription records first; Stripe later.

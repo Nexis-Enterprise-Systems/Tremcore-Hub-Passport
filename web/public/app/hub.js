@@ -13,7 +13,8 @@
   const ROLE = { client_super: 'Head office', client_site: 'Site user', tremcore_admin: 'Tremcore administrator', tremcore_staff: 'Tremcore staff' };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['subscriptions', 'Subscriptions'], ['enquiries', 'Enquiries']];
+  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['subscriptions', 'Subscriptions'], ['enquiries', 'Enquiries'], ['settings', 'Settings']];
+  const navFor = () => NAV.filter((n) => n[0] !== 'settings' || (ctx && ctx.req.role_name === 'tremcore_admin'));
 
   let ctx = null, token = 0;
 
@@ -85,7 +86,7 @@
       h('header', { class: 'hubbar' },
         h('img', { class: 'hublogo', src: '/img/logo-mark.png', alt: 'Tremcore' }),
         h('nav', { class: 'hubnav', 'aria-label': 'Hub sections' },
-          NAV.map(([k, label]) => h('a', { href: '#/' + k, class: active === k ? 'on' : null, 'aria-current': active === k ? 'page' : null }, label))),
+          navFor().map(([k, label]) => h('a', { href: '#/' + k, class: active === k ? 'on' : null, 'aria-current': active === k ? 'page' : null }, label))),
         h('div', { class: 'hubuser' },
           h('span', { class: 'muted' }, (r.full_name || 'Staff') + ' · ' + (ROLE[r.role_name] || r.role_name)),
           h('span', { class: 'badge ' + (ctx.hasFactor ? 'on' : 'off'), title: '2FA' }, ctx.hasFactor ? 'On' : 'Off'),
@@ -118,7 +119,7 @@
   async function pageDashboard(my) {
     chrome('dashboard', h('h1', {}, 'Dashboard'), loading());
     const [companies, props, sums, enqs] = await Promise.all([
-      q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence')),
+      q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,source')),
       q(ctx.sb.from('properties').select('id,company_id,name')),
       q(ctx.sb.from('property_summary').select('*')),
       q(ctx.sb.from('enquiries').select('id,status'))]);
@@ -138,7 +139,8 @@
         tile('Active clients', String(live.length), '#/clients'),
         tile('Sites', String(props.length), '#/clients'),
         tile('Monthly recurring revenue', money(mrr), '#/subscriptions'),
-        tile('New enquiries', String(enqs.filter((e) => e.status === 'new').length), '#/enquiries')),
+        tile('New enquiries', String(enqs.filter((e) => e.status === 'new').length), '#/enquiries'),
+        tile('Self sign-ups to follow up', String(companies.filter((c) => c.source === 'self_signup' && c.subscription === 'trial').length), '#/clients')),
       h('section', { class: 'card' },
         h('h2', {}, 'Compliance across every site'),
         tot.total
@@ -214,7 +216,7 @@
       const t = term.trim().toLowerCase();
       const rows = companies.filter((c) => !t || c.name.toLowerCase().includes(t) || (c.contact_email || '').toLowerCase().includes(t));
       body.replaceChildren(...(rows.length ? rows.map((c) => h('tr', {},
-        h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name)), h('td', {}, LEVELS[c.level]),
+        h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name), c.source === 'self_signup' ? [' ', badge('new', 'Self sign-up')] : null), h('td', {}, LEVELS[c.level]),
         h('td', {}, badge('sub-' + c.subscription, SUBS[c.subscription])), h('td', { class: 'num' }, String(siteCount[c.id] || 0)),
         h('td', { class: 'num' }, money(c.monthly_value_pence))))
         : [h('tr', {}, h('td', { colspan: '5', class: 'muted' }, companies.length ? 'No clients match that search.' : 'No clients yet. Add your first one.'))]));
@@ -259,6 +261,7 @@
     chrome('clients',
       h('p', {}, h('a', { href: '#/clients' }, '← All clients')),
       h('div', { class: 'titlerow' }, h('h1', {}, c.name), badge('sub-' + c.subscription, SUBS[c.subscription])),
+      c.source === 'self_signup' ? h('div', { class: 'msg ok' }, 'This client signed themselves up online. They are on a trial: contact ' + (c.contact_name || 'them') + (c.contact_email ? ' at ' + c.contact_email : '') + ' to agree the plan, then set the subscription to Active.') : null,
       h('section', { class: 'card' }, h('h2', {}, 'Client details'), clientForm(c, async (row, box) => {
         await q(ctx.sb.from('companies').update(row).eq('id', id)); Object.assign(c, row); note(box, 'ok', 'Saved.');
       })),
@@ -425,6 +428,33 @@
       }) : h('p', { class: 'muted' }, 'No enquiries yet.'));
   }
 
+
+  // ---------- Settings (administrators only) ----------
+  async function pageSettings(my) {
+    chrome('settings', h('h1', {}, 'Settings'), loading());
+    const rows = await q(ctx.sb.from('app_settings').select('key,value').eq('key', 'self_signup_open'));
+    if (my !== token) return;
+    const open = rows.length > 0 && rows[0].value === true;
+    const out = h('div');
+    const btn = h('button', { class: 'btn small' + (open ? ' danger' : ''), onclick: async () => {
+      await busy(btn, async () => {
+        try {
+          const done = await q(ctx.sb.from('app_settings').update({ value: !open, updated_at: new Date().toISOString() }).eq('key', 'self_signup_open').select());
+          if (!done || !done.length) throw new Error('Only a Tremcore administrator can change this.');
+          pageSettings(++token);
+        } catch (err) { note(out, 'err', 'Not changed: ' + err.message); }
+      });
+    } }, open ? 'Close sign-up' : 'Open sign-up');
+    chrome('settings', h('h1', {}, 'Settings'),
+      h('section', { class: 'card' },
+        h('div', { class: 'titlerow' }, h('h2', {}, 'Self-Managed sign-up'), badge(open ? 'green' : 'missing', open ? 'Open' : 'Closed')),
+        h('p', {}, open
+          ? 'Businesses can create their own Self-Managed account from the website and the sign-in page. Each one starts as a trial with no charge, and appears under Clients marked “Self sign-up”.'
+          : 'Sign-up is closed. The website shows only “Book a demo” and nobody can create an account for themselves.'),
+        h('p', { class: 'hint' }, 'Before opening: in Supabase switch on email sign-ups and “Confirm email”, add the site address to the allowed redirect URLs, and have the Terms and Privacy pages checked and finished.'),
+        btn, out));
+  }
+
   // ---------- routing ----------
   async function render() {
     if (!ctx) return;
@@ -436,8 +466,9 @@
       else if (a === 'clients') await pageClients(my);
       else if (a === 'subscriptions') await pageSubscriptions(my);
       else if (a === 'enquiries') await pageEnquiries(my);
+      else if (a === 'settings' && ctx.req.role_name === 'tremcore_admin') await pageSettings(my);
       else await pageDashboard(my);
-    } catch (e) { if (my === token) chrome(a === 'clients' || a === 'sites' ? 'clients' : (NAV.some((n) => n[0] === a) ? a : 'dashboard'), errorBox(e)); }
+    } catch (e) { if (my === token) chrome(a === 'clients' || a === 'sites' ? 'clients' : (navFor().some((n) => n[0] === a) ? a : 'dashboard'), errorBox(e)); }
     if (my === token) window.scrollTo(0, 0);
   }
 

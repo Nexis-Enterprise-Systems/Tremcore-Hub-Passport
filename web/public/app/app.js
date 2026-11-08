@@ -11,6 +11,7 @@
   const root = document.getElementById('app');
   let sb = null;
   let recovering = false;   // true while the user is on a password-reset link
+  let finishingSignup = false;   // stops the sign-up step running twice at once
   let suppressSignedOut = false; // true while we sign out on purpose and show our own message afterwards
   let wantEnroll = false;   // true when an optional user chose "Set up 2FA"
 
@@ -43,6 +44,7 @@
   // ---------- views ----------
   function viewLogin(note) {
     const box = h('div');
+    const newRow = h('div', { class: 'row' });
     const email = h('input', { id: 'email', type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
     const pass = h('input', { id: 'password', type: 'password', autocomplete: 'current-password', required: true });
     const btn = h('button', { class: 'btn', type: 'submit' }, 'Sign in');
@@ -53,6 +55,7 @@
         const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
         if (error) {
           message(box, 'err', error.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
+            : (error.code === 'email_not_confirmed' || /not confirmed/i.test(error.message || '')) ? 'Please confirm your email first. Open the link we sent you, then sign in.'
             : 'Email or password not recognised.');
           pass.value = '';
         } else { await route(); }
@@ -61,7 +64,12 @@
       h('label', { for: 'email' }, 'Email'), email,
       h('label', { for: 'password' }, 'Password'), pass,
       btn, box,
-      h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewForgot() }, 'Forgotten your password?')));
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewForgot() }, 'Forgotten your password?')),
+      newRow);
+    // The "create an account" link appears only while Tremcore has Self-Managed sign-up switched on.
+    Promise.resolve(sb.rpc('signup_open')).then((r) => {
+      if (r && r.data === true) newRow.append(h('span', { class: 'muted' }, 'New to Tremcore?'), h('button', { type: 'button', class: 'linkbtn', onclick: () => viewSignup() }, 'Create an account'));
+    }).catch(() => {});
     if (note) message(box, 'ok', note);
     show(h('div', { class: 'card' }, h('h1', {}, 'Sign in'), h('p', { class: 'muted' }, 'Tremcore Compliance Passport'), form));
   }
@@ -189,8 +197,84 @@
       h('p', { class: 'muted' }, 'You are signed in.'),
       h('div', { class: 'kv' }, h('span', {}, 'Access'), h('span', {}, ROLE_LABEL[req.role_name] || req.role_name)),
       h('div', { class: 'kv' }, h('span', {}, '2FA'), h('span', { class: 'badge ' + (hasFactor ? 'on' : 'off') }, hasFactor ? 'On' : 'Off')),
-      h('p', { class: 'muted', style: null }, 'The compliance passport and management hub are being built next.'),
+      h('p', { class: 'muted', style: null }, 'Your account is ready. Your compliance passport will appear here as soon as it is switched on.'),
       !hasFactor && h('button', { class: 'btn ghost', onclick: () => { wantEnroll = true; route(); } }, 'Set up 2FA'),
+      h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
+  }
+
+
+  // ---------- Self-Managed sign-up ----------
+  // The details typed here are kept with the new login (as account details) until the emailed link is opened;
+  // the first confirmed sign-in then creates the company through signup_company(), which only ever makes a Level 1 trial.
+  async function viewSignup() {
+    show(h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
+    let open = false;
+    try { open = (await sb.rpc('signup_open')).data === true; } catch { open = false; }
+    if (!open) {
+      return show(h('div', { class: 'card' }, h('h1', {}, 'Sign-up is not open yet'),
+        h('p', { class: 'muted' }, 'We are not taking new accounts online just yet. Book a demo and we will get you started.'),
+        h('a', { class: 'btn', href: '/contact/' }, 'Book a demo'),
+        h('button', { class: 'btn ghost', onclick: () => viewLogin() }, 'Back to sign in')));
+    }
+    const box = h('div');
+    const name = h('input', { id: 'su-name', autocomplete: 'name', required: true, maxlength: '120' });
+    const company = h('input', { id: 'su-company', autocomplete: 'organization', required: true, maxlength: '160' });
+    const site = h('input', { id: 'su-site', required: true, maxlength: '160' });
+    const addr = h('input', { id: 'su-addr', autocomplete: 'street-address', maxlength: '300' });
+    const email = h('input', { id: 'su-email', type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
+    const pass = h('input', { id: 'su-pass', type: 'password', autocomplete: 'new-password', required: true, minlength: String(MIN_PASSWORD) });
+    const terms = h('input', { id: 'su-terms', type: 'checkbox' });
+    const btn = h('button', { class: 'btn', type: 'submit' }, 'Create my account');
+    const form = h('form', { novalidate: true, onsubmit: async (e) => {
+      e.preventDefault();
+      const v = { name: name.value.trim(), company: company.value.trim(), site: site.value.trim(), addr: addr.value.trim(), email: email.value.trim() };
+      if (!v.name || !v.company || !v.site) return message(box, 'err', 'Please fill in your name, your business name and your first site.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) return message(box, 'err', 'Please check your email address.');
+      if (pass.value.length < MIN_PASSWORD) return message(box, 'err', 'Use at least ' + MIN_PASSWORD + ' characters for your password. A few random words work well.');
+      if (!terms.checked) return message(box, 'err', 'Please tick the box to agree to the terms and privacy notice.');
+      await busy(btn, async () => {
+        const { data, error } = await sb.auth.signUp({ email: v.email, password: pass.value, options: {
+          emailRedirectTo: location.origin + '/app/',
+          data: { signup_company: v.company, signup_full_name: v.name, signup_site_name: v.site, signup_site_address: v.addr, terms_accepted_at: new Date().toISOString() } } });
+        if (error) {
+          const m = error.message || '';
+          return message(box, 'err', error.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
+            : /already/i.test(m) ? 'That email already has an account. Try signing in, or reset your password.'
+            : /signups? .*(not allowed|disabled)/i.test(m) ? 'Sign-up is not available right now. Please book a demo and we will help.'
+            : /password/i.test(m) ? m : 'Sorry, we could not create the account: ' + m);
+        }
+        pass.value = '';
+        if (data && data.session) return route();     // email confirmation is off (testing only): carry straight on
+        viewCheckEmail(v.email);
+      });
+    } },
+      h('label', { for: 'su-name' }, 'Your name'), name,
+      h('label', { for: 'su-company' }, 'Business name'), company,
+      h('label', { for: 'su-site' }, 'Your first site'), site,
+      h('label', { for: 'su-addr' }, 'Site address (optional)'), addr,
+      h('label', { for: 'su-email' }, 'Work email'), email,
+      h('label', { for: 'su-pass' }, 'Password'), pass,
+      h('label', { class: 'check' }, terms, h('span', {}, 'I agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms'), ' and have read the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy notice'), '.')),
+      btn, box,
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewLogin() }, 'I already have an account')));
+    show(h('div', { class: 'card' }, h('h1', {}, 'Create your account'),
+      h('p', { class: 'muted' }, 'Self-Managed Compliance Passport. You can add more sites after you sign in.'), form));
+  }
+
+  function viewCheckEmail(email) {
+    show(h('div', { class: 'card' }, h('h1', {}, 'Check your email'),
+      h('p', {}, 'We have sent a link to ', h('strong', {}, email), '. Open it to confirm your address, then sign in.'),
+      h('p', { class: 'muted' }, 'You will be asked to set up 2FA with an authenticator app the first time you sign in. It keeps your records safe. Nothing arrived? Check your spam folder.'),
+      h('button', { class: 'btn ghost', onclick: () => viewLogin() }, 'Go to sign in')));
+  }
+
+  function viewSignupProblem(err) {
+    const m = (err && err.message) || '';
+    const text = /signup_closed/.test(m) ? 'Sign-up is not open at the moment. Please book a demo and we will get you started.'
+      : /email_not_confirmed/.test(m) ? 'Your email address has not been confirmed yet. Open the link we emailed you, then sign in again.'
+      : /invalid_details/.test(m) ? 'Some of the details were not accepted. Please contact Tremcore and we will set you up.'
+      : 'We could not finish setting up your account. Please contact Tremcore.';
+    show(h('div', { class: 'card' }, h('h1', {}, 'Almost there'), h('div', { class: 'msg err', role: 'alert' }, text),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }
 
@@ -205,10 +289,20 @@
   // ---------- routing: decide which screen the current session should see ----------
   async function route() {
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) return viewLogin();
+    if (!session) return new URLSearchParams(location.search).has('signup') ? viewSignup() : viewLogin();
     if (recovering) return viewReset();
-    const { data: rows, error } = await sb.rpc('auth_requirements');
-    const req = rows && rows[0];
+    let { data: rows, error } = await sb.rpc('auth_requirements');
+    let req = rows && rows[0];
+    const meta = (session.user && session.user.user_metadata) || {};
+    if (!error && !req && meta.signup_company && !finishingSignup) {
+      finishingSignup = true;
+      try {
+        const made = await sb.rpc('signup_company', { p_company: meta.signup_company, p_full_name: meta.signup_full_name, p_site_name: meta.signup_site_name, p_site_address: meta.signup_site_address || null });
+        if (made.error) return viewSignupProblem(made.error);
+        ({ data: rows, error } = await sb.rpc('auth_requirements'));
+        req = rows && rows[0];
+      } finally { finishingSignup = false; }
+    }
     if (error || !req) return viewNoAccount();
     const aal = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data || {};
     const factors = (await sb.auth.mfa.listFactors()).data || {};
