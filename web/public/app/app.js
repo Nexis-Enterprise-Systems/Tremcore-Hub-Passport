@@ -41,8 +41,13 @@
     root.replaceChildren(h('img', { class: 'logo', src: '/img/logo-mark.png', alt: 'Tremcore' }), ...nodes);
     const f = root.querySelector('input'); if (f) f.focus();
   }
-  // Every signed-in client screen has Call Tremcore at the top. (The number is a placeholder until the real phone number is known.)
-  const callBar = () => h('div', { class: 'callbar' }, h('a', { href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'));
+  // Every signed-in client screen has a contact button at the top. Self-Managed (Level 1) clients email Tremcore for now (no phone calls);
+  // Managed clients (Levels 2 and 3) get Call Tremcore. The phone number is a placeholder until the real one is known.
+  const SUPPORT_EMAIL = 'hello@tremcore.co.uk';
+  let contactLevel = 1;
+  const callBar = () => h('div', { class: 'callbar' }, contactLevel > 1
+    ? h('a', { href: 'tel:+440000000000', id: 'contact-tremcore' }, 'Call Tremcore')
+    : h('a', { href: 'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('Tremcore Passport help'), id: 'contact-tremcore' }, 'Email Tremcore'));
   const showIn = (...nodes) => show(callBar(), ...nodes);
   const showForm = (...nodes) => { showIn(...nodes); document.body.classList.add('formwide'); };
   function message(box, kind, text) {
@@ -526,6 +531,7 @@
       } finally { finishingSignup = false; }
     }
     if (error || !req) return viewNoAccount();
+    contactLevel = Number(req.level) || 1;
     const aal = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data || {};
     const factors = (await sb.auth.mfa.listFactors()).data || {};
     const verified = factors.totp || [];

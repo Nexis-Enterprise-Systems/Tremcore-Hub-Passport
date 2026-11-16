@@ -109,7 +109,7 @@
         h('div', { class: 'welcome' }, h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'Your compliance passport' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
         ctx.banner, note ? h('div', { class: 'msg ok', role: 'status' }, note) : null,
         loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load your checks. Please refresh the page.') : null,
-        !rights.can_edit ? h('p', { class: 'muted' }, level > 1 ? 'Tremcore manages your compliance records for you. If anything looks wrong, use Call Tremcore at the top.' : 'You can view the passport but not change it. Ask your head-office user if something needs updating.') : null,
+        !rights.can_edit ? h('p', { class: 'muted' }, level > 1 ? 'Tremcore manages your compliance records for you. If anything looks wrong, use the contact button at the top.' : 'You can view the passport but not change it. Ask your head-office user if something needs updating.') : null,
         h('div', { class: 'summary' }, donut(c),
           h('div', { class: 'legend' },
             h('strong', { class: 'big' }, c.pct == null ? 'No checks yet' : c.pct + '% in date'),

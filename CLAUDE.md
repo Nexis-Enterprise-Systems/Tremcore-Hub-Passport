@@ -11,7 +11,7 @@ Owner: Aaron Loveday (Tremcore Ltd). Two connected parts: the **client app** (co
 - **Level 1 Self-Managed**: client edits their own records, categories, titles, dates, certificates; gets email reminders.
 - **Level 2 Managed Compliance**: client is **view-only**; Tremcore maintains everything in the hub; no reactive jobs.
 - **Level 3 Property & Compliance Managed**: Level 2 plus "Raise a Job" (priority, issue type incl. Other, location, description, photos). A new job emails Tremcore and is tracked in the hub.
-- Every client screen has a **Call Tremcore** button at the top.
+- Every signed-in client screen has a contact button at the top: **Email Tremcore** (mailto hello@tremcore.co.uk) for Level 1 Self-Managed, as Aaron does not want phone calls from them for now (16 Nov 2026); **Call Tremcore** for Levels 2 and 3.
 - **Traffic light**: green > 30 days to the due date; amber within 30 days; red past due; **missing/not entered is never green**. Percentages count missing items against the total.
 - Compliance items carry a basis: legal / standard / best practice. The legal-basis wording is illustrative and **needs professional review**; never present it as legal advice.
 - Multi-site clients: a head-office **super user** sees all sites and a dashboard split by site; each site gets its own login with `view` / `update` / `full` permission limited to assigned sites.

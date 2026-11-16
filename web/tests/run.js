@@ -555,7 +555,7 @@ const USERS = {
     await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'stopped', is_head: true }; });
     await login(t.page, 'site@t'); await t.page.waitForSelector('text=Your account is on stop');
-    check('stopped: only a stop message, Call Tremcore and Sign out are offered', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#call-tremcore').count()) === 1);
+    check('stopped: only a stop message, Call Tremcore and Sign out are offered', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#contact-tremcore').count()) === 1);
     await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: true }; });
     await login(t.page, 'site@t'); await t.page.waitForSelector('#cancel-start');
@@ -599,7 +599,7 @@ const USERS = {
       if (level) window.__mock.users['site@t'].profile.level = level;
     };
     t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
-    check('passport: Call Tremcore is at the very top of the screen', (await t.page.locator('main > .callbar #call-tremcore').count()) === 1 && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
+    check('passport: Email Tremcore (not a phone number) is at the very top of the screen for a Self-Managed client', (await t.page.locator('main > .callbar #contact-tremcore').count()) === 1 && (await t.page.locator('#contact-tremcore').innerText()) === 'Email Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk') && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
     check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.stat.red .num').innerText()) === '1' && (await t.page.locator('.stat.missing .num').innerText()) === '1' && (await t.page.locator('.stat.green .num').innerText()) === '2');
     check('passport: a check with no date is "No date", never green', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('.item:has-text("PAT Testing") .dot.missing').count()) === 1 && (await t.page.locator('.item:has-text("PAT Testing") .dot.green').count()) === 0);
     check('passport: overdue, due soon and in date are labelled in words as well as colour', (await t.page.locator('.item:has-text("Fire Alarm Test") .tag').innerText()) === 'Overdue' && (await t.page.locator('.item:has-text("Gas Safety") .tag').innerText()) === 'Due soon' && (await t.page.locator('.item:has-text("EICR") .tag').innerText()) === 'In date');
@@ -651,7 +651,7 @@ const USERS = {
     check('view-only: no add button, no edit form, no upload and no remove', (await t.page.locator('#add-check').count()) === 0 && (await t.page.locator('#f-due').count()) === 0 && (await t.page.locator('#file').count()) === 0 && (await t.page.locator('#remove-check').count()) === 0 && (await t.page.locator('.detail').innerText()).includes('Quarterly'));
     await t.ctx.close();
     t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false }, level: 2 }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
-    check('managed client: told Tremcore manages the records, and still has Call Tremcore', (await t.page.locator('.card').first().innerText()).includes('Tremcore manages your compliance records') && (await t.page.locator('#call-tremcore').count()) === 1);
+    check('managed client: told Tremcore manages the records, and still has Call Tremcore', (await t.page.locator('.card').first().innerText()).includes('Tremcore manages your compliance records') && (await t.page.locator('#contact-tremcore').innerText()) === 'Call Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('tel:'));
     await t.ctx.close();
     t = await newPage(() => { window.__mock.tables = { properties: [{ id: 's1', name: 'Only Site' }], compliance_items: [] }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
     check('passport: with no checks yet there is no score, only an invitation to add one (no site picker for one site)', (await t.page.locator('.legend').innerText()).includes('No checks yet') && (await t.page.locator('#site-pick').count()) === 0 && (await t.page.locator('.sitecard').count()) === 0 && (await t.page.locator('#add-check').count()) === 1);

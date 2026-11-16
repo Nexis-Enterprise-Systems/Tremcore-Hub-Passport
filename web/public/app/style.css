@@ -179,28 +179,56 @@ h3{font-size:.95rem;margin:18px 0 8px;color:var(--gold)}
 .detail{display:block}
 .detail>.card{margin-bottom:16px}
 .card.form{max-width:640px;margin-left:auto;margin-right:auto}
-body.passport,body.formwide{padding-top:max(14px,env(safe-area-inset-top))}
+body.passport,body.formwide{padding-top:max(12px,env(safe-area-inset-top))}
 body.passport main,body.formwide main{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:12px;max-width:1240px;margin:0 auto}
 body.formwide main{max-width:1000px}
 body.passport main>*,body.formwide main>*{grid-column:1/-1}
-body.passport main>.logo,body.formwide main>.logo{grid-column:1;grid-row:1;width:60px;margin:0}
+body.passport main>.logo,body.formwide main>.logo{grid-column:1;grid-row:1;width:40px;margin:0}
 body.passport main>.callbar,body.formwide main>.callbar{grid-column:2;grid-row:1;margin:0;justify-content:flex-end}
-body.passport main>:nth-child(n+3),body.formwide main>:nth-child(n+3){margin-top:14px}
-.donut{width:116px;height:116px}
-.summary{flex-wrap:nowrap;gap:16px}
-.legend{min-width:0}
-.legend .big{font-size:1.3rem}
-.tiles5{grid-template-columns:repeat(5,1fr);gap:6px}
-.stat{padding:8px 6px;border-radius:12px;align-items:center;text-align:center}
-.stat .num{font-size:1.25rem}
-.stat .lbl{font-size:.62rem;white-space:nowrap}
-.sitesgrid{display:flex;overflow-x:auto;scroll-snap-type:x proximity;gap:10px;margin:14px -4px;padding:2px 4px 8px}
-.sitesgrid .sitecard{flex:0 0 78%;max-width:280px;scroll-snap-align:start}
+body.passport main>:nth-child(n+3),body.formwide main>:nth-child(n+3){margin-top:12px}
+.callbar a{padding:7px 14px;font-size:.82rem}
+.card{padding:18px 16px}
+.welcome h1{font-size:1.25rem}
+.donut{width:92px;height:92px}
+.summary{flex-wrap:nowrap;gap:14px;margin:10px 0}
+.legend{min-width:0;font-size:.85rem}
+.legend .big{font-size:1.15rem}
+.legend .muted{font-size:.78rem}
+.tiles5{grid-template-columns:repeat(5,1fr);gap:5px}
+.stat{padding:5px 2px;border-radius:10px;align-items:center;text-align:center;gap:0}
+.stat .num{font-size:1rem}
+.stat .lbl{font-size:.6rem;white-space:nowrap}
+.sitesgrid{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.sitesgrid .sitecard{width:100%;padding:8px 12px;gap:10px;border-radius:12px}
+.sitecard .donut.mini{width:40px;height:40px}
+.sitecard .donut.mini .pct{font-size:9px}
+.sitecard .sname strong{font-size:.92rem}
+.sitecard .sname .small{font-size:.74rem}
+.item{padding:9px 12px;margin-bottom:6px;min-height:0;border-radius:10px}
+.item .title{font-size:.93rem}
+.item .meta{font-size:.76rem}
+.item .tag{font-size:.68rem;padding:2px 8px}
+.group h3{margin:14px 0 6px;font-size:.85rem}
 @media (min-width:960px){
   body.passport,body.formwide{padding-top:20px}
   body.passport main>.logo,body.formwide main>.logo{width:84px}
   body.passport main>:nth-child(n+3),body.formwide main>:nth-child(n+3){margin-top:18px}
   .callbar a{padding:10px 22px;font-size:.95rem}
+  .card{padding:26px 22px}
+  .item{padding:12px 14px;margin-bottom:8px;border-radius:12px}
+  .item .title{font-size:1rem}
+  .item .meta{font-size:.9rem}
+  .item .tag{font-size:.78rem;padding:3px 10px}
+  .group h3{margin:18px 0 8px;font-size:.95rem}
+  .sitesgrid{flex-direction:row}
+  .sitesgrid .sitecard{padding:14px;gap:12px;border-radius:16px}
+  .sitecard .donut.mini{width:72px;height:72px}
+  .sitecard .donut.mini .pct{font-size:8.5px}
+  .sitecard .sname strong{font-size:1rem}
+  .sitecard .sname .small{font-size:.82rem}
+  .legend{font-size:1rem}
+  .legend .muted{font-size:.92rem}
+  .stat{padding:12px 14px;border-radius:14px}
   .pp{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
   .pp-side{position:sticky;top:16px}
   .tiles5{grid-template-columns:repeat(5,1fr);gap:10px}
@@ -213,7 +241,7 @@ body.passport main>:nth-child(n+3),body.formwide main>:nth-child(n+3){margin-top
   .sitesgrid .sitecard{flex:none;max-width:none}
   .detail{display:grid;grid-template-columns:1.25fr 1fr;gap:20px;align-items:start}
   .welcome h1{font-size:1.8rem}
-  .donut{width:170px;height:170px}.donut.mini{width:72px;height:72px}
+  .donut{width:170px;height:170px}
   .thead,.item{grid-template-columns:16px minmax(140px,1fr) 120px minmax(190px,230px) 96px;grid-template-areas:none}
   .thead.nosite,.item.nosite{grid-template-columns:16px minmax(140px,1fr) minmax(190px,230px) 96px}
   .thead{display:grid;gap:12px;padding:0 14px 8px;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--line);margin-bottom:8px}
