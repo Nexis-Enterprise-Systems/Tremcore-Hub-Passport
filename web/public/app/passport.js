@@ -15,7 +15,7 @@
   const NS = 'http://www.w3.org/2000/svg';
   // Shown if the server list cannot be read, so the paid add-ons are always visible with their price.
   const EXTRA_DEFAULT = [
-    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records.', price_pence: 399, charged_per: 'company', owned: false },
+    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 399, charged_per: 'site', owned: false },
     { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 699, charged_per: 'site', owned: false }
   ];
   const ICON = {
@@ -354,7 +354,7 @@
         e.owned && state !== 'confirming'
           ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account. We are finishing this screen and it will appear here very soon.')
           : state === 'confirming' ? null : [h('p', { class: 'big' }, priceText(e)),
-            e.charged_per === 'site' ? h('p', { class: 'muted' }, 'You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month.') : null,
+            e.charged_per === 'site' ? h('p', { class: 'muted' }, 'This is charged for each site. You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month. Add-ons are always charged monthly, with no yearly discount.') : null,
             isHead && ((company && company.level) || 1) === 1
               ? [h('button', { class: 'btn', id: 'extra-add', type: 'button', onclick: (ev) => startExtraPayment(code, ev.target, box) }, 'Add ' + e.name + ' · pay now'),
                 h('p', { class: 'muted small' }, 'You will be taken to our secure payment page. The add-on starts as soon as your payment is confirmed and is added to your monthly subscription.')]

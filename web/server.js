@@ -194,10 +194,16 @@ async function handleCheckoutExtra(req, res) {
       const j = await r.json().catch(() => ({}));
       if (/already_owned/.test(j.message || '')) return out(409, { error: 'You already have this add-on.' });
       if (r.status === 401) return out(401, { error: 'Please sign in again.' });
-      return out(403, { error: 'Only the head-office user of an active account can add this.' });
+      const why = j.message || '';
+      if (r.status === 404 || /PGRST202|could not find the function/i.test(why + (j.code || ''))) return out(503, { error: 'Add-ons are not switched on yet. Tremcore needs to finish a database update.' });
+      if (/not_head/.test(why)) return out(403, { error: 'Only the head-office user can add this.' });
+      if (/two_factor_needed/.test(why)) return out(403, { error: 'Please finish signing in with your 2FA code first, then try again.' });
+      if (/not_self_managed/.test(why)) return out(403, { error: 'Add-ons are only for Self-Managed accounts.' });
+      if (/not_active/.test(why)) return out(403, { error: 'Your subscription needs to be active before you can add this.' });
+      return out(403, { error: 'Sorry, this cannot be added to your account right now. Please contact Tremcore.' });
     }
     const info = (await r.json())[0];
-    if (!info) return out(403, { error: 'Only the head-office user of an active account can add this.' });
+    if (!info) return out(403, { error: 'Sorry, this cannot be added to your account right now. Please contact Tremcore.' });
     const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
     const params = billing.extraCheckoutParams({ companyId: info.company_id, code, name: info.name + (info.charged_per === 'site' ? ' (per site)' : ''), unitPence: info.price_pence, quantity: info.quantity,
       customerId: info.stripe_customer_id, email: info.email, origin: proto + '://' + req.headers.host });

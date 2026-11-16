@@ -67,3 +67,7 @@
 - `monthly_value_pence` now includes active add-ons.
 - Staff Clock In / Out: `staff_members` register (people per site, active/not active, up to 300 per site), only usable while the add-on is owned. The QR code per site, the public clock-in page and attendance records are the next stage. Toolbox Talks library and talk management are to be designed later.
 - Not yet handled: adding a site later does not yet raise the Staff Clock In / Out quantity.
+
+## Toolbox Talks is per site (16 Nov 2026, migration 0018)
+- Toolbox Talks is £3.99 + VAT **per site** per month (changed from per company), same as Staff Clock In / Out at £6.99 per site. Add-ons are always monthly; no yearly discount.
+- Buying refusals now say why (not head office, 2FA not finished, not Self-Managed, subscription not active, database update not run).

@@ -434,8 +434,8 @@ end $$;
 update companies set extra_seats=1 where id='10000000-0000-0000-0000-0000000000f1';
 insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000f4','Fourth','client_site','10000000-0000-0000-0000-0000000000f1','view');
 select 'seats: a goodwill seat granted by Tremcore allows one more' as test, true as ok;
-select 'extras: Toolbox Talks is 3.99 per company; Staff Sign In/Out is 6.99 per site' as test,
-  (select price_pence=399 and charged_per='company' from extras where code='toolbox_talks') and (select price_pence=699 and charged_per='site' from extras where code='staff_signin') as ok;
+select 'extras: Toolbox Talks is 3.99 per site; Staff Sign In/Out is 6.99 per site' as test,
+  (select price_pence=399 and charged_per='site' from extras where code='toolbox_talks') and (select price_pence=699 and charged_per='site' from extras where code='staff_signin') as ok;
 insert into company_extras(company_id,extra_code,price_pence) values ('10000000-0000-0000-0000-00000000000a','toolbox_talks',399);
 select * from chk('extras: a client sees its own extras', :'superA', 'aal2', $$select count(*)=1 from company_extras$$);
 select * from chk('extras: another company sees none of them', :'superB', 'aal2', $$select count(*)=0 from company_extras$$);
@@ -706,7 +706,7 @@ select * from chk('extras: a business that has bought nothing owns no extras but
 update companies set subscription='active', stripe_customer_id='cus_A', stripe_subscription_id='sub_main', access_ends_at=null, billing_interval='monthly' where id='10000000-0000-0000-0000-00000000000a';
 delete from company_extras where company_id='10000000-0000-0000-0000-00000000000a';
 select * from chk('extras buy: head office of an active Level 1 account gets the checkout details (staff sign in is per site)', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=(select count(*) from properties where company_id='10000000-0000-0000-0000-00000000000a') and price_pence=699 and stripe_customer_id='cus_A' from extra_checkout_info('staff_signin'))$$);
-select * from chk('extras buy: toolbox talks is one per company', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=1 and price_pence=399 from extra_checkout_info('toolbox_talks'))$$);
+select * from chk('extras buy: toolbox talks is also charged per site (£3.99 each)', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=(select count(*) from properties where company_id='10000000-0000-0000-0000-00000000000a') and price_pence=399 from extra_checkout_info('toolbox_talks'))$$);
 select * from deny('extras buy: a site user cannot buy an add-on', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select * from extra_checkout_info('toolbox_talks')$$);
 select * from deny('extras buy: a Level 2 client cannot buy an add-on', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select * from extra_checkout_info('toolbox_talks')$$);
 select * from deny('extras buy: an unknown add-on is refused', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select * from extra_checkout_info('nonsense')$$);
@@ -717,14 +717,14 @@ do $$ declare r text; begin
 exception when others then reset role; end $$;
 do $$ declare r text; begin
   set local role service_role;
-  r := apply_stripe_event('evt_x2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','extra_paid','toolbox_talks',1);
+  r := apply_stripe_event('evt_x2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','extra_paid','toolbox_talks',2);
   if r <> 'extra_applied' then raise exception 'got %', r; end if;
-  r := apply_stripe_event('evt_x2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','extra_paid','toolbox_talks',1);
+  r := apply_stripe_event('evt_x2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','extra_paid','toolbox_talks',2);
   if r <> 'duplicate' then raise exception 'not idempotent: %', r; end if;
   reset role;
 end $$;
 select 'extras buy: a confirmed payment switches the add-on on, once (a repeated message changes nothing)' as test, (select count(*)=1 and bool_and(status='active' and stripe_item_id='sub_tt') from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks') as ok;
-select 'extras buy: the account value now includes the add-on' as test, (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') + 399 from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+select 'extras buy: the account value now includes the add-on' as test, (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') + 399*2 from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
 select * from chk('extras buy: the business now owns Toolbox Talks and not Staff Clock In', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select owned from my_extras() where code='toolbox_talks') and not (select owned from my_extras() where code='staff_signin')$$);
 select * from deny('extras buy: an add-on already owned cannot be bought twice', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select * from extra_checkout_info('toolbox_talks')$$);
 do $$ declare r text; begin

@@ -135,10 +135,13 @@ const USERS = {
     rr = await ce('staff_signin', { Origin: 'https://evil.example' }); check('add-on: another website cannot start it', rr.status === 403);
     rr = await ce('Bad Code!'); check('add-on: a nonsense code is refused before anything happens', rr.status === 400);
     extraReply = { status: 400, message: 'already_owned' }; rr = await ce('staff_signin'); check('add-on: already owned is explained, not charged again', rr.status === 409);
-    extraReply = { status: 403, message: 'not_allowed' }; rr = await ce('staff_signin'); check('add-on: someone who may not buy it is refused', rr.status === 403);
+    for (const [why, words] of [['not_head', 'head-office user'], ['two_factor_needed', '2FA'], ['not_self_managed', 'Self-Managed'], ['not_active', 'active']]) {
+      extraReply = { status: 403, message: why }; rr = await ce('staff_signin'); const jj = await rr.json(); check('add-on: refusal "' + why + '" tells the person exactly why', rr.status === 403 && jj.error.includes(words));
+    }
+    extraReply = { status: 404, message: 'Could not find the function public.extra_checkout_info', }; rr = await ce('staff_signin'); check('add-on: if the database update has not been run, the message says so', rr.status === 503 && (await rr.json()).error.includes('database update'));
     extraReply = { status: 200, rows: [] }; rr = await ce('staff_signin'); check('add-on: no row back means refused', rr.status === 403);
-    extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'p@x', stripe_customer_id: null, name: 'Toolbox Talks', price_pence: 399, charged_per: 'company', quantity: 1 }] }; const n1 = stripeCalls.length; await ce('toolbox_talks'); const tp = new URLSearchParams(stripeCalls[n1].o.body);
-    check('add-on: Toolbox Talks is one £3.99 charge per company; a first-time customer is created from their email', tp.get('line_items[0][quantity]') === '1' && tp.get('line_items[0][price_data][unit_amount]') === '399' && !tp.get('customer') && tp.get('customer_email') === 'p@x');
+    extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'p@x', stripe_customer_id: null, name: 'Toolbox Talks', price_pence: 399, charged_per: 'site', quantity: 3 }] }; const n1 = stripeCalls.length; await ce('toolbox_talks'); const tp = new URLSearchParams(stripeCalls[n1].o.body);
+    check('add-on: Toolbox Talks is £3.99 per site (3 sites = 3 x £3.99); a first-time customer is created from their email', tp.get('line_items[0][quantity]') === '3' && tp.get('line_items[0][price_data][unit_amount]') === '399' && !tp.get('customer') && tp.get('customer_email') === 'p@x');
     stripeFail = true; rr = await ce('toolbox_talks'); check('add-on: if Stripe refuses, a plain message only', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
     // webhook
     const evt = (type, obj, id) => JSON.stringify({ id: id || 'evt_' + type, type, data: { object: obj } });
@@ -798,7 +801,7 @@ const USERS = {
     // coming back from Stripe: waits for the confirmation, then opens the add-on
     t = await newPage(appSeed, {}); await t.page.goto(base + '/app/?extra=toolbox_talks&paid=1'); await login(t.page, 'site@t'); await t.page.waitForSelector('#extra-confirming');
     check('back from Stripe: the person sees that the payment is being confirmed, with no pay button', (await t.page.locator('#extra-add').count()) === 0);
-    await t.page.evaluate(() => { window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }]; });
+    await t.page.evaluate(() => { window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'site', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }]; });
     await t.page.waitForSelector('text=is now on your account', { timeout: 8000 });
     check('back from Stripe: once confirmed it says the add-on is on the account, and the web address is tidied', (await t.page.locator('.msg.ok').first().innerText()).includes('Toolbox Talks') && new URL(t.page.url()).search === '');
     await t.ctx.close();
