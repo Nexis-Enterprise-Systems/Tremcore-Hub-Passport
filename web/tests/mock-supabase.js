@@ -89,6 +89,11 @@
 
   window.supabase = { createClient() { return {
     from,
+    storage: { from(bucket) { return {
+      async upload(path, file) { rec('upload', bucket + ':' + path); if (M().uploadError) return { data: null, error: { message: 'x' } }; (M().objects = M().objects || {})[path] = file.size; return { data: { path }, error: null }; },
+      async remove(paths) { rec('remove', paths.join(',')); if (M().removeError) return { data: null, error: { message: 'x' } }; paths.forEach((p) => { delete (M().objects || {})[p]; }); return { data: [], error: null }; },
+      async createSignedUrl(path) { rec('signed', path); return { data: { signedUrl: location.origin + '/healthz?doc=' + encodeURIComponent(path) }, error: null }; }
+    }; } },
     auth: {
       async getSession() { return { data: { session: current ? { access_token: 'tok-' + current, user: { id: 'user-' + current, email: current, user_metadata: (userRow() && userRow().meta) || {} } } : null } }; },
       async signUp({ email, password, options }) {
@@ -129,6 +134,7 @@
     },
     async rpc(name, args) {
       rec('rpc:' + name, args || null);
+      if (name === 'passport_rights') return { data: [M().rights || { can_edit: true, can_manage: true }] };
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
       if (name === 'request_cancellation') { rec('cancel', 'x'); if (M().cancelError) return { data: null, error: { message: 'x' } }; M().access = { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 }; return { data: '2026-12-08T00:00:00Z' }; }
       if (name === 'withdraw_cancellation') { M().access = { state: 'ok', is_head: true }; return { data: null }; }

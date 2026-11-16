@@ -36,11 +36,14 @@
     return el;
   }
   function show(...nodes) {
-    document.body.classList.remove('hub');
+    document.body.classList.remove('hub', 'passport');
     if (window.TCHub) window.TCHub.unmount();
     root.replaceChildren(h('img', { class: 'logo', src: '/img/logo-mark.png', alt: 'Tremcore' }), ...nodes);
     const f = root.querySelector('input'); if (f) f.focus();
   }
+  // Every signed-in client screen has Call Tremcore at the top. (The number is a placeholder until the real phone number is known.)
+  const callBar = () => h('div', { class: 'callbar' }, h('a', { href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'));
+  const showIn = (...nodes) => show(callBar(), ...nodes);
   function message(box, kind, text) {
     box.replaceChildren(text ? h('div', { class: 'msg ' + kind, role: kind === 'err' ? 'alert' : 'status' }, text) : '');
   }
@@ -221,23 +224,14 @@
         a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async () => { await sb.rpc('withdraw_cancellation'); route(); } }, 'Keep my account')));
     }
     if (location.search.includes('paid=')) history.replaceState(null, '', '/app/');
-    let checksList = null;
-    try {
-      const it = (await sb.from('compliance_items').select('id,title,due_date').order('title')).data || [];
-      if (it.length) { const seen = new Set(); checksList = h('div', { class: 'checklist' }, h('h3', {}, 'Your checks'), ...it.filter((x) => !seen.has(x.title) && seen.add(x.title)).map((x) => h('div', { class: 'kv' }, h('span', {}, x.title), h('span', { class: 'badge off' }, x.due_date ? 'Date entered' : 'Not entered yet')))); }
-    } catch { checksList = null; }
-    show(h('div', { class: 'card' },
-      h('h1', {}, 'Welcome' + (req.full_name ? ', ' + req.full_name.split(' ')[0] : '')),
-      banner,
-      h('p', { class: 'muted' }, 'You are signed in.'),
+    const account = [
       h('div', { class: 'kv' }, h('span', {}, 'Access'), h('span', {}, ROLE_LABEL[req.role_name] || req.role_name)),
       h('div', { class: 'kv' }, h('span', {}, '2FA'), h('span', { class: 'badge ' + (hasFactor ? 'on' : 'off') }, hasFactor ? 'On' : 'Off')),
-      checksList,
-      !checksList && h('p', { class: 'muted', style: null }, 'Your account is ready. Your compliance passport will appear here as soon as it is switched on.'),
       !hasFactor && h('button', { class: 'btn ghost', onclick: () => { wantEnroll = true; route(); } }, 'Set up 2FA'),
       a.is_head && h('button', { class: 'btn', id: 'team-open', onclick: () => viewTeam() }, 'Manage my team'),
       a.is_head && a.state !== 'cancelling' && h('button', { class: 'btn ghost', id: 'cancel-start', onclick: () => viewCancel() }, 'Cancel my subscription'),
-      h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
+      h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')];
+    return window.TCPassport.mount({ sb, h, show: showIn, message, busy, fmtDate, req, banner, account });
   }
 
   // Pay now: the server makes a Stripe payment page for THIS company (it looks the company up from the signed-in token), and we go there.
@@ -259,27 +253,25 @@
         } catch { message(box, 'err', 'Sorry, we could not start the payment. Please try again, or contact Tremcore.'); }
       });
     } }, 'Pay now');
-    show(h('div', { class: 'card' }, h('h1', {}, confirming ? 'Confirming your payment' : 'One step left: payment'),
+    showIn(h('div', { class: 'card' }, h('h1', {}, confirming ? 'Confirming your payment' : 'One step left: payment'),
       confirming ? h('p', {}, 'Thank you. We are waiting for your payment to be confirmed. This page updates by itself, usually within a few seconds.')
         : h('p', {}, a.is_head ? 'Your account has been created. It opens as soon as your payment is confirmed.' : 'This account is waiting for its first payment. Please ask your head-office user.'),
       q === '0' && h('div', { class: 'msg err', role: 'status' }, 'The payment was not completed. You have not been charged. You can try again when you are ready.'),
       a.is_head && !confirming && btn, box,
-      h('a', { class: 'btn ghost', href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }
 
   function viewStopped(a) {
-    show(h('div', { class: 'card' }, h('h1', {}, 'Your account is on stop'),
+    showIn(h('div', { class: 'card' }, h('h1', {}, 'Your account is on stop'),
       h('p', { class: 'muted' }, 'You cannot open anything in this account at the moment.'),
       h('p', {}, a.is_head ? 'If a payment failed, please contact Tremcore. If your notice period has ended, the account is closed and your data is being removed.'
         : 'Please ask your head-office user, or contact Tremcore.'),
-      h('a', { class: 'btn', href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }
 
   function viewCancel() {
     const msg = h('div', { id: 'cancel-msg' });
-    show(h('div', { class: 'card' }, h('h1', {}, 'Cancel my subscription'),
+    showIn(h('div', { class: 'card' }, h('h1', {}, 'Cancel my subscription'),
       h('p', {}, 'We need one month\u2019s notice. You keep full access until the notice ends. After that you will not be able to sign in and all your data will be removed.'),
       h('p', { class: 'muted' }, 'If you have paid for a year up front, you keep access to the end of the year you paid for and that payment is not refunded (see the Terms). Please download or save anything you need before the end date.'),
       msg,
@@ -322,7 +314,7 @@
       h('h3', {}, 'Which compliance checks apply to your premises?'),
       h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
       h('div', { class: 'checklist' }, ...boxes), all, btn, box);
-    show(h('div', { class: 'card wide' }, h('h1', {}, 'Welcome to your passport' + (co && co.name ? ', ' + co.name : '')), h('p', { class: 'muted' }, 'Two quick things to set up.'), form));
+    showIn(h('div', { class: 'card wide' }, h('h1', {}, 'Welcome to your passport' + (co && co.name ? ', ' + co.name : '')), h('p', { class: 'muted' }, 'Two quick things to set up.'), form));
   }
 
   // ---------- Team: the head-office user decides who can do what ----------
@@ -334,7 +326,7 @@
       : /mfa_required|not_allowed/.test(m) ? 'You are not allowed to do that.' : 'Sorry, that did not work. Please try again.'; };
 
   async function viewTeam(note) {
-    show(h('div', { class: 'card wide' }, h('p', { class: 'muted center' }, 'Loading…')));
+    showIn(h('div', { class: 'card wide' }, h('p', { class: 'muted center' }, 'Loading…')));
     const [m, pend, sum, sites] = await Promise.all([sb.rpc('team_members'), sb.rpc('team_pending'), sb.rpc('team_summary'), sb.from('properties').select('id,name').order('name')]);
     if (m.error || !m.data) return viewHomeAgain();
     const members = m.data, pending = pend.data || [], s = (sum.data && sum.data[0]) || { used: members.length, allowed: members.length, require_mfa: false };
@@ -376,7 +368,7 @@
       h('button', { class: 'btn ghost', 'data-cancel': i.id, onclick: async () => { await sb.rpc('team_cancel_invite', { p_id: i.id }); viewTeam('Invitation cancelled.'); } }, 'Cancel')));
 
     const mfa = h('input', { type: 'checkbox', id: 'team-mfa', checked: s.require_mfa, onchange: async (e) => { const r = await sb.rpc('team_set_require_mfa', { p_on: e.target.checked }); viewTeam(r.error ? null : (e.target.checked ? '2FA is now required for everyone in your company.' : '2FA is now optional for your site users.')); } });
-    show(h('div', { class: 'card wide' }, h('h1', {}, 'My team'),
+    showIn(h('div', { class: 'card wide' }, h('h1', {}, 'My team'),
       h('p', { class: 'muted' }, s.used + ' of ' + s.allowed + ' users in use. Your price includes one user for your first site and one more for each extra site.'),
       box, ...rows, pendRows.length ? h('h3', {}, 'Waiting to sign up') : null, ...pendRows, invite,
       h('label', { class: 'check' }, mfa, h('span', {}, 'Require 2FA (authenticator app) for everyone in my company. It is always required for head-office users.')),

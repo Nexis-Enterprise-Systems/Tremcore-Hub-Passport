@@ -499,7 +499,7 @@ const USERS = {
     check('first confirmed sign-in creates the company once, with the saved details and billing choice', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_sites === 3 && made[0].p_billing === 'annual');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
-    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your account is ready').count()) === 1);
+    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your compliance passport').count()) === 1);
     check('no page or CSP errors through the whole sign-up', t.problems.length === 0);
     if (t.problems.length) console.log(t.problems);
     await t.ctx.close();
@@ -574,13 +574,87 @@ const USERS = {
     check('set-up: one row per site to name, with no name filled in yet', (await t.page.locator('[data-site-row]').count()) === 2 && (await t.page.locator('[data-site-row] input').first().inputValue()) === '');
     await t.page.fill('[data-site-row=s1] input >> nth=0', 'high street shop'); await t.page.fill('[data-site-row=s1] input >> nth=1', '1 High St'); await t.page.press('[data-site-row=s1] input >> nth=0', 'Tab');
     await t.page.fill('#st-phone', '01634 000000'); await t.page.check('input[value=c0]'); await t.page.check('input[value=c5]');
-    await t.page.click('#st-go'); await t.page.waitForSelector('text=Your checks');
+    await t.page.click('#st-go'); await t.page.waitForSelector('text=Your compliance passport');
     const fs = (await calls(t.page, 'rpc:finish_setup'))[0];
     check('set-up: only the ticked checks and the details are sent, with the site names capitalised and the unnamed one left as it was', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000' && fs.p_sites[0].name === 'High Street Shop' && fs.p_sites[0].address === '1 High St' && fs.p_sites[1].name === 'Site 2');
-    check('set-up: the ticked checks appear as "Not entered yet" (never green), and set-up is not asked again', (await t.page.locator('.kv:has-text("PAT Testing") .badge').innerText()) === 'Not entered yet' && (await t.page.locator('#st-go').count()) === 0);
+    check('set-up: the ticked checks appear as "No date" (never green), and set-up is not asked again', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('#st-go').count()) === 0);
     await t.ctx.close();
     t = await newPage(setupSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#st-go'); await t.page.click('#st-all');
     check('set-up: Tick all ticks everything', (await t.page.locator('input[name=core]:checked').count()) === 10);
+    await t.ctx.close();
+
+
+    // the passport: traffic lights, filters, details, editing, certificates, own checks, view-only
+    const ppSeed = (cfg) => {
+      const rights = cfg && cfg.rights, level = cfg && cfg.level;
+      const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+      window.__mock.tables = { properties: [{ id: 's1', name: 'High Street' }, { id: 's2', name: 'Station Road' }], documents: [],
+        compliance_items: [
+          { id: 'i1', property_id: 's1', grp: 'Fire safety', title: 'Fire Alarm Test', due_date: day(-3), basis: 'legal', notes: 'Quarterly' },
+          { id: 'i2', property_id: 's1', grp: 'Gas', title: 'Gas Safety', due_date: day(10) },
+          { id: 'i3', property_id: 's1', grp: 'Electrical', title: 'EICR', due_date: day(90), frequency_months: 60 },
+          { id: 'i4', property_id: 's1', grp: 'Electrical', title: 'PAT Testing', due_date: null },
+          { id: 'i5', property_id: 's2', grp: 'Other', title: 'Asbestos', due_date: day(200) }] };
+      if (rights) window.__mock.rights = rights;
+      if (level) window.__mock.users['site@t'].profile.level = level;
+    };
+    t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    check('passport: Call Tremcore is at the very top of the screen', (await t.page.locator('main > .callbar #call-tremcore').count()) === 1 && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
+    check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.counts').innerText()).replace(/\s+/g, ' ').includes('Overdue: 1') && (await t.page.locator('.counts').innerText()).includes('No date: 1'));
+    check('passport: a check with no date is "No date", never green', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('.item:has-text("PAT Testing") .dot.missing').count()) === 1 && (await t.page.locator('.item:has-text("PAT Testing") .dot.green').count()) === 0);
+    check('passport: overdue, due soon and in date are labelled in words as well as colour', (await t.page.locator('.item:has-text("Fire Alarm Test") .tag').innerText()) === 'Overdue' && (await t.page.locator('.item:has-text("Gas Safety") .tag').innerText()) === 'Due soon' && (await t.page.locator('.item:has-text("EICR") .tag').innerText()) === 'In date');
+    await t.page.selectOption('#site-pick', 's1');
+    check('passport: picking one site recalculates its own score (2 of 4 = 50%)', (await t.page.locator('.legend').innerText()).includes('50% in date') && (await t.page.locator('.item').count()) === 4);
+    await t.page.click('[data-filter=red]');
+    check('passport: the Overdue filter shows only overdue checks', (await t.page.locator('.item').count()) === 1 && (await t.page.locator('.item').innerText()).includes('Fire Alarm Test'));
+    await t.page.click('[data-filter=all]');
+    // open a check, change dates (the next due date is suggested from last done + months), save
+    await t.page.click('.item[data-id=i3]'); await t.page.waitForSelector('#f-due');
+    check('detail: shows the basis with a not-legal-advice note', (await t.page.locator('.card').innerText()).includes('not legal advice'));
+    await t.page.fill('#f-last', '2026-01-31'); await t.page.fill('#f-freq', '1');
+    check('detail: next due date is suggested from last done plus the repeat period (31 Jan + 1 month = 28 Feb)', (await t.page.inputValue('#f-due')) === '2026-02-28');
+    await t.page.fill('#f-notes', 'Done by Acme Electrics'); await t.page.click('button[type=submit]'); await t.page.waitForSelector('#item-msg .msg.ok');
+    const upd = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'update').pop();
+    check('detail: saving sends the dates, repeat period and notes for that check only', upd && upd.payload.due_date === '2026-02-28' && upd.payload.last_done === '2026-01-31' && upd.payload.frequency_months === 1 && upd.payload.notes === 'Done by Acme Electrics' && upd.filters.join() === 'id=i3');
+    await t.page.fill('#f-due', ''); await t.page.fill('#f-freq', '0'); await t.page.click('button[type=submit]');
+    check('detail: a bad repeat period is refused in plain words', (await t.page.locator('#item-msg').innerText()).includes('whole number of months'));
+    // certificates
+    await t.page.setInputFiles('#file', { name: 'virus.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('x') }); await t.page.click('#upload');
+    check('certificates: a file type that is not allowed is refused', (await t.page.locator('#item-msg').innerText()).includes('PDF, a photo'));
+    await t.page.setInputFiles('#file', { name: 'big.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(11 * 1024 * 1024) }); await t.page.click('#upload');
+    check('certificates: a file over 10 MB is refused', (await t.page.locator('#item-msg').innerText()).includes('10 MB') && (await calls(t.page, 'upload')).length === 0);
+    await t.page.setInputFiles('#file', { name: 'EICR certificate 2026.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') }); await t.page.click('#upload'); await t.page.waitForSelector('.doc');
+    const upl = (await calls(t.page, 'upload'))[0], dins = (await calls(t.page, 'db')).filter((c) => c.table === 'documents' && c.op === 'insert')[0];
+    check('certificates: uploaded into the site and check folder in private storage, and listed', /^documents:s1\/i3\/[^/]+-EICR_certificate_2026\.pdf$/.test(upl) && dins && dins.payload.property_id === 's1' && dins.payload.item_id === 'i3' && (await t.page.locator('.doc .fname').innerText()) === 'EICR certificate 2026.pdf');
+    const [pop] = await Promise.all([t.ctx.waitForEvent('page'), t.page.click('.doc button:has-text("Open")')]);
+    check('certificates: Open asks for a short-lived private link', (await calls(t.page, 'signed')).length === 1 && (await calls(t.page, 'signed'))[0].startsWith('s1/i3/')); await pop.close();
+    await t.page.click('.doc button:has-text("Delete")'); await t.page.waitForSelector('text=Document removed');
+    check('certificates: deleting removes the stored file and the record', (await calls(t.page, 'remove')).length === 1 && (await t.page.locator('.doc').count()) === 0);
+    // remove a check (its documents go with it)
+    await t.page.setInputFiles('#file', { name: 'a.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') }); await t.page.click('#upload'); await t.page.waitForSelector('.doc');
+    await t.page.click('#remove-check'); await t.page.click('#remove-confirm'); await t.page.waitForSelector('text=Check removed');
+    check('remove check: asks twice, removes its stored documents, then the check, and the score updates', (await calls(t.page, 'remove')).length === 2 && (await t.page.locator('.item:has-text("EICR")').count()) === 0 && (await t.page.locator('.legend').innerText()).includes('% in date'));
+    // add your own check to every site
+    await t.page.click('#add-check'); await t.page.waitForSelector('#a-title');
+    await t.page.click('button[type=submit]');
+    check('add check: a name is required', (await t.page.locator('#add-msg').innerText()).includes('give the check a name'));
+    await t.page.fill('#a-title', 'Kitchen Extract Cleaning'); await t.page.selectOption('#a-site', 'all'); await t.page.selectOption('#a-basis', 'best_practice'); await t.page.fill('#a-freq', '6'); await t.page.fill('#a-last', '2026-03-31');
+    check('add check: the next due date is suggested here too (31 Mar + 6 months = 30 Sep)', (await t.page.inputValue('#a-due')) === '2026-09-30');
+    await t.page.click('button[type=submit]'); await t.page.waitForSelector('text=Check added');
+    const ins = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'insert').pop();
+    check('add check: one record per chosen site, with its own title, basis and repeat period', ins.payload.length === 2 && ins.payload.map((x) => x.property_id).sort().join() === 's1,s2' && ins.payload[0].title === 'Kitchen Extract Cleaning' && ins.payload[0].basis === 'best_practice' && ins.payload[0].frequency_months === 6 && (await t.page.locator('.item:has-text("Kitchen Extract Cleaning")').count()) === 1);
+    check('date helper: end of month and leap years are handled', await t.page.evaluate(() => window.TCPassport.addMonths('2026-01-31', 1) === '2026-02-28' && window.TCPassport.addMonths('2028-01-31', 1) === '2028-02-29' && window.TCPassport.addMonths('2026-11-30', 3) === '2027-02-28' && window.TCPassport.addMonths('nope', 3) === '' && window.TCPassport.addMonths('2026-01-01', 0) === ''));
+    await t.ctx.close();
+    // view-only users (site user with view, or a managed client) see everything but can change nothing
+    t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    await t.page.click('.item[data-id=i1]'); await t.page.waitForSelector('.statusline');
+    check('view-only: no add button, no edit form, no upload and no remove', (await t.page.locator('#add-check').count()) === 0 && (await t.page.locator('#f-due').count()) === 0 && (await t.page.locator('#file').count()) === 0 && (await t.page.locator('#remove-check').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Quarterly'));
+    await t.ctx.close();
+    t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false }, level: 2 }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    check('managed client: told Tremcore manages the records, and still has Call Tremcore', (await t.page.locator('.card').first().innerText()).includes('Tremcore manages your compliance records') && (await t.page.locator('#call-tremcore').count()) === 1);
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.tables = { properties: [{ id: 's1', name: 'Only Site' }], compliance_items: [] }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    check('passport: with no checks yet there is no score, only an invitation to add one (no site picker for one site)', (await t.page.locator('.legend').innerText()).includes('No checks yet') && (await t.page.locator('#site-pick').count()) === 0 && (await t.page.locator('#add-check').count()) === 1);
     await t.ctx.close();
 
     // team page: the head-office user chooses who can do what

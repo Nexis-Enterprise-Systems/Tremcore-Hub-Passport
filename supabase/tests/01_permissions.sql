@@ -632,4 +632,12 @@ select 'stripe: an unknown company or an unknown kind of event is not accepted' 
 update companies set subscription='trial', trial_ends_at = now(), payment_failed_at=null where name='Pay Co';
 do $$ begin set local role service_role; perform apply_stripe_event('evt_6','invoice.payment_failed',null,'cus_1',null,'failed'); reset role; end $$;
 select 'stripe: a failed FIRST payment leaves the sign-up unpaid, not past due' as test, (select subscription='trial' from companies where name='Pay Co') as ok;
+-- passport rights (which buttons the screen shows; the real rules are the row-level policies above)
+select * from chk('rights: a Level 1 head-office user can edit and manage', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select can_edit and can_manage from passport_rights())$$);
+select * from chk('rights: a site user with update can edit but not manage', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select (select can_edit and not can_manage from passport_rights())$$);
+select * from chk('rights: a site user with full can edit and manage', '00000000-0000-0000-0000-0000000000a5', 'aal1', $$select (select can_edit and can_manage from passport_rights())$$);
+select * from chk('rights: a site user with view can do neither', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select (select not can_edit and not can_manage from passport_rights())$$);
+select * from chk('rights: a Level 2 client is view-only even as head office', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select (select not can_edit and not can_manage from passport_rights())$$);
+select * from chk('rights: a Level 3 client is view-only even as head office', '00000000-0000-0000-0000-0000000000c1', 'aal2', $$select (select not can_edit and not can_manage from passport_rights())$$);
+select * from chk('rights: a Level 2 client cannot edit a record even by calling the database directly', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$with u as (update compliance_items set notes='x' where id='30000000-0000-0000-0000-000000000006' returning 1) select count(*)=0 from u$$);
 rollback;
