@@ -25,7 +25,7 @@ const TYPES = {
 };
 
 function securityHeaders(area) {
-  const isApp = area === 'app';
+  const isApp = area === 'app', isClock = area === 'clock';
   const connect = ["'self'"];
   if (SUPABASE_URL) { connect.push(SUPABASE_URL); connect.push(SUPABASE_URL.replace(/^http/, 'ws')); }
   return {
@@ -36,11 +36,12 @@ function securityHeaders(area) {
       // The public website uses a few inline style attributes (no scripts); the sign-in app stays fully strict.
       ...(isApp ? [] : ["style-src-attr 'unsafe-inline'"]),
       "img-src 'self' data: blob:" + (SUPABASE_URL ? ' ' + SUPABASE_URL : ''),
-      'connect-src ' + connect.join(' '),
+      'connect-src ' + (isClock ? "'self'" : connect.join(' ')),
       "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'", "object-src 'none'"
     ].join('; '),
     'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Referrer-Policy': isClock ? 'no-referrer' : 'strict-origin-when-cross-origin',   // the clock page's address is a secret
+    ...(isClock ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}),
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'Cross-Origin-Opener-Policy': 'same-origin'
@@ -236,6 +237,50 @@ async function handleWebhook(req, res) {
   } catch (e) { console.error('webhook error', e.message); return out(500, { error: 'try again' }); }
 }
 
+// ---- Staff Clock In / Out. The QR code on a site's poster is a secret link, /clock/<token>. The page has no login; it can only show the
+// people of that one site and clock one of them in or out. It never talks to the database itself: these two routes call the clock functions
+// with the service key (the functions are closed to everyone else), and each one is rate-limited.
+const clockHits = new Map();   // key -> [timestamps]
+function clockLimited(key, max, windowMs) {
+  const now = Date.now(), recent = (clockHits.get(key) || []).filter((t) => now - t < windowMs);
+  recent.push(now); clockHits.set(key, recent);
+  if (clockHits.size > 20000) for (const [k, v] of clockHits) if (!v.some((t) => now - t < windowMs)) clockHits.delete(k);
+  return recent.length > max;
+}
+const CLOCK_TOKEN = /^[0-9a-f]{32}$/;
+async function handleClock(req, res, searchParams) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' }, 'clock');
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  const inactive = () => { clockLimited('bad:' + ip, 1e9, 10 * 60 * 1000); return out(404, { error: 'This QR code is not active. Please ask your manager.' }); };
+  // A site's whole team can share one Wi-Fi address, so the general limit is generous; wrong codes are limited much harder.
+  if ((clockHits.get('bad:' + ip) || []).filter((t) => Date.now() - t < 10 * 60 * 1000).length >= 30) return out(429, { error: 'Too many tries. Please wait a few minutes.' });
+  if (clockLimited('all:' + ip, 300, 10 * 60 * 1000)) return out(429, { error: 'Too many requests. Please wait a few minutes.' });
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return out(503, { error: 'Clock in is not switched on yet.' });
+  let token, rpc, body;
+  if (req.method === 'GET') {
+    token = clip(searchParams.get('t'), 40); rpc = 'clock_site_info'; body = { p_token: token };
+  } else {
+    const origin = req.headers.origin;
+    if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+    let raw; try { raw = await readBody(req, 2000); } catch { return out(413, { error: 'Too big.' }); }
+    let d; try { d = JSON.parse(raw); } catch { return out(400, { error: 'Sorry, that could not be read.' }); }
+    token = clip(d && d.t, 40); rpc = 'clock_action';
+    const member = clip(d && d.member, 40), action = d && d.action;
+    if (!/^[0-9a-f-]{36}$/.test(member) || (action !== 'in' && action !== 'out')) return out(400, { error: 'Sorry, that could not be read.' });
+    body = { p_token: token, p_member: member, p_action: action };
+  }
+  if (!CLOCK_TOKEN.test(token)) return inactive();
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + rpc, { method: 'POST',
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) { console.error('clock rpc failed', rpc, r.status); return out(502, { error: 'Sorry, something went wrong. Please try again.' }); }
+    const result = await r.json();
+    if (!result) return inactive();
+    return out(200, result);
+  } catch (e) { console.error('clock error', e.message); return out(502, { error: 'Sorry, something went wrong. Please try again.' }); }
+}
+
 const server = http.createServer((req, res) => {
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return send(res, 400, 'Bad request'); }
@@ -243,6 +288,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout-extra') return handleCheckoutExtra(req, res);
   if (req.method === 'POST' && pathname === '/api/stripe-webhook') return handleWebhook(req, res);
+  if (pathname === '/api/clock' && (req.method === 'GET' || req.method === 'POST')) return handleClock(req, res, new URL(req.url, 'http://x').searchParams);
   if (req.method === 'GET' && (pathname === '/api/managed-check' || pathname === '/api/postcode')) return handleLookup(req, res, pathname, new URL(req.url, 'http://x').searchParams);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
 
@@ -253,8 +299,9 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === '/app') { res.writeHead(301, { Location: '/app/' }); return res.end(); }
+  if (/^\/clock\/[0-9a-f]{32}\/?$/.test(pathname)) pathname = '/clock/index.html';   // every site's QR link opens the same page; the code in the address picks the site
   if (pathname.endsWith('/')) pathname += 'index.html';
-  const area = pathname.startsWith('/app/') ? 'app' : 'site';
+  const area = pathname.startsWith('/app/') ? 'app' : pathname.startsWith('/clock/') ? 'clock' : 'site';
   const file = path.normalize(path.join(PUBLIC_DIR, pathname));
   if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + path.sep)) return send(res, 403, 'Forbidden');
   fs.stat(file, (err, st) => {
@@ -262,7 +309,7 @@ const server = http.createServer((req, res) => {
     if (err || !st.isFile()) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' }, area);
     const ext = path.extname(file).toLowerCase();
     // The shell and service worker must always be fresh; images can be cached.
-    const cache = ext === '.png' ? 'public, max-age=86400' : 'no-cache';
+    const cache = ext === '.png' ? 'public, max-age=86400' : area === 'clock' ? 'no-store' : 'no-cache';
     res.writeHead(200, Object.assign(securityHeaders(area), {
       'Content-Type': TYPES[ext] || 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': cache
     }));

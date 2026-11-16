@@ -826,4 +826,97 @@ update company_extras set status='cancelled', access_ends_at=now() where company
 select * from chk('people: with only Toolbox Talks bought, head office can add and see people', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with i as (insert into staff_members(property_id,full_name) values ('20000000-0000-0000-0000-0000000000a1','pat jones') returning full_name) select (select full_name from i)='Pat Jones'$$);
 update company_extras set status='cancelled', access_ends_at=now() where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks';
 select * from chk('people: with neither add-on, the register cannot be read', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select count(*)=0 from staff_members$$);
+
+-- ===== Staff Clock In / Out: QR token per site, public clock functions, attendance =====
+update company_extras set status='active', access_ends_at=null where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='staff_signin';
+delete from staff_members where property_id in ('20000000-0000-0000-0000-0000000000a1','20000000-0000-0000-0000-0000000000a2');
+insert into staff_members(id, property_id, full_name) values
+ ('90000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-0000000000a1','Jo Bloggs'),
+ ('90000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-0000000000a1','Al Smith'),
+ ('90000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-0000000000a2','Other Site');
+select 'clock: every site has its own 32-character token, all different' as test,
+  (select count(*) = count(distinct clock_token) and bool_and(char_length(clock_token) = 32) from properties) as ok;
+select * from chk('clock: a client cannot set a site token directly', :'superA', 'aal2', $$with u as (update properties set clock_token = repeat('a', 32) where id = '20000000-0000-0000-0000-0000000000a1' returning 1) select count(*) = 0 from u$$);
+select * from deny('clock: even Tremcore staff cannot set a token by hand (only the replace function can)', :'staff', 'aal2', $$update properties set clock_token = repeat('a', 32) where id = '20000000-0000-0000-0000-0000000000a1'$$);
+do $$ begin set local role service_role;
+  if clock_site_info('nonsense') is not null or clock_site_info(repeat('0', 32)) is not null then raise exception 'bad token answered'; end if; reset role; end $$;
+select 'clock: a wrong token gets no answer' as test, true as ok;
+select 'clock: the page info lists the site and active people, nobody in yet' as test, (
+  with t as (select clock_token tk from properties where id = '20000000-0000-0000-0000-0000000000a1')
+  select (j ->> 'site') = (select name from properties where id = '20000000-0000-0000-0000-0000000000a1') and jsonb_array_length(j -> 'people') = 2 and not (j -> 'people' -> 0 ->> 'in')::boolean
+  from (select clock_site_info(tk) j from t) x) as ok;
+create temp table clk(r jsonb, step text);
+grant all on clk to public;
+do $$ declare tk text; begin
+  select clock_token into tk from properties where id = '20000000-0000-0000-0000-0000000000a1';
+  set local role service_role;
+  insert into clk select clock_action(tk, '90000000-0000-0000-0000-000000000001', 'in'), 'in1';
+  insert into clk select clock_action(tk, '90000000-0000-0000-0000-000000000001', 'in'), 'in2';
+  insert into clk select clock_action(tk, '90000000-0000-0000-0000-000000000003', 'in'), 'wrongsite';
+  insert into clk select clock_action(tk, '90000000-0000-0000-0000-000000000002', 'out'), 'outfirst';
+  insert into clk select clock_action(tk, '90000000-0000-0000-0000-000000000001', 'sideways'), 'badaction';
+  insert into clk select clock_action(tk, '90000000-0000-0000-0000-000000000002', 'in'), 'in_al';
+  reset role;
+end $$;
+select 'clock: clocking in works, and a second tap says already in without a second record' as test,
+  (select r ->> 'status' from clk where step = 'in1') = 'in' and (select r ->> 'status' from clk where step = 'in2') = 'already_in'
+  and (select count(*) from staff_attendance where member_id = '90000000-0000-0000-0000-000000000001') = 1 as ok;
+select 'clock: someone from another site, a bad action, or clocking out when not in, is refused or harmless' as test,
+  (select r is null from clk where step = 'wrongsite') and (select r is null from clk where step = 'badaction') and (select r ->> 'status' from clk where step = 'outfirst') = 'already_out'
+  and (select count(*) from staff_attendance where member_id = '90000000-0000-0000-0000-000000000003') = 0 as ok;
+select 'clock: the page info now shows who is in' as test, (
+  select (select (p ->> 'in')::boolean from jsonb_array_elements(j -> 'people') p where p ->> 'name' = 'Jo Bloggs')
+  from (select clock_site_info(clock_token) j from properties where id = '20000000-0000-0000-0000-0000000000a1') x) as ok;
+do $$ declare tk text; r jsonb; begin
+  select clock_token into tk from properties where id = '20000000-0000-0000-0000-0000000000a1';
+  set local role service_role; r := clock_action(tk, '90000000-0000-0000-0000-000000000001', 'out'); reset role;
+  if r ->> 'status' <> 'out' then raise exception 'clock out failed %', r; end if;
+  insert into clk values (r, 'out1');
+end $$;
+select 'clock: clocking out closes the record' as test, (select clocked_out is not null and closed_by = 'person' from staff_attendance where member_id = '90000000-0000-0000-0000-000000000001') as ok;
+-- forgot to clock out yesterday: marked honestly, no time invented, and today's clock-in works
+do $$ declare tk text; begin
+  select clock_token into tk from properties where id = '20000000-0000-0000-0000-0000000000a1';
+  alter table staff_attendance disable trigger attendance_guard;
+  update staff_attendance set clocked_in = now() - interval '20 hours' where member_id = '90000000-0000-0000-0000-000000000002';
+  alter table staff_attendance enable trigger attendance_guard;
+  set local role service_role; perform clock_action(tk, '90000000-0000-0000-0000-000000000002', 'in'); reset role;
+end $$;
+select 'clock: a forgotten clock-out is flagged, not invented, and the new clock-in is recorded' as test,
+  (select count(*) = 1 from staff_attendance where member_id = '90000000-0000-0000-0000-000000000002' and no_clock_out and clocked_out is null)
+  and (select count(*) = 1 from staff_attendance where member_id = '90000000-0000-0000-0000-000000000002' and not no_clock_out and clocked_out is null) as ok;
+-- who can call the clock functions, and who can read the record
+do $$ declare tk text; begin
+  select clock_token into tk from properties where id = '20000000-0000-0000-0000-0000000000a1';
+  begin set local role anon; perform clock_action(tk, '90000000-0000-0000-0000-000000000001', 'in'); reset role; raise exception 'anon could clock'; exception when insufficient_privilege then reset role; end;
+  begin set local role authenticated; perform clock_site_info(tk); reset role; raise exception 'user could read page info'; exception when insufficient_privilege then reset role; end;
+end $$;
+select 'clock: signed-in and anonymous users cannot call the clock functions (only our server can)' as test, true as ok;
+select * from chk('attendance: head office can read its own site''s record', :'superA', 'aal2', $$select count(*) >= 3 from staff_attendance$$);
+select * from chk('attendance: another company sees nothing', :'superB', 'aal2', $$select count(*) = 0 from staff_attendance$$);
+select * from deny('attendance: nobody can add a record by hand', :'superA', 'aal2', $$insert into staff_attendance(property_id, member_name) values ('20000000-0000-0000-0000-0000000000a1', 'Fake')$$);
+select * from chk('attendance: a view-only site user cannot close a record', :'siteAv', 'aal2', $$with u as (update staff_attendance set clocked_out = now() where member_id = '90000000-0000-0000-0000-000000000002' and clocked_out is null returning 1) select count(*) = 0 from u$$);
+select * from deny('attendance: the start time of a record cannot be changed', :'superA', 'aal2', $$update staff_attendance set clocked_in = clocked_in - interval '1 hour' where member_id = '90000000-0000-0000-0000-000000000002'$$);
+select * from deny('attendance: a clock-out cannot be set in the future', :'superA', 'aal2', $$update staff_attendance set clocked_out = now() + interval '2 days' where member_id = '90000000-0000-0000-0000-000000000002' and clocked_out is null$$);
+select * from chk('attendance: head office can close a record that was left open', :'superA', 'aal2', $$with u as (update staff_attendance set clocked_out = now() where member_id = '90000000-0000-0000-0000-000000000002' and clocked_out is null and not no_clock_out returning closed_by) select count(*) = 1 and bool_and(closed_by = 'manager') from u$$);
+select * from chk('attendance: a closed record cannot be altered again', :'superA', 'aal2', $$with u as (update staff_attendance set clocked_out = now() where member_id = '90000000-0000-0000-0000-000000000001' returning 1) select count(*) = 0 from u$$);
+-- replacing the QR code
+select * from deny('clock: a view-only site user cannot replace the QR code', :'siteAv', 'aal2', $$select regen_clock_token('20000000-0000-0000-0000-0000000000a1')$$);
+select * from deny('clock: another company cannot replace our QR code', :'superB', 'aal2', $$select regen_clock_token('20000000-0000-0000-0000-0000000000a1')$$);
+select * from deny('clock: replacing the QR code needs 2FA', :'superA', 'aal1', $$select regen_clock_token('20000000-0000-0000-0000-0000000000a1')$$);
+do $$ declare old text; new text; begin
+  select clock_token into old from properties where id = '20000000-0000-0000-0000-0000000000a1';
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated; new := regen_clock_token('20000000-0000-0000-0000-0000000000a1'); reset role;
+  if new = old or char_length(new) <> 32 then raise exception 'token not replaced'; end if;
+  set local role service_role;
+  if clock_site_info(old) is not null then raise exception 'old token still works'; end if;
+  if clock_site_info(new) is null then raise exception 'new token does not work'; end if;
+  reset role;
+end $$;
+select 'clock: head office can replace the QR code; the old one stops working at once' as test, true as ok;
+update company_extras set status='cancelled', access_ends_at=now() where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='staff_signin';
+do $$ declare tk text; begin select clock_token into tk from properties where id = '20000000-0000-0000-0000-0000000000a1'; set local role service_role;
+  if clock_site_info(tk) is not null then raise exception 'page still works after stop'; end if; reset role; end $$;
+select 'clock: when the add-on stops, the public page stops answering' as test, true as ok;
 rollback;

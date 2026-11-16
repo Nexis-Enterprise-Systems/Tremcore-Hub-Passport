@@ -316,3 +316,21 @@ body.passport{padding-bottom:84px}
 .backbtn{display:inline-flex;align-items:center;gap:6px;background:transparent;border:0;color:var(--gold,#d4af37);font:inherit;font-size:1.05rem;font-weight:600;padding:10px 14px 10px 4px;margin:0 0 6px -4px;min-height:44px;cursor:pointer}
 .backbtn .chev{font-size:2rem;line-height:1;margin-top:-4px}
 .backbtn:hover,.backbtn:focus-visible{text-decoration:underline}
+
+/* Staff clock in: QR code, poster */
+.qrbox{background:#fff;border-radius:12px;padding:6px;width:min(100%,280px);margin:12px auto}
+.qrbox svg{display:block;width:100%;height:auto}
+.qrbox.big{width:min(100%,420px)}
+.breakall{word-break:break-all}
+.daygroup h3{font-size:1rem;margin:1em 0 .2em;color:var(--gold)}
+.poster{text-align:center}
+.poster .p-brand{color:var(--gold);font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.poster .p-steps{text-align:left;max-width:420px;margin:12px auto;font-size:1.1rem}
+.poster .p-small{color:var(--muted)}
+@media print{
+  body{background:#fff !important;color:#000 !important}
+  body *{visibility:hidden}
+  .poster,.poster *{visibility:visible;color:#000 !important}
+  .poster{position:absolute;left:0;top:0;width:100%}
+  .poster .p-brand{color:#000 !important}
+}

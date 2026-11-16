@@ -84,3 +84,10 @@
 - Names and addresses start every word with a capital; postcodes are capitals with a space (ME3 8FX), in their own box next to every address; phone numbers are 5 digits, a space, 6 digits (01634 123456, +44 accepted). Enforced by database triggers (migration 0022) and checked on screen with friendly messages (`web/public/app/format.js`).
 - Numbers that do not fit that shape (for example 0800 or 999 emergency numbers) are refused on screen for phone fields; the database leaves such text as typed.
 - One people list per site (`staff_members`) is shared by Staff Clock In/Out and Toolbox Talks. Talk attendees are ticked from that list; someone missing can be added on the spot. Reachable from Toolbox Talks via "People".
+
+## Staff Clock In / Out built (16 Nov 2026)
+- Every site has its own secret QR code (a 32-character random token, address `/clock/<token>`). Replacing it (head office, needs 2FA) stops the old one at once. Printable poster included.
+- The public clock page has no login and shows only the names of one site's active people. It never talks to the database directly: our server calls two database functions with the service key; those functions are closed to every browser user. Wrong-code guessing is rate-limited per address.
+- Attendance records are made only by the clock function. Managers can only close a record that was left open, and cannot change a start time. Someone who forgot to clock out is shown as "no clock-out recorded"; no time is invented.
+- Known gap (Aaron to decide): there is no PIN, so anyone who can see the QR code could clock in as someone else. A per-person PIN is the usual fix if it matters.
+- Needs `SUPABASE_SERVICE_ROLE_KEY` set in Railway (same key the payment webhook uses).

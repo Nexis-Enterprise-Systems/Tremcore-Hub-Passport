@@ -1,0 +1,26 @@
+:root{--bg:#0a0a0a;--card:#141414;--line:#2a2a2a;--text:#f4efe2;--muted:#a8a191;--gold:#d9b13b;--gold-dark:#b8932a;--red:#ff8a80;--green:#6ff0a8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:520px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.5rem;margin:.2em 0 .1em}
+h2{font-size:1.1rem;margin:1.2em 0 .4em;color:var(--gold)}
+.muted{color:var(--muted)}.center{text-align:center}.small{font-size:.9rem}
+.brand{color:var(--gold);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.8rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:14px}
+input[type=search]{width:100%;font:inherit;padding:14px;border-radius:10px;border:1px solid var(--line);background:#0f0f0f;color:var(--text)}
+input:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.people{display:grid;gap:10px;margin-top:12px}
+.person{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;color:var(--text);background:#0f0f0f;border:1px solid var(--line);border-radius:12px;padding:16px;min-height:60px;cursor:pointer}
+.person:hover{border-color:var(--gold)}
+.tag{font-size:.8rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.in{color:var(--green);border-color:var(--green)}
+.big{display:block;width:100%;font:inherit;font-size:1.4rem;font-weight:700;border:0;border-radius:14px;padding:26px 16px;margin-top:16px;cursor:pointer;color:#111;background:var(--gold)}
+.big.out{background:#fff}
+.big:disabled{opacity:.6}
+.linkbtn{background:none;border:0;color:var(--gold);font:inherit;text-decoration:underline;padding:12px 4px;cursor:pointer}
+.msg{margin-top:14px;padding:12px 14px;border-radius:10px;border:1px solid var(--line)}
+.msg.err{color:var(--red);border-color:var(--red)}
+.done{text-align:center;padding:28px 10px}
+.tick{font-size:3.4rem;line-height:1;color:var(--green)}
+.tick.outc{color:var(--gold)}
+.done h1{font-size:1.7rem}

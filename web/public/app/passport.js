@@ -403,7 +403,61 @@
         ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, fromTalks ? 'Nobody added yet. Add the people who will attend talks at this site.' : 'Nobody added yet. Add the people who need to clock in and out at this site.')]),
         can ? [h('label', { for: 's-name' }, 'Name'), name, h('label', { for: 's-title' }, 'Job title (optional)'), title, add] : h('p', { class: 'muted' }, 'You can see this list but not change it.'),
         box),
-        fromTalks ? null : h('div', { class: 'card', id: 'clock-soon' }, h('h2', {}, 'Site QR code and attendance'), h('p', { class: 'muted' }, 'The QR code for each site, the clock-in page staff will use and the attendance record are being finished and will appear here in the next update. The people you add now will be ready for it.')));
+        fromTalks ? null : clockCards(pid),
+        fromTalks ? null : h('div', { class: 'card', id: 'clock-more' }, h('p', { class: 'muted small' }, 'Anyone who has seen the QR code could clock in as any name on the list, so only put the poster somewhere your team can see it, and replace the code if it is ever taken away or photographed.')));
+    }
+
+    // ---------- Staff Clock In / Out: the QR code, who is on site now, and the attendance record ----------
+    const clockUrl = (token) => location.origin + '/clock/' + token;
+    const londonTime = (iso) => iso ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }).format(new Date(iso)) : '';
+    const londonDay = (iso) => new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }).format(new Date(iso));
+    const hoursText = (a, b) => { const m = Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000)); return Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; };
+    function clockCards(pid) {
+      const wrap = h('div', { id: 'clock-cards' });
+      (async () => {
+        const [tk, rows] = await Promise.all([
+          sb.from('properties').select('clock_token').eq('id', pid).single(),
+          sb.from('staff_attendance').select('id,member_name,clocked_in,clocked_out,no_clock_out,closed_by').eq('property_id', pid).order('clocked_in', { ascending: false }).limit(400)]);
+        const token = tk && tk.data && tk.data.clock_token, att = (rows && rows.data) || [], box = h('div', {});
+        const again = (n) => viewClock(n, pid);
+        const qrCard = h('div', { class: 'card', id: 'clock-qr' }, h('h2', {}, 'QR code for ' + siteName(pid)),
+          token ? [h('p', { class: 'muted' }, 'Print this and put it up where your team can scan it. It is different for every site. Staff scan it with their phone, tap their name and clock in or out. No app or login is needed.'),
+            h('div', { class: 'qrbox' }, window.TCQr.svg(clockUrl(token), { label: 'QR code for clocking in and out at ' + siteName(pid) })),
+            h('p', { class: 'small muted breakall', id: 'clock-link' }, clockUrl(token)),
+            h('div', { class: 'btnrow' }, h('button', { class: 'btn', type: 'button', id: 'clock-poster', onclick: () => viewPoster(pid, token) }, 'Print the poster'),
+              h('button', { class: 'btn ghost', type: 'button', id: 'clock-copy', onclick: async (e) => { try { await navigator.clipboard.writeText(clockUrl(token)); e.target.textContent = 'Copied'; } catch (x) { e.target.textContent = 'Press and hold the link to copy it'; } } }, 'Copy the link'),
+              rights.can_manage ? h('button', { class: 'btn ghost', type: 'button', id: 'clock-regen', onclick: () => {
+                box.replaceChildren(h('div', { class: 'msg err', role: 'alert', id: 'regen-ask' }, h('p', {}, 'Replace this QR code? The printed one will stop working straight away and you will need to print and put up the new one.'),
+                  h('div', { class: 'btnrow' }, h('button', { class: 'btn small', type: 'button', id: 'regen-yes', onclick: (e) => ctx.busy(e.target, async () => {
+                    const r = await sb.rpc('regen_clock_token', { p_property: pid });
+                    if (r.error) return ctx.message(box, 'err', 'Sorry, that did not work. You may need to sign in with your 2FA code first.');
+                    again('New QR code made. The old one no longer works, so please print the new poster.');
+                  }) }, 'Yes, replace it'), h('button', { class: 'btn small ghost', type: 'button', onclick: () => box.replaceChildren() }, 'Cancel'))));
+              } }, 'Replace the QR code') : null), box] : h('p', { class: 'muted' }, 'The QR code could not be loaded. Please refresh the page.'));
+        const open = att.filter((x) => !x.clocked_out && !x.no_clock_out);
+        const nowCard = h('div', { class: 'card', id: 'clock-now' }, h('h2', {}, 'On site now (' + open.length + ')'),
+          open.length ? open.map((x) => h('div', { class: 'econ', 'data-onsite': x.id }, h('span', {}, h('strong', {}, x.member_name), h('span', { class: 'muted small' }, ' · in since ' + londonTime(x.clocked_in) + ', ' + londonDay(x.clocked_in))),
+            rights.can_edit ? h('button', { class: 'btn small ghost', type: 'button', 'data-clockout': x.id, onclick: async () => { const u = await sb.from('staff_attendance').update({ clocked_out: new Date().toISOString() }).eq('id', x.id); again(u.error ? 'Sorry, that did not work.' : 'Clocked out.'); } }, 'Clock out') : null))
+            : h('p', { class: 'muted' }, 'Nobody is clocked in right now.'));
+        const byDay = []; att.forEach((x) => { const d = londonDay(x.clocked_in); let g = byDay.find((y) => y.d === d); if (!g) byDay.push(g = { d, rows: [] }); g.rows.push(x); });
+        const csv = () => { const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; const day = (i) => i ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date(i)) : '';
+          const lines = [['Site', 'Name', 'Date', 'In', 'Out', 'Hours', 'Note'].map(q).join(',')].concat(att.slice().reverse().map((x) => [siteName(pid), x.member_name, day(x.clocked_in), londonTime(x.clocked_in), londonTime(x.clocked_out), x.clocked_out ? hoursText(x.clocked_in, x.clocked_out) : '', x.no_clock_out ? 'No clock-out recorded' : (!x.clocked_out ? 'Still in' : (x.closed_by === 'manager' ? 'Clocked out by manager' : ''))].map(q).join(',')));
+          const a = h('a', { href: URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' })), download: 'attendance-' + siteName(pid).replace(/[^\w]+/g, '-').toLowerCase() + '.csv' }); document.body.append(a); a.click(); a.remove(); };
+        const recCard = h('div', { class: 'card', id: 'clock-record' }, h('div', { class: 'titlerow' }, h('h2', {}, 'Attendance record'), att.length ? h('button', { class: 'btn small ghost', type: 'button', id: 'clock-csv', onclick: csv }, 'Download (spreadsheet)') : null),
+          att.length ? byDay.map((g) => h('div', { class: 'daygroup' }, h('h3', {}, g.d), g.rows.map((x) => h('div', { class: 'econ', 'data-att': x.id }, h('span', {}, h('strong', {}, x.member_name)),
+            h('span', { class: 'muted small' }, x.no_clock_out ? 'In ' + londonTime(x.clocked_in) + ' · no clock-out recorded' : x.clocked_out ? londonTime(x.clocked_in) + ' to ' + londonTime(x.clocked_out) + ' · ' + hoursText(x.clocked_in, x.clocked_out) + (x.closed_by === 'manager' ? ' (clocked out by a manager)' : '') : 'In ' + londonTime(x.clocked_in) + ' · still in')))))
+            : h('p', { class: 'muted' }, 'No one has clocked in yet. The record of every clock in and out will appear here.'));
+        wrap.replaceChildren(qrCard, nowCard, recCard);
+      })();
+      return wrap;
+    }
+    function viewPoster(pid, token) {
+      page('form', h('div', { class: 'card form' }, backBtn('Back', () => viewClock(null, pid)),
+        h('div', { class: 'poster', id: 'poster' }, h('div', { class: 'p-brand' }, 'Tremcore'), h('h1', {}, 'Clock in / out'), h('h2', {}, siteName(pid)),
+          h('div', { class: 'qrbox big' }, window.TCQr.svg(clockUrl(token), { label: 'QR code for clocking in and out' })),
+          h('ol', { class: 'p-steps' }, h('li', {}, 'Scan the QR code with your phone camera.'), h('li', {}, 'Tap your name.'), h('li', {}, 'Tap Clock in when you arrive, and Clock out when you leave.')),
+          h('p', { class: 'p-small' }, 'Please clock out every time you leave the site.')),
+        h('div', { class: 'btnrow noprint' }, h('button', { class: 'btn', type: 'button', id: 'poster-print', onclick: () => window.print() }, 'Print'))));
     }
 
     // ---------- Settings ----------

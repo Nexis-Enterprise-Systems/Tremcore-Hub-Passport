@@ -72,6 +72,7 @@ const USERS = {
   const realFetch = global.fetch; const sent = [];
   const PC = { 'ME44TL': { latitude: 51.381, longitude: 0.527 }, 'NR11AA': { latitude: 52.63, longitude: 1.29 }, 'ME14AA': { latitude: 51.39, longitude: 0.50 } };
   let pcDown = false;
+  const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   global.fetch = (u, o) => {
     const url = String(u);
@@ -79,6 +80,16 @@ const USERS = {
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info') { sent.push({ u: url, o }); return Promise.resolve(extraReply.status === 200 ? new Response(JSON.stringify(extraReply.rows), { status: 200 }) : new Response(JSON.stringify({ message: extraReply.message || 'not_allowed' }), { status: extraReply.status })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/apply_stripe_event') { applied.push({ u: url, o, body: JSON.parse(o.body) }); return Promise.resolve(new Response(JSON.stringify(applyResult), { status: applyStatus })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/clock_site_info' || url === process.env.SUPABASE_URL + '/rest/v1/rpc/clock_action') {
+      const b = JSON.parse(o.body); clockCalls.push({ url, o, b });
+      if (b.p_token !== 'a'.repeat(32)) return Promise.resolve(new Response('null', { status: 200 }));
+      if (url.endsWith('clock_site_info')) return Promise.resolve(new Response(JSON.stringify({ site: 'High Street', people: clockPeople.map((x) => ({ id: x.id, name: x.name, in: !!x.at })) }), { status: 200 }));
+      const m = clockPeople.find((x) => x.id === b.p_member); if (!m) return Promise.resolve(new Response('null', { status: 200 }));
+      const now = new Date().toISOString();
+      if (b.p_action === 'in') { if (m.at) return Promise.resolve(new Response(JSON.stringify({ status: 'already_in', name: m.name, at: m.at }), { status: 200 })); m.at = now; return Promise.resolve(new Response(JSON.stringify({ status: 'in', name: m.name, at: now }), { status: 200 })); }
+      if (!m.at) return Promise.resolve(new Response(JSON.stringify({ status: 'already_out', name: m.name }), { status: 200 }));
+      const since = m.at; m.at = null; return Promise.resolve(new Response(JSON.stringify({ status: 'out', name: m.name, at: now, since }), { status: 200 }));
+    }
     if (url.startsWith('https://api.postcodes.io/postcodes/')) {
       if (pcDown) return Promise.resolve(new Response('x', { status: 500 }));
       const hit = PC[decodeURIComponent(url.split('/').pop()).replace(/\s/g, '')];
@@ -163,6 +174,33 @@ const USERS = {
     const del = evt('customer.subscription.deleted', { id: 'sub_1', customer: 'cus_1' }, 'evt_del');
     rr = await hook(del, sign(del)); check('webhook: a cancelled subscription is passed on as cancelled', applied.length === 4 && applied[3].body.p_action === 'cancelled');
     const other = evt('customer.created', { id: 'cus_9' }, 'evt_other'); rr = await hook(other, sign(other)); check('webhook: events we do not care about are accepted and ignored', rr.status === 200 && applied.length === 4);
+
+    // ---- Staff Clock In / Out: the public page and its two routes
+    {
+      const TOK = 'a'.repeat(32), J = '11111111-1111-1111-1111-111111111111';
+      rr = await realFetch(base + '/clock/' + TOK); const ch = rr.headers; const cb = await rr.text();
+      check('clock page: the secret link opens the clock page, with no referrer, no caching and no outside scripts', rr.status === 200 && cb.includes('Clock in / out') && ch.get('referrer-policy') === 'no-referrer' && ch.get('cache-control') === 'no-store' && !(ch.get('content-security-policy') || '').includes('jsdelivr') && ch.get('x-robots-tag').includes('noindex'));
+      rr = await realFetch(base + '/clock/not-a-code'); check('clock page: an address that is not a code finds nothing', rr.status === 404);
+      rr = await realFetch(base + '/api/clock?t=' + TOK); let j = await rr.json();
+      check('clock api: the right code returns the site and its people (names and whether they are in), nothing else', rr.status === 200 && j.site === 'High Street' && j.people.length === 2 && Object.keys(j.people[0]).sort().join() === 'id,in,name' && !JSON.stringify(j).includes('SERVICE-SECRET'));
+      check('clock api: the database is asked with the service key, which only the server holds', clockCalls[clockCalls.length - 1].o.headers.Authorization === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK' && clockCalls[clockCalls.length - 1].b.p_token === TOK);
+      const n0 = clockCalls.length;
+      rr = await realFetch(base + '/api/clock?t=' + 'f'.repeat(32), { headers: { 'x-forwarded-for': '7.7.7.7' } }); check('clock api: a wrong code is told only that it is not active', rr.status === 404 && (await rr.json()).error.includes('not active'));
+      rr = await realFetch(base + '/api/clock?t=short'); check('clock api: a malformed code never reaches the database', rr.status === 404 && clockCalls.length === n0 + 1);
+      const post = (b, hdr) => realFetch(base + '/api/clock', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr || {}), body: JSON.stringify(b) });
+      rr = await post({ t: TOK, member: J, action: 'in' }); j = await rr.json(); check('clock api: clocking in works', rr.status === 200 && j.status === 'in' && j.name === 'Jo Bloggs');
+      rr = await post({ t: TOK, member: J, action: 'in' }); j = await rr.json(); check('clock api: a second tap is "already in", not a second record', j.status === 'already_in');
+      rr = await post({ t: TOK, member: J, action: 'out' }); j = await rr.json(); check('clock api: clocking out reports when you were in from', rr.status === 200 && j.status === 'out' && !!j.since);
+      const n1 = clockCalls.length;
+      rr = await post({ t: TOK, member: 'x', action: 'in' }); check('clock api: a bad person id is refused before the database', rr.status === 400 && clockCalls.length === n1);
+      rr = await post({ t: TOK, member: J, action: 'delete' }); check('clock api: only in or out is accepted', rr.status === 400 && clockCalls.length === n1);
+      rr = await post({ t: TOK, member: J, action: 'in' }, { Origin: 'https://evil.example' }); check('clock api: another website cannot post to it', rr.status === 403 && clockCalls.length === n1);
+      rr = await post({ t: 'f'.repeat(32), member: J, action: 'in' }); check('clock api: a wrong code cannot clock anyone in', rr.status === 404);
+      let last = 0; for (let i = 0; i < 40; i++) { rr = await realFetch(base + '/api/clock?t=' + 'e'.repeat(32), { headers: { 'x-forwarded-for': '9.9.9.9' } }); last = rr.status; }
+      const rv = await realFetch(base + '/api/clock?t=' + TOK, { headers: { 'x-forwarded-for': '9.9.9.9' } });
+      const ro = await realFetch(base + '/api/clock?t=' + TOK, { headers: { 'x-forwarded-for': '8.8.8.8' } });
+      check('clock api: guessing wrong codes is stopped after a few tries, and only for that address', last === 429 && rv.status === 429 && ro.status === 200);
+    }
     const xs = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_x', metadata: { kind: 'extra', extra_code: 'staff_signin', quantity: '3', company_id: 'co-1' } }, 'evt_extra');
     const nA = applied.length; rr = await realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'Stripe-Signature': sign(xs) }, body: xs });
     check('webhook: a paid add-on is passed on as an add-on with its code and quantity (not as the main account)', rr.status === 200 && applied.length === nA + 1 && applied[nA].body.p_action === 'extra_paid' && applied[nA].body.p_extra === 'staff_signin' && applied[nA].body.p_quantity === 3 && applied[nA].body.p_subscription === 'sub_x');
@@ -182,6 +220,31 @@ const USERS = {
   m = await mc('hello'); check('something that is not a postcode is refused', m.s === 422);
   pcDown = true; m = await mc('ME4 4TL'); check('if the postcode service is down, visitors are told to call', m.s === 502 && m.j.error.includes('call us')); pcDown = false;
   const pr = await (await realFetch(base + '/api/postcode?postcode=ME4%204TL')).json(); check('the hub can turn a postcode into a point', pr.ok && Math.abs(pr.lat - 51.381) < 0.001 && pr.postcode === 'ME4 4TL');
+    // the public clock page as a phone sees it after scanning the QR code
+    {
+      clockPeople.forEach((x) => { x.at = null; });
+      const cctx = await browser.newContext({ viewport: { width: 390, height: 800 } }), cp = await cctx.newPage(); const cprob = [];
+      cp.on('console', (m) => { if (m.type() === 'error') cprob.push(m.text()); }); cp.on('pageerror', (e) => cprob.push(String(e)));
+      await cp.goto(base + '/clock/' + 'a'.repeat(32)); await cp.waitForSelector('[data-person]');
+      check('clock page: shows the site and everyone on its list, with no stray text', (await cp.locator('h1').innerText()) === 'High Street' && (await cp.locator('[data-person]').count()) === 2 && !(await cp.locator('main').innerText()).includes('null'));
+      await cp.fill('#cl-search', 'al'); check('clock page: typing narrows the list to matching names', (await cp.locator('[data-person]').count()) === 1 && (await cp.locator('[data-person]').innerText()).includes('Al Smith'));
+      await cp.fill('#cl-search', ''); await cp.click('[data-person="11111111-1111-1111-1111-111111111111"]'); await cp.waitForSelector('#cl-go');
+      check('clock page: after choosing a name there is one big Clock in button', (await cp.locator('#cl-go').innerText()) === 'Clock in' && (await cp.locator('h1').innerText()) === 'Jo Bloggs');
+      await cp.click('#cl-go'); await cp.waitForSelector('[data-result=in]');
+      check('clock page: clocking in confirms with the time', (await cp.locator('.done').innerText()).includes('Clocked in at') && (await cp.locator('.done').innerText()).includes('Jo Bloggs'));
+      await cp.click('#cl-remember'); await cp.click('#cl-done'); await cp.waitForSelector('#cl-go');
+      check('clock page: after "remember me" the page opens straight to that person, who is now offered Clock out', (await cp.locator('#cl-go').innerText()) === 'Clock out');
+      await cp.reload(); await cp.waitForSelector('#cl-go'); check('clock page: scanning again on the same phone goes straight to you', (await cp.locator('h1').innerText()) === 'Jo Bloggs' && (await cp.locator('#cl-go').innerText()) === 'Clock out');
+      await cp.click('#cl-go'); await cp.waitForSelector('[data-result=out]');
+      check('clock page: clocking out says how long you were in', /you were in for \d+ h \d\d min/.test(await cp.locator('.done').innerText()));
+      await cp.click('#cl-done'); await cp.waitForSelector('#cl-notme'); await cp.click('#cl-notme'); await cp.waitForSelector('[data-person]');
+      check('clock page: "Not you?" forgets the phone and shows the list again', (await cp.locator('[data-person]').count()) === 2);
+      await cp.goto(base + '/clock/' + 'f'.repeat(32)); await cp.waitForSelector('h1');
+      check('clock page: a code that is not active shows a plain message and no names', (await cp.locator('h1').innerText()).includes('not available') && !(await cp.locator('body').innerText()).includes('Jo Bloggs'));
+      check('clock page: no browser errors (including blocked scripts or styles)', cprob.filter((x) => !/404|Failed to load resource/.test(x)).length === 0);
+      await cctx.close();
+    }
+
   global.fetch = realFetch;
 
   // --- sign-in ---
@@ -709,7 +772,11 @@ const USERS = {
       if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: cfg.owned === true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: cfg.owned === 'staff' }];
       const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       window.__mock.tables.companies = [{ id: 'c1', name: 'Test Co', contact_phone: '01634 000000', address: '1 High St', level: (cfg && cfg.level) || 1, billing_interval: 'monthly', subscription: 'active' }];
-      window.__mock.tables.properties[0].address = '1 High St';
+      window.__mock.tables.properties[0].address = '1 High St'; window.__mock.tables.properties[0].clock_token = 'a'.repeat(32); window.__mock.tables.properties[1].clock_token = 'c'.repeat(32);
+      { const at = (h) => new Date(Date.now() - h * 36e5).toISOString();
+        window.__mock.tables.staff_attendance = [{ id: 'a1', property_id: 's1', member_name: 'Jo Bloggs', clocked_in: at(2), clocked_out: null, no_clock_out: false, closed_by: null },
+          { id: 'a2', property_id: 's1', member_name: 'Al Smith', clocked_in: at(30), clocked_out: at(21.5), no_clock_out: false, closed_by: 'person' },
+          { id: 'a3', property_id: 's1', member_name: 'Al Smith', clocked_in: at(60), clocked_out: null, no_clock_out: true, closed_by: null }]; }
       window.__mock.tables.tasks = [
         { id: 't1', property_id: 's1', title: 'Check exit signs', notes: '', due_date: day(-2), repeat_months: null, status: 'pending' },
         { id: 't2', property_id: 's1', title: 'Monthly alarm test', notes: '', due_date: day(5), repeat_months: 1, status: 'pending' },
@@ -863,7 +930,21 @@ const USERS = {
     t = await newPage(appSeed, { owned: 'staff' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     check('staff: a bought Staff Clock In / Out tile is not locked', (await t.page.locator('[data-q=staff_signin].locked').count()) === 0);
     await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('#s-add');
-    check('staff: shows the people at the site and says the QR code and attendance are coming', (await t.page.locator('[data-staff]').count()) === 1 && (await t.page.locator('.econ').innerText()).includes('Jo Bloggs') && (await t.page.locator('#clock-soon').innerText()).includes('QR code'));
+    check('staff: shows the people at the site', (await t.page.locator('[data-staff]').count()) === 1 && (await t.page.locator('.econ').first().innerText()).includes('Jo Bloggs'));
+    await t.page.waitForSelector('#clock-qr svg');
+    check('clock: the site has a QR code (drawn as an image) and the link it opens', (await t.page.locator('#clock-qr svg path').count()) === 1 && (await t.page.locator('#clock-link').innerText()).endsWith('/clock/' + 'a'.repeat(32)));
+    check('clock: who is on site now, with a clock-out button for a manager', (await t.page.locator('[data-onsite]').count()) === 1 && (await t.page.locator('#clock-now').innerText()).includes('Jo Bloggs') && (await t.page.locator('[data-clockout=a1]').count()) === 1);
+    { const rec = await t.page.locator('#clock-record').innerText(); check('clock: the attendance record shows times and hours, and flags a missing clock-out', rec.includes('Al Smith') && /8 h 30 min/.test(rec) && rec.includes('no clock-out recorded') && rec.includes('still in')); }
+    { const dl = t.page.waitForEvent('download'); await t.page.click('#clock-csv'); const d = await dl; const txt = require('fs').readFileSync(await d.path(), 'utf8');
+      check('clock: the record downloads as a spreadsheet file with a row per clock-in', d.suggestedFilename().startsWith('attendance-') && txt.split('\r\n').length === 4 && txt.includes('No clock-out recorded') && txt.includes('Harbour') === false); }
+    await t.page.click('#clock-poster'); await t.page.waitForSelector('#poster svg');
+    check('clock: the poster has the site name, the QR code and simple steps', (await t.page.locator('#poster').innerText()).includes('Clock in / out') && (await t.page.locator('#poster li').count()) === 3 && (await t.page.locator('#poster-print').count()) === 1);
+    await t.page.click('[data-back]'); await t.page.waitForSelector('#clock-regen');
+    await t.page.click('#clock-regen'); check('clock: replacing the QR code asks first and warns the old one stops', (await t.page.locator('#regen-ask').innerText()).includes('stop working'));
+    await t.page.click('#regen-yes'); await t.page.waitForSelector('text=New QR code made');
+    check('clock: after replacing, the new link is shown', (await t.page.locator('#clock-link').innerText()).endsWith('/clock/' + 'b'.repeat(32)));
+    await t.page.click('[data-clockout=a1]'); await t.page.waitForSelector('text=Clocked out.');
+    check('clock: a manager can clock someone out who forgot', (await t.page.evaluate(() => window.__mock.tables.staff_attendance.find((x) => x.id === 'a1').clocked_out)) !== null);
     await t.page.click('#s-add'); check('staff: a person needs a name', (await t.page.locator('.msg.err').innerText()).includes('name'));
     await t.page.fill('#s-name', 'Al Smith'); await t.page.fill('#s-title', 'Manager'); await t.page.click('#s-add'); await t.page.waitForSelector('text=Person added.');
     check('staff: a person can be added and appears in the list', (await t.page.locator('[data-staff]').count()) === 2);
@@ -881,6 +962,7 @@ const USERS = {
     await t.page.click('[data-back]'); await t.page.waitForSelector('.talkrow');
     check('toolbox talks: only head office is offered My own talks', (await t.page.locator('#tb-own').count()) === 0 && (await t.page.locator('#tb-records').count()) === 1);
     await t.ctx.close();
+
 
     // team page: the head-office user chooses who can do what
     const teamSeed = () => { window.__mock.tables = { properties: [{ id: 's1', name: 'High Street' }, { id: 's2', name: 'Station Road' }] };
