@@ -55,7 +55,7 @@
     let props = [], items = [], rights = { can_edit: false, can_manage: false }, loadError = false;
     let site = 'all', filter = 'all';
     // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
-    const page = (mode, ...nodes) => { ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); };
+    const page = (mode, ...nodes) => { ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     const siteName = (id) => (props.find((p) => p.id === id) || {}).name || '';
 
     async function reload() {
@@ -89,8 +89,8 @@
       const shown = rows.filter((r) => filter === 'all' || r.status === filter);
       const level = ctx.req && ctx.req.level;
       const multi = props.length > 1;
-      const tiles = [['all', 'All checks', rows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'In date', c.green], ['missing', 'No date', c.missing]]
-        .map(([k, l, n]) => h('button', { class: 'tile ' + k, type: 'button', 'data-filter': k, 'aria-pressed': String(filter === k), onclick: () => { filter = k; viewList(); } },
+      const tiles = [['all', 'All', rows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'In date', c.green], ['missing', 'No date', c.missing]]
+        .map(([k, l, n]) => h('button', { class: 'stat ' + k, type: 'button', 'data-filter': k, 'aria-pressed': String(filter === k), onclick: () => { filter = k; viewList(); } },
           h('span', { class: 'num' }, String(n)), h('span', { class: 'lbl' }, l)));
 
       // Head office oversight: one card per site (up to 12; beyond that a plain drop-down is easier to use).
