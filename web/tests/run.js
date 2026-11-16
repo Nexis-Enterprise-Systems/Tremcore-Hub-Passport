@@ -600,17 +600,17 @@ const USERS = {
     };
     t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
     check('passport: Call Tremcore is at the very top of the screen', (await t.page.locator('main > .callbar #call-tremcore').count()) === 1 && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
-    check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.counts').innerText()).replace(/\s+/g, ' ').includes('Overdue: 1') && (await t.page.locator('.counts').innerText()).includes('No date: 1'));
+    check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.tile.red .num').innerText()) === '1' && (await t.page.locator('.tile.missing .num').innerText()) === '1' && (await t.page.locator('.tile.green .num').innerText()) === '2');
     check('passport: a check with no date is "No date", never green', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('.item:has-text("PAT Testing") .dot.missing').count()) === 1 && (await t.page.locator('.item:has-text("PAT Testing") .dot.green').count()) === 0);
     check('passport: overdue, due soon and in date are labelled in words as well as colour', (await t.page.locator('.item:has-text("Fire Alarm Test") .tag').innerText()) === 'Overdue' && (await t.page.locator('.item:has-text("Gas Safety") .tag').innerText()) === 'Due soon' && (await t.page.locator('.item:has-text("EICR") .tag').innerText()) === 'In date');
-    await t.page.selectOption('#site-pick', 's1');
+    await t.page.click('.sitecard[data-site=s1]');
     check('passport: picking one site recalculates its own score (2 of 4 = 50%)', (await t.page.locator('.legend').innerText()).includes('50% in date') && (await t.page.locator('.item').count()) === 4);
     await t.page.click('[data-filter=red]');
     check('passport: the Overdue filter shows only overdue checks', (await t.page.locator('.item').count()) === 1 && (await t.page.locator('.item').innerText()).includes('Fire Alarm Test'));
     await t.page.click('[data-filter=all]');
     // open a check, change dates (the next due date is suggested from last done + months), save
     await t.page.click('.item[data-id=i3]'); await t.page.waitForSelector('#f-due');
-    check('detail: shows the basis with a not-legal-advice note', (await t.page.locator('.card').innerText()).includes('not legal advice'));
+    check('detail: shows the basis with a not-legal-advice note', (await t.page.locator('.detail').innerText()).includes('not legal advice'));
     await t.page.fill('#f-last', '2026-01-31'); await t.page.fill('#f-freq', '1');
     check('detail: next due date is suggested from last done plus the repeat period (31 Jan + 1 month = 28 Feb)', (await t.page.inputValue('#f-due')) === '2026-02-28');
     await t.page.fill('#f-notes', 'Done by Acme Electrics'); await t.page.click('button[type=submit]'); await t.page.waitForSelector('#item-msg .msg.ok');
@@ -648,13 +648,13 @@ const USERS = {
     // view-only users (site user with view, or a managed client) see everything but can change nothing
     t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
     await t.page.click('.item[data-id=i1]'); await t.page.waitForSelector('.statusline');
-    check('view-only: no add button, no edit form, no upload and no remove', (await t.page.locator('#add-check').count()) === 0 && (await t.page.locator('#f-due').count()) === 0 && (await t.page.locator('#file').count()) === 0 && (await t.page.locator('#remove-check').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Quarterly'));
+    check('view-only: no add button, no edit form, no upload and no remove', (await t.page.locator('#add-check').count()) === 0 && (await t.page.locator('#f-due').count()) === 0 && (await t.page.locator('#file').count()) === 0 && (await t.page.locator('#remove-check').count()) === 0 && (await t.page.locator('.detail').innerText()).includes('Quarterly'));
     await t.ctx.close();
     t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false }, level: 2 }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
     check('managed client: told Tremcore manages the records, and still has Call Tremcore', (await t.page.locator('.card').first().innerText()).includes('Tremcore manages your compliance records') && (await t.page.locator('#call-tremcore').count()) === 1);
     await t.ctx.close();
     t = await newPage(() => { window.__mock.tables = { properties: [{ id: 's1', name: 'Only Site' }], compliance_items: [] }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
-    check('passport: with no checks yet there is no score, only an invitation to add one (no site picker for one site)', (await t.page.locator('.legend').innerText()).includes('No checks yet') && (await t.page.locator('#site-pick').count()) === 0 && (await t.page.locator('#add-check').count()) === 1);
+    check('passport: with no checks yet there is no score, only an invitation to add one (no site picker for one site)', (await t.page.locator('.legend').innerText()).includes('No checks yet') && (await t.page.locator('#site-pick').count()) === 0 && (await t.page.locator('.sitecard').count()) === 0 && (await t.page.locator('#add-check').count()) === 1);
     await t.ctx.close();
 
     // team page: the head-office user chooses who can do what

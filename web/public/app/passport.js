@@ -38,14 +38,14 @@
   }
   const validDate = (v) => v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v + 'T00:00:00Z').getTime()));
 
-  function donut(c) {
+  function donut(c, size) {
     const R = 15.915; let off = 25;   // 100 units round the circle; 25 starts at the top
     const parts = c.total ? [['green', c.green], ['amber', c.amber], ['red', c.red], ['missing', c.missing]].filter((s) => s[1] > 0).map(([k, n]) => {
       const len = 100 * n / c.total;
       const el = svg('circle', { class: 'seg ' + k, cx: 21, cy: 21, r: R, fill: 'none', 'stroke-width': 6, 'stroke-dasharray': len + ' ' + (100 - len), 'stroke-dashoffset': off });
       off -= len; return el;
     }) : [];
-    return svg('svg', { viewBox: '0 0 42 42', class: 'donut', role: 'img', 'aria-label': c.pct == null ? 'No checks yet' : c.pct + ' per cent of your checks are in date' },
+    return svg('svg', { viewBox: '0 0 42 42', class: 'donut' + (size ? ' ' + size : ''), role: 'img', 'aria-label': c.pct == null ? 'No checks yet' : c.pct + ' per cent of your checks are in date' },
       svg('circle', { class: 'seg track', cx: 21, cy: 21, r: R, fill: 'none', 'stroke-width': 6 }), ...parts,
       svg('text', { x: 21, y: 23.2, 'text-anchor': 'middle', class: 'pct' }, c.pct == null ? '–' : c.pct + '%'));
   }
@@ -54,7 +54,8 @@
     const { sb, h, message, busy, fmtDate } = ctx;
     let props = [], items = [], rights = { can_edit: false, can_manage: false }, loadError = false;
     let site = 'all', filter = 'all';
-    const page = (...nodes) => { ctx.show(...nodes); document.body.classList.add('passport'); };
+    // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
+    const page = (mode, ...nodes) => { ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); };
     const siteName = (id) => (props.find((p) => p.id === id) || {}).name || '';
 
     async function reload() {
@@ -70,11 +71,14 @@
         loadError = false;
       } catch { loadError = true; }
     }
-    const dueText = (r) => {
+    const shortDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    // The list uses short dates so each row stays on one line on a computer; the detail page spells them out.
+    const dueText = (r, short) => {
+      const f = short ? shortDate : fmtDate;
       if (r.status === 'missing') return 'No date entered';
-      if (r.status === 'red') return 'Overdue since ' + fmtDate(r.due_date);
+      if (r.status === 'red') return 'Overdue since ' + f(r.due_date);
       const n = r.days_left;
-      return 'Due ' + fmtDate(r.due_date) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)');
+      return 'Due ' + f(r.due_date) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)');
     };
     const goBack = (label) => h('button', { class: 'btn ghost', type: 'button', onclick: () => viewList() }, label || 'Back to my passport');
 
@@ -84,49 +88,58 @@
       const c = tally(rows);
       const shown = rows.filter((r) => filter === 'all' || r.status === filter);
       const level = ctx.req && ctx.req.level;
-      const chips = [['all', 'All', rows.length], ['red', 'Overdue', c.red], ['missing', 'No date', c.missing], ['amber', 'Due soon', c.amber], ['green', 'In date', c.green]];
+      const multi = props.length > 1;
+      const tiles = [['all', 'All checks', rows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'In date', c.green], ['missing', 'No date', c.missing]]
+        .map(([k, l, n]) => h('button', { class: 'tile ' + k, type: 'button', 'data-filter': k, 'aria-pressed': String(filter === k), onclick: () => { filter = k; viewList(); } },
+          h('span', { class: 'num' }, String(n)), h('span', { class: 'lbl' }, l)));
 
-      const siteSel = props.length > 1 && h('div', {}, h('label', { for: 'site-pick' }, 'Site'),
-        h('select', { id: 'site-pick', onchange: (e) => { site = e.target.value; viewList(); } },
+      // Head office oversight: one card per site (up to 12; beyond that a plain drop-down is easier to use).
+      let sites = null;
+      if (multi && props.length <= 12) {
+        const card = (id, name, cc) => h('button', { class: 'sitecard', type: 'button', 'data-site': id, 'aria-pressed': String(site === id), onclick: () => { site = id; viewList(); } },
+          donut(cc, 'mini'), h('span', { class: 'sname' }, h('strong', {}, name), h('span', { class: 'muted small' },
+            cc.total ? [cc.red + ' overdue', cc.amber + ' due soon', cc.missing + ' no date'].join(' · ') : 'No checks yet')));
+        sites = h('div', { class: 'sitesgrid' }, card('all', 'All sites', tally(items)), ...props.map((p) => card(p.id, p.name, tally(items.filter((i) => i.property_id === p.id)))));
+      } else if (multi) {
+        sites = h('div', {}, h('label', { for: 'site-pick' }, 'Site'), h('select', { id: 'site-pick', onchange: (e) => { site = e.target.value; viewList(); } },
           h('option', { value: 'all', selected: site === 'all' }, 'All sites'), ...props.map((p) => h('option', { value: p.id, selected: site === p.id }, p.name))));
+      }
 
-      const summary = h('div', { class: 'summary' }, donut(c),
-        h('div', { class: 'legend' },
-          h('div', {}, h('strong', {}, c.pct == null ? 'No checks yet' : c.pct + '% in date')),
-          h('div', { class: 'muted' }, c.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'),
-          h('div', { class: 'counts' }, ...[['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'In date', c.green], ['missing', 'No date', c.missing]].map(([k, l, n]) =>
-            h('span', { class: 'count ' + k }, h('i', { class: 'dot ' + k }), l + ': ' + n)))));
+      const overview = h('div', { class: 'card overview' },
+        h('div', { class: 'welcome' }, h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'Your compliance passport' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
+        ctx.banner, note ? h('div', { class: 'msg ok', role: 'status' }, note) : null,
+        loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load your checks. Please refresh the page.') : null,
+        !rights.can_edit ? h('p', { class: 'muted' }, level > 1 ? 'Tremcore manages your compliance records for you. If anything looks wrong, use Call Tremcore at the top.' : 'You can view the passport but not change it. Ask your head-office user if something needs updating.') : null,
+        h('div', { class: 'summary' }, donut(c),
+          h('div', { class: 'legend' },
+            h('strong', { class: 'big' }, c.pct == null ? 'No checks yet' : c.pct + '% in date'),
+            h('div', { class: 'muted' }, c.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'))),
+        rows.length ? h('div', { class: 'tiles5', role: 'group', 'aria-label': 'Show' }, ...tiles) : null);
 
       const groups = {};
       shown.forEach((r) => { (groups[r.grp || 'Other'] = groups[r.grp || 'Other'] || []).push(r); });
       const list = Object.keys(groups).sort().map((g) => h('div', { class: 'group' }, h('h3', {}, g),
         ...groups[g].sort((a, b) => ST[a.status].rank - ST[b.status].rank || String(a.title).localeCompare(b.title)).map((r) =>
-          h('button', { class: 'item', type: 'button', 'data-id': r.id, onclick: () => viewItem(r.id) },
+          h('button', { class: 'item' + (multi ? '' : ' nosite'), type: 'button', 'data-id': r.id, onclick: () => viewItem(r.id) },
             h('i', { class: 'dot ' + r.status }),
-            h('span', { class: 'name' }, h('span', { class: 'title' }, r.title), h('span', { class: 'muted small' }, (props.length > 1 && !(site !== 'all') ? siteName(r.property_id) + ' · ' : '') + dueText(r))),
+            h('span', { class: 'title' }, r.title),
+            h('span', { class: 'meta muted' }, multi ? h('span', { class: 'site' }, siteName(r.property_id)) : null, h('span', { class: 'due' }, dueText(r, true))),
             h('span', { class: 'tag ' + r.status }, ST[r.status].label)))));
 
-      const note2 = !rights.can_edit
-        ? h('p', { class: 'muted' }, level > 1 ? 'Tremcore manages your compliance records for you. If anything looks wrong, use Call Tremcore at the top.' : 'You can view the passport but not change it. Ask your head-office user if something needs updating.')
-        : null;
+      const checksCard = h('div', { class: 'card' },
+        h('div', { class: 'titlerow' }, h('h2', {}, 'Your checks'), rights.can_manage && props.length ? h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check') : null),
+        rows.length ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
+        ...(list.length ? list : [rows.length ? h('p', { class: 'muted' }, 'Nothing here.') : h('p', { class: 'muted' }, rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.')]));
 
-      page(
-        h('div', { class: 'card wide' },
-          h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')),
-          h('p', { class: 'muted' }, 'Your compliance passport'),
-          ctx.banner, note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, note2,
-          loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load your checks. Please refresh the page.') : null,
-          siteSel, summary,
-          rows.length ? h('div', { class: 'chips', role: 'group', 'aria-label': 'Show' }, ...chips.map(([k, l, n]) =>
-            h('button', { class: 'chip', type: 'button', 'aria-pressed': String(filter === k), 'data-filter': k, onclick: () => { filter = k; viewList(); } }, l + ' (' + n + ')'))) : null,
-          ...(list.length ? list : [rows.length ? h('p', { class: 'muted' }, 'Nothing here.') : h('p', { class: 'muted' }, rights.can_manage ? 'You have no checks yet. Add your first one below.' : 'There are no checks to show yet.')]),
-          rights.can_manage && props.length ? h('button', { class: 'btn', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check') : null),
-        h('div', { class: 'card wide' }, h('h2', {}, 'My account'), ...(ctx.account || [])));
+      page('dash',
+        h('div', { class: 'pp' },
+          h('div', { class: 'pp-main' }, overview, sites, checksCard),
+          h('aside', { class: 'pp-side' }, h('div', { class: 'card' }, h('h2', {}, 'My account'), ...(ctx.account || [])))));
     }
 
     // ---------- one check ----------
     async function viewItem(id, note) {
-      page(h('div', { class: 'card wide' }, h('p', { class: 'muted center' }, 'Loading…')));
+      page('form', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
       const r = await sb.from('compliance_status').select('*').eq('id', id).maybeSingle();
       const item = r.data;
       if (!item) { await reload(); return viewList('That check could not be found. It may have been removed.'); }
@@ -227,13 +240,13 @@
         remove = go;
       }
 
-      page(h('div', { class: 'card wide' }, goBack(),
+      page('form', h('div', { class: 'detail' }, h('div', { class: 'card' }, goBack(),
         h('h1', {}, item.title),
         h('div', { class: 'statusline' }, h('span', { class: 'tag ' + item.status }, ST[item.status].label), h('span', { class: 'muted' }, dueText(item))),
         props.length > 1 ? h('p', { class: 'muted' }, siteName(item.property_id)) : null,
         h('div', { class: 'kv' }, h('span', {}, 'Basis'), h('span', {}, BASIS[item.basis] || 'Standard')),
         h('p', { class: 'muted small' }, 'The basis shown is a general guide only, not legal advice. What applies to your premises depends on the property, equipment and risk assessment, so please check with a competent professional.'),
-        msg, form, docsBox, remove));
+        msg, form, remove), h('div', { class: 'card' }, docsBox)));
     }
 
     // ---------- add your own check ----------
@@ -276,10 +289,10 @@
         h('label', { for: 'a-due' }, 'Next due date (optional)'), due,
         h('p', { class: 'muted small' }, 'If you do not know the due date yet, leave it empty. It will show as "No date" until you enter it.'),
         save, msg);
-      page(h('div', { class: 'card wide' }, goBack(), h('h1', {}, 'Add a check'), h('p', { class: 'muted' }, 'Add anything your premises need, such as an extra inspection or a piece of equipment.'), form));
+      page('form', h('div', { class: 'card form' }, goBack(), h('h1', {}, 'Add a check'), h('p', { class: 'muted' }, 'Add anything your premises need, such as an extra inspection or a piece of equipment.'), form));
     }
 
-    page(h('div', { class: 'card wide' }, h('p', { class: 'muted center' }, 'Loading your passport…')));
+    page('dash', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading your passport…')));
     await reload();
     viewList();
   }

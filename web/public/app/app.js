@@ -36,7 +36,7 @@
     return el;
   }
   function show(...nodes) {
-    document.body.classList.remove('hub', 'passport');
+    document.body.classList.remove('hub', 'passport', 'formwide');
     if (window.TCHub) window.TCHub.unmount();
     root.replaceChildren(h('img', { class: 'logo', src: '/img/logo-mark.png', alt: 'Tremcore' }), ...nodes);
     const f = root.querySelector('input'); if (f) f.focus();
@@ -44,6 +44,7 @@
   // Every signed-in client screen has Call Tremcore at the top. (The number is a placeholder until the real phone number is known.)
   const callBar = () => h('div', { class: 'callbar' }, h('a', { href: 'tel:+440000000000', id: 'call-tremcore' }, 'Call Tremcore'));
   const showIn = (...nodes) => show(callBar(), ...nodes);
+  const showForm = (...nodes) => { showIn(...nodes); document.body.classList.add('formwide'); };
   function message(box, kind, text) {
     box.replaceChildren(text ? h('div', { class: 'msg ' + kind, role: kind === 'err' ? 'alert' : 'status' }, text) : '');
   }
@@ -314,7 +315,7 @@
       h('h3', {}, 'Which compliance checks apply to your premises?'),
       h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
       h('div', { class: 'checklist' }, ...boxes), all, btn, box);
-    showIn(h('div', { class: 'card wide' }, h('h1', {}, 'Welcome to your passport' + (co && co.name ? ', ' + co.name : '')), h('p', { class: 'muted' }, 'Two quick things to set up.'), form));
+    showForm(h('div', { class: 'card wide' }, h('h1', {}, 'Welcome to your passport' + (co && co.name ? ', ' + co.name : '')), h('p', { class: 'muted' }, 'Two quick things to set up.'), form));
   }
 
   // ---------- Team: the head-office user decides who can do what ----------
@@ -326,7 +327,7 @@
       : /mfa_required|not_allowed/.test(m) ? 'You are not allowed to do that.' : 'Sorry, that did not work. Please try again.'; };
 
   async function viewTeam(note) {
-    showIn(h('div', { class: 'card wide' }, h('p', { class: 'muted center' }, 'Loading…')));
+    showForm(h('div', { class: 'card wide' }, h('p', { class: 'muted center' }, 'Loading…')));
     const [m, pend, sum, sites] = await Promise.all([sb.rpc('team_members'), sb.rpc('team_pending'), sb.rpc('team_summary'), sb.from('properties').select('id,name').order('name')]);
     if (m.error || !m.data) return viewHomeAgain();
     const members = m.data, pending = pend.data || [], s = (sum.data && sum.data[0]) || { used: members.length, allowed: members.length, require_mfa: false };
@@ -368,7 +369,7 @@
       h('button', { class: 'btn ghost', 'data-cancel': i.id, onclick: async () => { await sb.rpc('team_cancel_invite', { p_id: i.id }); viewTeam('Invitation cancelled.'); } }, 'Cancel')));
 
     const mfa = h('input', { type: 'checkbox', id: 'team-mfa', checked: s.require_mfa, onchange: async (e) => { const r = await sb.rpc('team_set_require_mfa', { p_on: e.target.checked }); viewTeam(r.error ? null : (e.target.checked ? '2FA is now required for everyone in your company.' : '2FA is now optional for your site users.')); } });
-    showIn(h('div', { class: 'card wide' }, h('h1', {}, 'My team'),
+    showForm(h('div', { class: 'card wide' }, h('h1', {}, 'My team'),
       h('p', { class: 'muted' }, s.used + ' of ' + s.allowed + ' users in use. Your price includes one user for your first site and one more for each extra site.'),
       box, ...rows, pendRows.length ? h('h3', {}, 'Waiting to sign up') : null, ...pendRows, invite,
       h('label', { class: 'check' }, mfa, h('span', {}, 'Require 2FA (authenticator app) for everyone in my company. It is always required for head-office users.')),
