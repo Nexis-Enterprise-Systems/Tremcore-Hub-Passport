@@ -176,11 +176,13 @@ const USERS = {
   // site user, 2FA optional
   t = await newPage(); await login(t.page, 'site@t');
   await t.page.waitForSelector('text=Welcome, Leah');
+  await t.page.click('[data-nav=settings]'); 
   check('site user signs in without 2FA when not required', (await t.page.locator('.badge').innerText()) === 'Off');
   check('optional user is offered 2FA set-up', await t.page.locator('text=Set up 2FA').count() === 1);
   await t.page.click('text=Set up 2FA'); await t.page.waitForSelector('img.qr');
   check('optional set-up has a Not now button', await t.page.locator('text=Not now').count() === 1);
   await t.page.click('text=Not now'); await t.page.waitForSelector('text=Welcome, Leah');
+  await t.page.click('[data-nav=settings]'); 
   check('Not now returns to the home screen with 2FA still off', (await t.page.locator('.badge').innerText()) === 'Off');
   await t.page.click('text=Sign out'); await t.page.waitForSelector('text=Sign in');
   check('sign out returns to login', (await h1(t.page)) === 'Sign in');
@@ -499,7 +501,7 @@ const USERS = {
     check('first confirmed sign-in creates the company once, with the saved details and billing choice', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_sites === 3 && made[0].p_billing === 'annual');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
-    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Your compliance passport').count()) === 1);
+    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Overall Compliance').count()) === 1);
     check('no page or CSP errors through the whole sign-up', t.problems.length === 0);
     if (t.problems.length) console.log(t.problems);
     await t.ctx.close();
@@ -558,12 +560,12 @@ const USERS = {
     check('stopped: only a stop message, Call Tremcore and Sign out are offered', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#contact-tremcore').count()) === 1);
     await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: true }; });
-    await login(t.page, 'site@t'); await t.page.waitForSelector('#cancel-start');
+    await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
     await t.page.click('#cancel-start'); await t.page.waitForSelector('#cancel-confirm');
     check('cancel: explains one month notice, data removal and that a year paid up front is not refunded', (await t.page.locator('.card').innerText()).includes('one month') && (await t.page.locator('.card').innerText()).includes('not refunded'));
     await t.page.click('#cancel-confirm'); await t.page.waitForSelector('text=due to close on');
     check('cancel: after giving notice the banner shows the end date and a Keep my account button', (await t.page.locator('button:has-text("Keep my account")').count()) === 1 && (await calls(t.page, 'rpc:request_cancellation')).length === 1);
-    await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#cancel-start');
+    await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
     check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
     await t.ctx.close();
     // first-run set-up: contact details and tick the core checks
@@ -574,9 +576,10 @@ const USERS = {
     check('set-up: one row per site to name, with no name filled in yet', (await t.page.locator('[data-site-row]').count()) === 2 && (await t.page.locator('[data-site-row] input').first().inputValue()) === '');
     await t.page.fill('[data-site-row=s1] input >> nth=0', 'high street shop'); await t.page.fill('[data-site-row=s1] input >> nth=1', '1 High St'); await t.page.press('[data-site-row=s1] input >> nth=0', 'Tab');
     await t.page.fill('#st-phone', '01634 000000'); await t.page.check('input[value=c0]'); await t.page.check('input[value=c5]');
-    await t.page.click('#st-go'); await t.page.waitForSelector('text=Your compliance passport');
+    await t.page.click('#st-go'); await t.page.waitForSelector('text=Overall Compliance');
     const fs = (await calls(t.page, 'rpc:finish_setup'))[0];
     check('set-up: only the ticked checks and the details are sent, with the site names capitalised and the unnamed one left as it was', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000' && fs.p_sites[0].name === 'High Street Shop' && fs.p_sites[0].address === '1 High St' && fs.p_sites[1].name === 'Site 2');
+    await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('set-up: the ticked checks appear as "No date" (never green), and set-up is not asked again', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('#st-go').count()) === 0);
     await t.ctx.close();
     t = await newPage(setupSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#st-go'); await t.page.click('#st-all');
@@ -599,7 +602,7 @@ const USERS = {
       if (rights) window.__mock.rights = rights;
       if (level) window.__mock.users['site@t'].profile.level = level;
     };
-    t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('passport: Email Tremcore (not a phone number) is at the very top of the screen for a Self-Managed client', (await t.page.locator('main > .callbar #contact-tremcore').count()) === 1 && (await t.page.locator('#contact-tremcore').innerText()) === 'Email Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk') && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
     check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.stat.red .num').innerText()) === '1' && (await t.page.locator('.stat.missing .num').innerText()) === '1' && (await t.page.locator('.stat.green .num').innerText()) === '2');
     check('passport: a check with no date is "No date", never green', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('.item:has-text("PAT Testing") .dot.missing').count()) === 1 && (await t.page.locator('.item:has-text("PAT Testing") .dot.green').count()) === 0);
@@ -666,15 +669,93 @@ const USERS = {
     check('date helper: end of month and leap years are handled', await t.page.evaluate(() => window.TCPassport.addMonths('2026-01-31', 1) === '2026-02-28' && window.TCPassport.addMonths('2028-01-31', 1) === '2028-02-29' && window.TCPassport.addMonths('2026-11-30', 3) === '2027-02-28' && window.TCPassport.addMonths('nope', 3) === '' && window.TCPassport.addMonths('2026-01-01', 0) === ''));
     await t.ctx.close();
     // view-only users (site user with view, or a managed client) see everything but can change nothing
-    t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     await t.page.click('.item[data-id=i1]'); await t.page.waitForSelector('.statusline');
     check('view-only: no add button, no edit form, no upload and no remove', (await t.page.locator('#add-check').count()) === 0 && (await t.page.locator('#f-due').count()) === 0 && (await t.page.locator('#file').count()) === 0 && (await t.page.locator('#remove-check').count()) === 0 && (await t.page.locator('.detail').innerText()).includes('Quarterly'));
     await t.ctx.close();
-    t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false }, level: 2 }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    t = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false }, level: 2 }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('managed client: told Tremcore manages the records, and still has Call Tremcore', (await t.page.locator('.card').first().innerText()).includes('Tremcore manages your compliance records') && (await t.page.locator('#contact-tremcore').innerText()) === 'Call Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('tel:'));
     await t.ctx.close();
-    t = await newPage(() => { window.__mock.tables = { properties: [{ id: 's1', name: 'Only Site' }], compliance_items: [] }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary');
+    t = await newPage(() => { window.__mock.tables = { properties: [{ id: 's1', name: 'Only Site' }], compliance_items: [] }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('passport: with no checks yet there is no score, only an invitation to add one (no site picker for one site)', (await t.page.locator('.legend').innerText()).includes('No checks yet') && (await t.page.locator('#site-pick').count()) === 0 && (await t.page.locator('.sitecard').count()) === 0 && (await t.page.locator('#add-check').count()) === 1);
+    await t.ctx.close();
+
+    // the app-style screens: Home, Tasks, Emergency Information, Settings and the paid add-ons
+    const appExtra = (cfg) => {
+      window.__mock.users['site@t'].profile.role_name = 'client_super';
+      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }];
+      const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+      window.__mock.tables.companies = [{ id: 'c1', name: 'Test Co', contact_phone: '01634 000000', address: '1 High St', level: (cfg && cfg.level) || 1, billing_interval: 'monthly', subscription: 'active' }];
+      window.__mock.tables.properties[0].address = '1 High St';
+      window.__mock.tables.tasks = [
+        { id: 't1', property_id: 's1', title: 'Check exit signs', notes: '', due_date: day(-2), repeat_months: null, status: 'pending' },
+        { id: 't2', property_id: 's1', title: 'Monthly alarm test', notes: '', due_date: day(5), repeat_months: 1, status: 'pending' },
+        { id: 't3', property_id: 's2', title: 'Old job', notes: '', due_date: day(-40), repeat_months: null, status: 'done', completed_at: new Date().toISOString() }];
+      window.__mock.tables.site_emergency = [{ id: 'e1', property_id: 's1', assembly_point: 'Car park', gas_shutoff: 'Back store', water_shutoff: '', electric_shutoff: '', notes: '' }];
+      window.__mock.tables.emergency_contacts = [{ id: 'k1', property_id: 's1', name: 'Sam Keyholder', role: 'Keyholder', phone: '07000 000000' }];
+    };
+    // the page runs this as one self-contained function, so the two seeds are joined into one piece of text
+    const appSeed = new Function('cfg', '(' + ppSeed.toString() + ')(cfg); (' + appExtra.toString() + ')(cfg);');
+    t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    check('home: a bottom/side menu with Home, Compliance, Tasks and Settings', (await t.page.locator('.appnav [data-nav]').allInnerTexts()).join() === 'Home,Compliance,Tasks,Settings' && (await t.page.locator('.appnav [data-nav=home]').getAttribute('aria-current')) === 'page');
+    check('home: overall compliance shows on-track, due soon, overdue and no-date counts (missing is never on track)', (await t.page.locator('.lglist').innerText()).replace(/\s+/g, ' ').includes('On track · 2') && (await t.page.locator('.lglist').innerText()).includes('1 item due soon') && (await t.page.locator('.lglist').innerText()).includes('1 overdue') && (await t.page.locator('.lglist').innerText()).includes('1 with no date'));
+    check('home: Quick Access has the four tiles; the paid add-ons show an Add button and their price', (await t.page.locator('.qtile').count()) === 4 && (await t.page.locator('.qtile.locked .tag.add').count()) === 2 && (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('£3.99') && (await t.page.locator('[data-q=staff_signin]').innerText()).includes('£6.99'));
+    check('home: My Tasks tile counts pending tasks', (await t.page.locator('[data-q=tasks]').innerText()).includes('2 pending'));
+    await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
+    check('add-on not bought: explains the price, offers Add (head office) and has no working feature behind it', (await t.page.locator('.card').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('#extra-add').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk'));
+    await t.page.click('text=Back to home'); await t.page.waitForSelector('#view-full');
+    await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
+    check('Staff Clock In / Out is charged per site', (await t.page.locator('.card').innerText()).includes('per site'));
+    await t.page.click('text=Back to home'); await t.page.click('#view-full'); await t.page.waitForSelector('[data-ctab]');
+    check('compliance: three tabs, Overview / By Category / Due Soon', (await t.page.locator('[data-ctab]').allInnerTexts()).join() === 'Overview,By Category,Due Soon');
+    await t.page.click('[data-ctab=due]');
+    check('Due Soon lists overdue, due-soon and no-date checks but not in-date ones', (await t.page.locator('.item').count()) === 3 && (await t.page.locator('.item:has-text("EICR")').count()) === 0 && (await t.page.locator('.item').first().innerText()).includes('Fire Alarm Test'));
+    await t.page.click('[data-ctab=category]');
+    check('By Category groups the checks under their headings', (await t.page.locator('.group h3').allInnerTexts()).join('|').includes('Fire safety (1)') && (await t.page.locator('.group h3').count()) >= 3);
+    await t.page.click('[data-nav=tasks]'); await t.page.waitForSelector('#add-task');
+    check('tasks: pending tab lists open tasks, overdue first and marked red', (await t.page.locator('[data-ttab=pending]').innerText()) === 'Pending (2)' && (await t.page.locator('.taskrow').count()) === 2 && (await t.page.locator('.taskrow').first().innerText()).includes('Check exit signs') && (await t.page.locator('.taskrow').first().locator('.dot.red').count()) === 1);
+    await t.page.click('[data-done=t2]'); await t.page.waitForSelector('text=Task completed.');
+    check('tasks: ticking a repeating task completes it and the next one appears', (await calls(t.page, 'rpc:complete_task')).length === 1 && (await t.page.locator('.taskrow:has-text("Monthly alarm test")').count()) === 1);
+    await t.page.click('[data-ttab=done]');
+    check('tasks: the completed tab shows finished tasks', (await t.page.locator('.taskrow:has-text("Monthly alarm test")').count()) === 1);
+    await t.page.click('#add-task'); await t.page.waitForSelector('#t-title');
+    await t.page.click('#t-save');
+    check('tasks: a task needs a name', (await t.page.locator('.msg.err').innerText()).includes('name'));
+    await t.page.fill('#t-title', 'Test emergency lights'); await t.page.fill('#t-repeat', '3'); await t.page.selectOption('#t-site', 's2'); await t.page.click('#t-save'); await t.page.waitForSelector('text=Task added.');
+    const added = await t.page.evaluate(() => window.__mock.tables.tasks.find((x) => x.title === 'Test emergency lights'));
+    check('tasks: a new repeating task is saved for the chosen site', added && added.property_id === 's2' && added.repeat_months === 3 && added.status === 'pending');
+    await t.page.click('[data-nav=home]'); await t.page.click('[data-q=emergency]'); await t.page.waitForSelector('#e-assembly');
+    check('emergency: shows the site contacts, assembly point and shut-offs', (await t.page.locator('.econ').innerText()).includes('Sam Keyholder') && (await t.page.locator('#e-assembly').inputValue()) === 'Car park' && (await t.page.locator('#e-gas').inputValue()) === 'Back store');
+    await t.page.fill('#e-water', 'Under the stairs'); await t.page.click('#e-save'); await t.page.waitForSelector('text=Emergency information saved.');
+    check('emergency: saving updates the site details', (await t.page.evaluate(() => window.__mock.tables.site_emergency[0].water_shutoff)) === 'Under the stairs');
+    await t.page.fill('#c-name', 'Pat Manager'); await t.page.fill('#c-phone', '07111 111111'); await t.page.click('#c-add'); await t.page.waitForSelector('text=Contact added.');
+    check('emergency: a contact can be added and removed', (await t.page.locator('.econ').count()) === 2);
+    await t.page.click('[data-rm-contact]>> nth=0'); await t.page.waitForSelector('text=Contact removed.');
+    check('emergency: removing a contact works', (await t.page.locator('.econ').count()) === 1);
+    await t.page.selectOption('#e-site', 's2'); await t.page.waitForSelector('#e-assembly');
+    check('emergency: each site has its own details', (await t.page.locator('#e-assembly').inputValue()) === '' && (await t.page.locator('.econ').count()) === 0);
+    await t.page.click('text=Back to home'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#b-save');
+    check('settings: business info, premises, subscription, customised tasks, help and account are all there', (await t.page.locator('.appbody h2').allInnerTexts()).join('|').replace(/\s+/g, ' ') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
+    check('settings: subscription shows the plan, two sites and the price including the extra site', (await t.page.locator('.appbody').innerText()).includes('Self-Managed') && (await t.page.locator('.appbody').innerText()).includes('£22.98 + VAT per month'));
+    check('settings: customised tasks shows how many of the 10 repeating tasks are used', (await t.page.locator('.appbody').innerText()).includes('2 of 10'));
+    await t.page.fill('#b-phone', '01634 999999'); await t.page.click('#b-save'); await t.page.waitForSelector('text=Business information saved.');
+    check('settings: head office can change the business phone', (await calls(t.page, 'rpc:update_business'))[0].p_phone === '01634 999999');
+    await t.page.fill('[data-site-name=s2]', 'Station Road Depot'); await t.page.click('[data-save-site=s2]'); await t.page.waitForSelector('text=Site saved.');
+    check('settings: head office can rename a site', (await t.page.evaluate(() => window.__mock.tables.properties[1].name)) === 'Station Road Depot');
+    check('settings: Email Tremcore help button', (await t.page.locator('#help-email').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk'));
+    await t.ctx.close();
+    // a view-only user: sees tasks and emergency details but cannot change them
+    t = await newPage(appSeed, { rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    await t.page.click('[data-nav=tasks]'); await t.page.waitForSelector('.taskrow');
+    check('view-only: tasks are listed with no add, done or remove buttons', (await t.page.locator('#add-task').count()) === 0 && (await t.page.locator('[data-done]').count()) === 0 && (await t.page.locator('[data-del]').count()) === 0);
+    await t.page.click('[data-nav=home]'); await t.page.click('[data-q=emergency]'); await t.page.waitForSelector('.econ');
+    check('view-only: emergency information is shown as text only', (await t.page.locator('#e-save').count()) === 0 && (await t.page.locator('#c-add').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Car park'));
+    await t.ctx.close();
+    // an add-on that has been bought is shown as active, not offered again
+    t = await newPage(appSeed, { owned: true }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    check('a bought add-on is not shown as locked; one not bought still is', (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('30+ available') && (await t.page.locator('[data-q=toolbox_talks].locked').count()) === 0 && (await t.page.locator('.qtile.locked').count()) === 1);
+    await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
+    check('a bought add-on page shows it is active and has no Add button', (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.msg.ok').innerText()).includes('active'));
     await t.ctx.close();
 
     // team page: the head-office user chooses who can do what
@@ -682,7 +763,7 @@ const USERS = {
       window.__mock.team = { summary: { used: 2, allowed: 3, require_mfa: false },
         members: [{ user_id: 'u1', full_name: 'Boss', email: 'boss@x.test', role: 'client_super', perm: 'full', active: true, property_ids: [], is_me: true },
                   { user_id: 'u2', full_name: 'Mo Manager', email: 'mo@x.test', role: 'client_site', perm: 'view', active: true, property_ids: ['s1'], is_me: false }], pending: [] }; };
-    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('#team-open');
+    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#team-open');
     await t.page.click('#team-open'); await t.page.waitForSelector('text=My team');
     check('team: shows seats used, the head-office user and the manager', (await t.page.locator('.card').innerText()).includes('2 of 3 users') && (await t.page.locator('.member').count()) === 3);
     await t.page.selectOption('[data-user=u2] select', 'update'); await t.page.check('[data-user=u2] input[value=s2]');
@@ -698,12 +779,12 @@ const USERS = {
     await t.page.check('#team-mfa'); await t.page.waitForSelector('text=2FA is now required');
     check('team: head office can require 2FA for everyone', (await calls(t.page, 'rpc:team_set_require_mfa')).pop().p_on === true);
     await t.ctx.close();
-    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.evaluate(() => { window.__mock.team.inviteError = 'user_limit_reached'; }); await t.page.click('#team-open'); await t.page.waitForSelector('#inv-name');
+    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.evaluate(() => { window.__mock.team.inviteError = 'user_limit_reached'; }); await t.page.click('#team-open'); await t.page.waitForSelector('#inv-name');
     await t.page.fill('#inv-name', 'X'); await t.page.fill('#inv-email', 'x@x.test'); await t.page.check('input[data-site=new][value=s1]'); await t.page.click('#inv-go');
     await t.page.waitForSelector('.msg.err');
     check('team: going over the user limit is explained', (await t.page.locator('.msg.err').innerText()).includes('used all the users'));
     await t.ctx.close();
-    t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: false }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah');
+    t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: false }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah'); await t.page.click('[data-nav=settings]'); 
     check('team: a site user is not offered the team page', (await t.page.locator('#team-open').count()) === 0);
     await t.ctx.close();
     // invited person's own sign-up
@@ -717,8 +798,8 @@ const USERS = {
     await t.ctx.close();
     t = await newPage(() => { window.__mock.users['sam@x.test'] = { password: 'correct-horse-battery', factor: false, profile: null, confirmed: true, meta: { invited: true, signup_full_name: 'Sam Site' },
       invitedProfile: { role_name: 'client_site', full_name: 'Sam Site', company_id: 'c1', level: 1, mfa_required: false } }; });
-    await login(t.page, 'sam@x.test'); await t.page.waitForSelector('text=Welcome, Sam');
-    check('invite: first confirmed sign-in accepts the invitation and lands in the passport as a site user', (await calls(t.page, 'rpc:accept_invitation')).length === 1 && (await t.page.locator('.kv').first().innerText()).includes('Site user'));
+    await login(t.page, 'sam@x.test'); await t.page.waitForSelector('text=Welcome, Sam'); await t.page.click('[data-nav=settings]');
+    check('invite: first confirmed sign-in accepts the invitation and lands in the passport as a site user', (await calls(t.page, 'rpc:accept_invitation')).length === 1 && (await t.page.locator('.kv:has-text("Site user")').count()) === 1);
     await t.ctx.close();
 
     // the staff hub: markers and the on/off switch

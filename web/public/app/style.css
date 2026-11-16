@@ -263,3 +263,37 @@ fieldset.sitepick .check{display:flex}
   .item .meta .site,.item .meta .due{font-size:.9rem;color:var(--muted)}
   .item .tag{justify-self:end}
 }
+
+/* ---- app shell: bottom menu on phones, left-hand menu on computers ---- */
+.appshell{display:block}
+.appbody>.card,.appbody>.sitesgrid,.appbody>div{margin-bottom:12px}
+.appnav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);background:#0d0d0d;border-top:1px solid var(--line);padding:6px 6px max(6px,env(safe-area-inset-bottom))}
+.navbtn{background:none;border:0;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;font:inherit;font-size:.72rem;cursor:pointer;border-radius:10px}
+.navbtn .ico{width:22px;height:22px}
+.navbtn.on{color:var(--gold)}
+body.passport{padding-bottom:84px}
+.qtiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.qtile{background:#0d0d0d;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:4px;font:inherit;cursor:pointer;position:relative;min-height:84px}
+.qtile.locked{border-style:dashed}
+.qtile .tag.add{align-self:flex-start;background:var(--gold);color:#0a0a0a;border-color:var(--gold);margin-top:2px}
+.subtabs{display:flex;gap:6px;margin:10px 0;border-bottom:1px solid var(--line)}
+.subtab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 10px;font:inherit;font-size:.9rem;cursor:pointer}
+.subtab[aria-selected=true]{color:var(--gold);border-bottom-color:var(--gold)}
+.lglist{display:flex;flex-direction:column;gap:6px;font-size:.95rem}
+.lg{display:flex;align-items:center;gap:8px}
+.taskrow{cursor:default}
+.taskrow .rowtools{display:flex;gap:6px;justify-content:flex-end}
+.econ{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.econ a{color:var(--gold)}
+.siteedit{display:grid;gap:6px;margin-bottom:12px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
+#view-full{margin-top:14px}
+@media (min-width:960px){
+  body.passport{padding-bottom:40px}
+  .appshell{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;align-items:start}
+  .appnav{position:sticky;top:16px;left:auto;right:auto;bottom:auto;display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px}
+  .navbtn{flex-direction:row;gap:12px;font-size:.95rem;padding:11px 12px;justify-content:flex-start}
+  .navbtn.on{background:#1d1a10}
+  .qtiles{grid-template-columns:repeat(4,1fr)}
+  .siteedit{grid-template-columns:1fr 1.6fr auto;align-items:center}
+}

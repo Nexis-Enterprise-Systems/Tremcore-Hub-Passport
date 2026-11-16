@@ -13,6 +13,18 @@
   const MAX_FILE = 10 * 1024 * 1024;
   const FILE_OK = /\.(pdf|jpe?g|png|docx?)$/i;
   const NS = 'http://www.w3.org/2000/svg';
+  // Shown if the server list cannot be read, so the paid add-ons are always visible with their price.
+  const EXTRA_DEFAULT = [
+    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records.', price_pence: 399, charged_per: 'company', owned: false },
+    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 699, charged_per: 'site', owned: false }
+  ];
+  const ICON = {
+    home: 'M3 11l9-8 9 8v10h-6v-6H9v6H3z', compliance: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z M8.5 12l2.5 2.5L16 9.5',
+    tasks: 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5', settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 5v4 M8 15v4'
+  };
+  const icon = (k) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, svg('path', { d: ICON[k] }));
+  const money = (p) => '£' + (p / 100).toFixed(2);
+  const today = () => new Date().toISOString().slice(0, 10);
 
   // ---------- small helpers ----------
   function svg(tag, attrs, ...kids) {
@@ -52,22 +64,29 @@
 
   async function mount(ctx) {
     const { sb, h, message, busy, fmtDate } = ctx;
-    let props = [], items = [], core = [], rights = { can_edit: false, can_manage: false }, loadError = false;
-    let site = 'all', filter = 'all';
+    let props = [], items = [], core = [], tasks = [], extras = [], company = null, rights = { can_edit: false, can_manage: false }, loadError = false;
+    let site = 'all', filter = 'all', tab = 'home', ctab = 'overview', ttab = 'pending';
+    const isHead = !!(ctx.req && ctx.req.role_name === 'client_super');
     // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
     const page = (mode, ...nodes) => { ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     const siteName = (id) => (props.find((p) => p.id === id) || {}).name || '';
 
     async function reload() {
       try {
-        const [p, i, r, cc] = await Promise.all([
+        const [p, i, r, cc, tk, ex, co] = await Promise.all([
           sb.from('properties').select('id,name').order('name'),
           sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,status,days_left').order('title'),
           sb.rpc('passport_rights'),
-          sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort')
+          sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
+          sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
+          sb.rpc('my_extras'),
+          sb.from('companies').select('name,contact_phone,address,level,billing_interval,subscription').limit(1)
         ]);
         if (p.error || i.error) throw new Error('load');
         props = p.data || []; items = i.data || []; core = (cc && cc.data) || [];
+        tasks = (tk && tk.data) || [];
+        extras = (ex && ex.data && ex.data.length) ? ex.data : EXTRA_DEFAULT;
+        company = (co && co.data && co.data[0]) || null;
         rights = (r && r.data && r.data[0]) || { can_edit: false, can_manage: false };
         loadError = false;
       } catch { loadError = true; }
@@ -81,61 +100,276 @@
       const n = r.days_left;
       return 'Due ' + f(r.due_date) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)');
     };
-    const goBack = (label) => h('button', { class: 'btn ghost', type: 'button', onclick: () => viewList() }, label || 'Back to my passport');
+    const goBack = (label) => h('button', { class: 'btn ghost', type: 'button', onclick: () => viewList() }, label || 'Back to compliance');
 
-    // ---------- the passport ----------
+    // ---------- shell: bottom menu on a phone, left-hand menu on a computer ----------
+    const TABS = [['home', 'Home'], ['compliance', 'Compliance'], ['tasks', 'Tasks'], ['settings', 'Settings']];
+    const go = (k) => { tab = k; if (k === 'home') viewHome(); else if (k === 'compliance') viewList(); else if (k === 'tasks') viewTasks(); else viewSettings(); };
+    const shell = (cur, ...nodes) => page('dash', h('div', { class: 'appshell' },
+      h('nav', { class: 'appnav', 'aria-label': 'Main menu' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: 'navbtn' + (cur === k ? ' on' : ''), 'data-nav': k, 'aria-current': cur === k ? 'page' : null, onclick: () => go(k) }, icon(k), h('span', {}, l)))),
+      h('div', { class: 'appbody' }, ...nodes)));
+    const backTo = (label) => h('button', { class: 'btn ghost', type: 'button', onclick: () => go(tab) }, label);
+
+    // All sites, then each site underneath (up to 12 as cards; beyond that a plain drop-down).
+    function sitePicker(refresh) {
+      if (props.length < 2) return null;
+      if (props.length <= 12) {
+        const card = (id, name, cc) => h('button', { class: 'sitecard', type: 'button', 'data-site': id, 'aria-pressed': String(site === id), onclick: () => { site = id; refresh(); } },
+          donut(cc, 'mini'), h('span', { class: 'sname' }, h('strong', {}, name), h('span', { class: 'muted small' },
+            cc.total ? [cc.red + ' overdue', cc.amber + ' due soon', cc.missing + ' no date'].join(' · ') : 'No checks yet')));
+        return h('div', { class: 'sitesgrid' }, card('all', 'All sites', tally(items)), ...props.map((p) => card(p.id, p.name, tally(items.filter((i) => i.property_id === p.id)))));
+      }
+      return h('div', {}, h('label', { for: 'site-pick' }, 'Site'), h('select', { id: 'site-pick', onchange: (e) => { site = e.target.value; refresh(); } },
+        h('option', { value: 'all', selected: site === 'all' }, 'All sites'), ...props.map((p) => h('option', { value: p.id, selected: site === p.id }, p.name))));
+    }
+    const extraOf = (code) => extras.find((e) => e.code === code) || EXTRA_DEFAULT.find((e) => e.code === code);
+    const priceText = (e) => money(e.price_pence) + ' + VAT ' + (e.charged_per === 'site' ? 'per site, ' : '') + 'per month';
+    const legendLines = (c) => h('div', { class: 'lglist' },
+      h('div', { class: 'lg' }, h('i', { class: 'dot green' }), 'On track · ' + c.green),
+      h('div', { class: 'lg' }, h('i', { class: 'dot amber' }), c.amber + (c.amber === 1 ? ' item due soon' : ' items due soon')),
+      h('div', { class: 'lg' }, h('i', { class: 'dot red' }), c.red + ' overdue'),
+      c.missing ? h('div', { class: 'lg' }, h('i', { class: 'dot missing' }), c.missing + ' with no date') : null);
+    const heading = (note) => [ctx.banner, note ? h('div', { class: 'msg ok', role: 'status' }, note) : null,
+      loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load your passport. Please refresh the page.') : null];
+
+    // ---------- Home ----------
+    function viewHome(note) {
+      tab = 'home';
+      const rows = items.filter((r) => site === 'all' || r.property_id === site);
+      const c = tally(rows);
+      const pend = tasks.filter((t) => t.status === 'pending' && (site === 'all' || t.property_id === site)).length;
+      const q = (code, label, sub, onclick, locked) => h('button', { class: 'qtile' + (locked ? ' locked' : ''), type: 'button', 'data-q': code, onclick },
+        h('strong', {}, label), h('span', { class: 'muted small' }, sub), locked ? h('span', { class: 'tag add' }, 'Add') : null);
+      const tt = extraOf('toolbox_talks'), ss = extraOf('staff_signin');
+      shell('home',
+        h('div', { class: 'card overview' },
+          h('div', { class: 'welcome' }, h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
+          ...heading(note),
+          h('h2', {}, 'Overall Compliance'),
+          h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
+          h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
+        sitePicker(viewHome),
+        h('div', { class: 'card' }, h('h2', {}, 'Quick Access'),
+          h('div', { class: 'qtiles' },
+            q('toolbox_talks', 'Toolbox Talks', tt.owned ? '30+ available' : 'Add-on · ' + money(tt.price_pence) + '/month', () => viewExtra('toolbox_talks'), !tt.owned),
+            q('staff_signin', 'Staff Clock In / Out', ss.owned ? 'QR code per site' : 'Add-on · ' + money(ss.price_pence) + '/site/month', () => viewExtra('staff_signin'), !ss.owned),
+            q('tasks', 'My Tasks', pend + ' pending', () => go('tasks')),
+            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency()))));
+    }
+
+    // ---------- Compliance: Overview / By Category / Due Soon ----------
+    function itemRow(r, multi) {
+      return h('button', { class: 'item' + (multi ? '' : ' nosite'), type: 'button', 'data-id': r.id, onclick: () => viewItem(r.id) },
+        h('i', { class: 'dot ' + r.status }), h('span', { class: 'title' }, r.title),
+        h('span', { class: 'meta muted' }, multi ? h('span', { class: 'site' }, siteName(r.property_id)) : null, h('span', { class: 'due' }, dueText(r, true))),
+        h('span', { class: 'tag ' + r.status }, ST[r.status].label));
+    }
+    const byUrgency = (a, b) => ST[a.status].rank - ST[b.status].rank || String(a.due_date || '').localeCompare(String(b.due_date || '')) || String(a.title).localeCompare(b.title);
+
     function viewList(note) {
+      tab = 'compliance';
       const rows = items.filter((r) => site === 'all' || r.property_id === site);
       const c = tally(rows);
       const shown = rows.filter((r) => filter === 'all' || r.status === filter);
       const level = ctx.req && ctx.req.level;
       const multi = props.length > 1;
-      const tiles = [['all', 'All', rows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'In date', c.green], ['missing', 'No date', c.missing]]
+      const tiles = [['all', 'All', rows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'Complete', c.green], ['missing', 'No date', c.missing]]
         .map(([k, l, n]) => h('button', { class: 'stat ' + k, type: 'button', 'data-filter': k, 'aria-pressed': String(filter === k), onclick: () => { filter = k; viewList(); } },
           h('span', { class: 'num' }, String(n)), h('span', { class: 'lbl' }, l)));
+      const subtabs = h('div', { class: 'subtabs', role: 'tablist' }, ...[['overview', 'Overview'], ['category', 'By Category'], ['due', 'Due Soon']].map(([k, l]) =>
+        h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ctab': k, 'aria-selected': String(ctab === k), onclick: () => { ctab = k; viewList(); } }, l)));
 
-      // Head office oversight: one card per site (up to 12; beyond that a plain drop-down is easier to use).
-      let sites = null;
-      if (multi && props.length <= 12) {
-        const card = (id, name, cc) => h('button', { class: 'sitecard', type: 'button', 'data-site': id, 'aria-pressed': String(site === id), onclick: () => { site = id; viewList(); } },
-          donut(cc, 'mini'), h('span', { class: 'sname' }, h('strong', {}, name), h('span', { class: 'muted small' },
-            cc.total ? [cc.red + ' overdue', cc.amber + ' due soon', cc.missing + ' no date'].join(' · ') : 'No checks yet')));
-        sites = h('div', { class: 'sitesgrid' }, card('all', 'All sites', tally(items)), ...props.map((p) => card(p.id, p.name, tally(items.filter((i) => i.property_id === p.id)))));
-      } else if (multi) {
-        sites = h('div', {}, h('label', { for: 'site-pick' }, 'Site'), h('select', { id: 'site-pick', onchange: (e) => { site = e.target.value; viewList(); } },
-          h('option', { value: 'all', selected: site === 'all' }, 'All sites'), ...props.map((p) => h('option', { value: p.id, selected: site === p.id }, p.name))));
-      }
-
-      const overview = h('div', { class: 'card overview' },
-        h('div', { class: 'welcome' }, h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'Your compliance passport' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
-        ctx.banner, note ? h('div', { class: 'msg ok', role: 'status' }, note) : null,
-        loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load your checks. Please refresh the page.') : null,
+      const summary = h('div', { class: 'card overview' },
+        h('div', { class: 'welcome' }, h('h1', {}, 'Compliance'), h('p', { class: 'muted' }, 'Your compliance passport' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
+        ...heading(note), subtabs,
         !rights.can_edit ? h('p', { class: 'muted' }, level > 1 ? 'Tremcore manages your compliance records for you. If anything looks wrong, use the contact button at the top.' : 'You can view the passport but not change it. Ask your head-office user if something needs updating.') : null,
-        h('div', { class: 'summary' }, donut(c),
-          h('div', { class: 'legend' },
-            h('strong', { class: 'big' }, c.pct == null ? 'No checks yet' : c.pct + '% in date'),
-            h('div', { class: 'muted' }, c.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'))),
-        rows.length ? h('div', { class: 'tiles5', role: 'group', 'aria-label': 'Show' }, ...tiles) : null);
+        ctab !== 'due' ? h('div', { class: 'summary' }, donut(c),
+          h('div', { class: 'legend' }, h('strong', { class: 'big' }, c.pct == null ? 'No checks yet' : c.pct + '% in date'),
+            h('div', { class: 'muted' }, c.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'))) : null,
+        ctab !== 'due' && rows.length ? h('div', { class: 'tiles5', role: 'group', 'aria-label': 'Show' }, ...tiles) : null);
 
-      const groups = {};
-      shown.forEach((r) => { (groups[r.grp || 'Other'] = groups[r.grp || 'Other'] || []).push(r); });
-      const list = Object.keys(groups).sort().map((g) => h('div', { class: 'group' }, h('h3', {}, g),
-        ...groups[g].sort((a, b) => ST[a.status].rank - ST[b.status].rank || String(a.title).localeCompare(b.title)).map((r) =>
-          h('button', { class: 'item' + (multi ? '' : ' nosite'), type: 'button', 'data-id': r.id, onclick: () => viewItem(r.id) },
-            h('i', { class: 'dot ' + r.status }),
-            h('span', { class: 'title' }, r.title),
-            h('span', { class: 'meta muted' }, multi ? h('span', { class: 'site' }, siteName(r.property_id)) : null, h('span', { class: 'due' }, dueText(r, true))),
-            h('span', { class: 'tag ' + r.status }, ST[r.status].label)))));
-
+      let body;
+      if (ctab === 'category') {
+        const groups = {};
+        shown.forEach((r) => { (groups[r.grp || 'Other'] = groups[r.grp || 'Other'] || []).push(r); });
+        const names = Object.keys(groups).sort((x, y) => (GROUPS.indexOf(x) + 99) % 99 - (GROUPS.indexOf(y) + 99) % 99 || x.localeCompare(y));
+        body = names.map((g) => h('div', { class: 'group' }, h('h3', {}, g + ' (' + groups[g].length + ')'), ...groups[g].sort(byUrgency).map((r) => itemRow(r, multi))));
+      } else if (ctab === 'due') {
+        const due = rows.filter((r) => r.status !== 'green').sort(byUrgency);
+        body = due.length ? due.map((r) => itemRow(r, multi)) : [];
+      } else body = shown.slice().sort(byUrgency).map((r) => itemRow(r, multi));
+      const empty = ctab === 'due' ? 'Nothing is due soon, overdue or missing a date. Well done.' : rows.length ? 'Nothing here.' : rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.';
       const checksCard = h('div', { class: 'card' },
-        h('div', { class: 'titlerow' }, h('h2', {}, 'Your checks'), rights.can_manage && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks'), h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check')) : null),
-        rows.length ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
-        ...(list.length ? list : [rows.length ? h('p', { class: 'muted' }, 'Nothing here.') : h('p', { class: 'muted' }, rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.')]));
+        h('div', { class: 'titlerow' }, h('h2', {}, ctab === 'due' ? 'Due Soon' : ctab === 'category' ? 'By Category' : 'Core Compliance'),
+          rights.can_manage && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks'), h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check')) : null),
+        body.length && ctab !== 'category' ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
+        ...(body.length ? body : [h('p', { class: 'muted' }, empty)]));
+      shell('compliance', summary, sitePicker(viewList), checksCard);
+    }
 
-      page('dash',
-        h('div', { class: 'pp' },
-          h('div', { class: 'pp-main' }, overview, sites, checksCard),
-          h('aside', { class: 'pp-side' }, h('div', { class: 'card' }, h('h2', {}, 'My account'), ...(ctx.account || [])))));
+    // ---------- My Tasks ----------
+    const taskState = (t) => {
+      if (t.status === 'done') return 'green';
+      if (!t.due_date) return 'missing';
+      const d = Math.round((new Date(t.due_date + 'T00:00:00Z') - new Date(today() + 'T00:00:00Z')) / 864e5);
+      return d < 0 ? 'red' : d <= 30 ? 'amber' : 'green';
+    };
+    const taskText = (t) => t.status === 'done' ? 'Completed ' + shortDate(t.completed_at) : !t.due_date ? 'No due date' : (taskState(t) === 'red' ? 'Overdue since ' : 'Due ') + shortDate(t.due_date);
+    function viewTasks(note) {
+      tab = 'tasks';
+      const mine = tasks.filter((t) => site === 'all' || t.property_id === site);
+      const pend = mine.filter((t) => t.status === 'pending').sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
+      const done = mine.filter((t) => t.status === 'done').sort((a, b) => String(b.completed_at).localeCompare(String(a.completed_at)));
+      const list = ttab === 'pending' ? pend : done;
+      const box = h('div', { id: 'task-msg' });
+      const act = async (btn, fn, okNote) => ctx.busy(btn, async () => {
+        const r = await fn();
+        if (r && r.error) { ctx.message(box, 'err', 'Sorry, that did not save. You may not have permission to change tasks.'); return; }
+        await reload(); viewTasks(okNote);
+      });
+      const row = (t) => h('div', { class: 'item taskrow nosite', 'data-task': t.id },
+        h('i', { class: 'dot ' + taskState(t) }), h('span', { class: 'title' }, t.title, t.repeat_months ? h('span', { class: 'muted small rep' }, ' · repeats every ' + t.repeat_months + (t.repeat_months === 1 ? ' month' : ' months')) : null),
+        h('span', { class: 'meta muted' }, props.length > 1 ? h('span', { class: 'site' }, siteName(t.property_id)) : null, h('span', { class: 'due' }, taskText(t))),
+        rights.can_edit && t.status === 'pending' ? h('span', { class: 'rowtools' },
+          h('button', { class: 'btn small', type: 'button', 'data-done': t.id, onclick: (e) => act(e.target, () => sb.rpc('complete_task', { p_id: t.id }), 'Task completed.') }, 'Done'),
+          h('button', { class: 'btn small ghost', type: 'button', 'data-del': t.id, onclick: (e) => act(e.target, () => sb.from('tasks').delete().eq('id', t.id), 'Task removed.') }, 'Remove')) : h('span', { class: 'tag ' + taskState(t) }, t.status === 'done' ? 'Done' : ST[taskState(t)].label));
+      const tabs = h('div', { class: 'subtabs', role: 'tablist' },
+        h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'pending', 'aria-selected': String(ttab === 'pending'), onclick: () => { ttab = 'pending'; viewTasks(); } }, 'Pending (' + pend.length + ')'),
+        h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'done', 'aria-selected': String(ttab === 'done'), onclick: () => { ttab = 'done'; viewTasks(); } }, 'Completed'));
+      shell('tasks', h('div', { class: 'card' },
+        h('div', { class: 'titlerow' }, h('h1', {}, 'My Tasks'), rights.can_edit && props.length ? h('button', { class: 'btn small', id: 'add-task', type: 'button', onclick: () => viewTaskAdd() }, 'Add New Task +') : null),
+        ...heading(note), tabs, box,
+        !rights.can_edit ? h('p', { class: 'muted' }, 'You can see these tasks but not change them.') : null,
+        ...(list.length ? list.map(row) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'No pending tasks.' : 'No completed tasks yet.')])),
+        sitePicker(viewTasks));
+    }
+    function viewTaskAdd() {
+      const box = h('div', {});
+      const title = h('input', { id: 't-title', maxlength: '160', autocomplete: 'off' });
+      const due = h('input', { id: 't-due', type: 'date' });
+      const rep = h('input', { id: 't-repeat', type: 'number', min: '1', max: '120', inputmode: 'numeric' });
+      const sel = h('select', { id: 't-site' }, ...props.map((p) => h('option', { value: p.id, selected: p.id === (site !== 'all' ? site : props[0].id) }, p.name)));
+      const notes = h('textarea', { id: 't-notes', rows: '3', maxlength: '2000' });
+      const used = tasks.filter((t) => t.status === 'pending' && t.repeat_months).length;
+      const save = h('button', { class: 'btn', id: 't-save', type: 'button', onclick: async (e) => {
+        const t = title.value.trim(); const r = rep.value.trim();
+        if (!t) return ctx.message(box, 'err', 'Please give the task a name.');
+        if (!validDate(due.value)) return ctx.message(box, 'err', 'Please check the due date.');
+        if (r && !(Number.isInteger(+r) && +r >= 1 && +r <= 120)) return ctx.message(box, 'err', 'Repeat every must be a whole number of months, 1 to 120.');
+        await ctx.busy(e.target, async () => {
+          const res = await sb.from('tasks').insert({ property_id: sel.value, title: t, notes: notes.value.trim(), due_date: due.value || null, repeat_months: r ? +r : null });
+          if (res.error) return ctx.message(box, 'err', /repeat_limit/.test(res.error.message || '') ? 'You already have 10 repeating tasks. Finish or remove one first.' : 'Sorry, that did not save. Please try again.');
+          await reload(); viewTasks('Task added.');
+        });
+      } }, 'Save task');
+      page('form', h('div', { class: 'card form' }, backTo('Back to tasks'), h('h1', {}, 'Add New Task'),
+        h('label', { for: 't-title' }, 'Task'), title,
+        props.length > 1 ? [h('label', { for: 't-site' }, 'Site'), sel] : null,
+        h('label', { for: 't-due' }, 'Due date (optional)'), due,
+        h('label', { for: 't-repeat' }, 'Repeat every (months, optional)'), rep,
+        h('p', { class: 'muted small' }, 'Repeating tasks come back by themselves when you tick them off. You can have up to 10 repeating tasks (' + used + ' in use).'),
+        h('label', { for: 't-notes' }, 'Notes (optional)'), notes, save, box));
+    }
+
+    // ---------- Emergency Information ----------
+    async function viewEmergency(note, pid) {
+      tab = 'home';
+      if (!props.length) return viewHome('Add a site first.');
+      pid = pid || (site !== 'all' ? site : props[0].id);
+      page('form', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
+      const [er, cr] = await Promise.all([sb.from('site_emergency').select('*').eq('property_id', pid).maybeSingle(), sb.from('emergency_contacts').select('*').eq('property_id', pid).order('name')]);
+      const e0 = (er && er.data) || null, contacts = (cr && cr.data) || [];
+      const can = rights.can_edit;
+      const box = h('div', {});
+      const F = [['assembly_point', 'Assembly point', 'e-assembly'], ['gas_shutoff', 'Gas shut-off', 'e-gas'], ['water_shutoff', 'Water shut-off', 'e-water'], ['electric_shutoff', 'Electric shut-off', 'e-electric']];
+      const inputs = {};
+      F.forEach(([k, , id]) => { inputs[k] = h('input', { id, maxlength: '300', value: (e0 && e0[k]) || '', autocomplete: 'off' }); });
+      const notes = h('textarea', { id: 'e-notes', rows: '3', maxlength: '2000' }, (e0 && e0.notes) || '');
+      const saveBtn = h('button', { class: 'btn', id: 'e-save', type: 'button', onclick: async (ev) => ctx.busy(ev.target, async () => {
+        const v = { assembly_point: inputs.assembly_point.value.trim(), gas_shutoff: inputs.gas_shutoff.value.trim(), water_shutoff: inputs.water_shutoff.value.trim(), electric_shutoff: inputs.electric_shutoff.value.trim(), notes: notes.value.trim() };
+        const res = e0 ? await sb.from('site_emergency').update(v).eq('property_id', pid) : await sb.from('site_emergency').insert(Object.assign({ property_id: pid }, v));
+        if (res.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please try again.');
+        viewEmergency('Emergency information saved.', pid);
+      }) }, 'Save');
+      const cname = h('input', { id: 'c-name', maxlength: '120', autocomplete: 'off' }), crole = h('input', { id: 'c-role', maxlength: '120', autocomplete: 'off' }), cphone = h('input', { id: 'c-phone', type: 'tel', maxlength: '40', autocomplete: 'off' });
+      const addC = h('button', { class: 'btn small', id: 'c-add', type: 'button', onclick: async (ev) => ctx.busy(ev.target, async () => {
+        if (!cname.value.trim()) return ctx.message(box, 'err', 'Please enter the contact\'s name.');
+        const res = await sb.from('emergency_contacts').insert({ property_id: pid, name: cname.value.trim(), role: crole.value.trim(), phone: cphone.value.trim() });
+        if (res.error) return ctx.message(box, 'err', /contact_limit/.test(res.error.message || '') ? 'You can add up to 10 contacts per site.' : 'Sorry, that did not save. Please try again.');
+        viewEmergency('Contact added.', pid);
+      }) }, 'Add contact');
+      const crow = (c) => h('div', { class: 'econ', 'data-contact': c.id }, h('span', {}, h('strong', {}, c.name), c.role ? h('span', { class: 'muted small' }, ' · ' + c.role) : null),
+        c.phone ? h('a', { href: 'tel:' + c.phone.replace(/[^\d+]/g, '') }, c.phone) : null,
+        can ? h('button', { class: 'btn small ghost', type: 'button', 'data-rm-contact': c.id, onclick: async () => { const r = await sb.from('emergency_contacts').delete().eq('id', c.id); if (r.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); viewEmergency('Contact removed.', pid); } }, 'Remove') : null);
+      const sitePick = props.length > 1 ? [h('label', { for: 'e-site' }, 'Site'), h('select', { id: 'e-site', onchange: (ev) => viewEmergency(null, ev.target.value) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
+      page('form', h('div', { class: 'card form' }, backTo('Back to home'), h('h1', {}, 'Emergency Information'),
+        note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, sitePick,
+        h('h2', {}, 'Key contacts'),
+        ...(contacts.length ? contacts.map(crow) : [h('p', { class: 'muted' }, 'No contacts added yet.')]),
+        can ? [h('label', { for: 'c-name' }, 'Name'), cname, h('label', { for: 'c-role' }, 'Role (optional)'), crole, h('label', { for: 'c-phone' }, 'Phone'), cphone, addC] : null,
+        h('h2', {}, 'Assembly point and shut-offs'),
+        ...(can ? [...F.flatMap(([k, l, id]) => [h('label', { for: id }, l), inputs[k]]), h('label', { for: 'e-notes' }, 'Other notes (optional)'), notes, saveBtn]
+          : [...F.map(([k, l]) => h('div', { class: 'kv' }, h('span', {}, l), h('span', {}, (e0 && e0[k]) || 'Not added yet'))), (e0 && e0.notes) ? h('p', {}, e0.notes) : null]),
+        box));
+    }
+
+    // ---------- paid add-ons (Toolbox Talks, Staff Clock In / Out) ----------
+    function viewExtra(code) {
+      const e = extraOf(code);
+      const mail = 'mailto:hello@tremcore.co.uk?subject=' + encodeURIComponent('Add ' + e.name) + '&body=' + encodeURIComponent('Please add ' + e.name + ' to my account.');
+      page('form', h('div', { class: 'card form', 'data-extra': code }, backTo('Back to home'), h('h1', {}, e.name),
+        h('p', {}, e.description),
+        e.owned
+          ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account. We are finishing this screen and it will appear here very soon.')
+          : [h('p', { class: 'big' }, priceText(e)),
+            isHead ? [h('a', { class: 'btn', id: 'extra-add', href: mail }, 'Add ' + e.name), h('p', { class: 'muted small' }, 'Online payment for add-ons is coming very soon. Until then, this button emails Tremcore and we will switch it on for you.')]
+              : h('p', { class: 'muted' }, 'Ask your head-office user to add this to your account.')]));
+    }
+
+    // ---------- Settings ----------
+    function viewSettings(note) {
+      tab = 'settings';
+      const box = h('div', {});
+      const bphone = h('input', { id: 'b-phone', type: 'tel', maxlength: '40', value: (company && company.contact_phone) || '' });
+      const baddr = h('input', { id: 'b-address', maxlength: '300', value: (company && company.address) || '' });
+      const bsave = h('button', { class: 'btn small', id: 'b-save', type: 'button', onclick: (ev) => ctx.busy(ev.target, async () => {
+        const r = await sb.rpc('update_business', { p_phone: bphone.value, p_address: baddr.value });
+        if (r.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please try again.');
+        await reload(); viewSettings('Business information saved.');
+      }) }, 'Save');
+      const biz = h('div', { class: 'card' }, h('h2', {}, 'Business Information'),
+        h('div', { class: 'kv' }, h('span', {}, 'Business'), h('span', {}, (company && company.name) || '')),
+        isHead ? [h('label', { for: 'b-phone' }, 'Phone'), bphone, h('label', { for: 'b-address' }, 'Address'), baddr, bsave]
+          : [h('div', { class: 'kv' }, h('span', {}, 'Phone'), h('span', {}, (company && company.contact_phone) || '–')), h('div', { class: 'kv' }, h('span', {}, 'Address'), h('span', {}, (company && company.address) || '–'))]);
+      const siteRow = (p) => {
+        const n = h('input', { 'data-site-name': p.id, maxlength: '120', value: p.name, 'aria-label': 'Site name' });
+        const a = h('input', { 'data-site-addr': p.id, maxlength: '300', value: p.address || '', placeholder: 'Address', 'aria-label': 'Site address' });
+        return h('div', { class: 'siteedit' }, isHead ? [n, a, h('button', { class: 'btn small ghost', type: 'button', 'data-save-site': p.id, onclick: (ev) => ctx.busy(ev.target, async () => {
+          const r = await sb.rpc('update_site', { p_id: p.id, p_name: n.value, p_address: a.value });
+          if (r.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please check the name and try again.');
+          await reload(); viewSettings('Site saved.');
+        }) }, 'Save')] : [h('strong', {}, p.name), h('span', { class: 'muted small' }, p.address || '')]);
+      };
+      const premises = h('div', { class: 'card' }, h('h2', {}, 'Manage Premises'), ...props.map(siteRow),
+        h('p', { class: 'muted small' }, 'To add another site, ', h('a', { href: 'mailto:hello@tremcore.co.uk?subject=Add%20a%20site' }, 'email Tremcore'), '. Each site is £7.99 + VAT per month.'));
+      const lvl = (company && company.level) || (ctx.req && ctx.req.level) || 1;
+      const n = props.length, yearly = company && company.billing_interval === 'annual';
+      const owned = extras.filter((e) => e.owned).map((e) => e.name);
+      const plan = h('div', { class: 'card' }, h('h2', {}, 'Subscription Details'),
+        h('div', { class: 'kv' }, h('span', {}, 'Plan'), h('span', {}, lvl === 1 ? 'Self-Managed' : lvl === 2 ? 'Managed Compliance' : 'Property & Compliance Managed')),
+        h('div', { class: 'kv' }, h('span', {}, 'Sites'), h('span', {}, String(n))),
+        lvl === 1 ? h('div', { class: 'kv' }, h('span', {}, 'Price'), h('span', {}, yearly ? money(15290 + 8150 * Math.max(n - 1, 0)) + ' + VAT per year' : money(1499 + 799 * Math.max(n - 1, 0)) + ' + VAT per month')) : null,
+        h('div', { class: 'kv' }, h('span', {}, 'Add-ons'), h('span', {}, owned.length ? owned.join(', ') : 'None')),
+        h('div', { class: 'kv' }, h('span', {}, 'Status'), h('span', {}, company && company.subscription ? String(company.subscription).replace(/^./, (x) => x.toUpperCase()) : '–')));
+      const repeating = tasks.filter((t) => t.status === 'pending' && t.repeat_months).length;
+      const custom = h('div', { class: 'card' }, h('h2', {}, 'Customised Tasks'),
+        h('p', { class: 'muted' }, 'Your own repeating tasks. You are using ' + repeating + ' of 10.'),
+        h('button', { class: 'btn small ghost', id: 'open-tasks', type: 'button', onclick: () => go('tasks') }, 'Open My Tasks'));
+      const help = h('div', { class: 'card' }, h('h2', {}, 'Help & Support'),
+        h('p', { class: 'muted' }, 'Questions about your passport? We are happy to help.'),
+        h('a', { class: 'btn small', id: 'help-email', href: 'mailto:hello@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'Email Tremcore'));
+      const acct = h('div', { class: 'card' }, h('h2', {}, 'My account'), ...(ctx.account || []));
+      shell('settings', h('div', { class: 'card' }, h('h1', {}, 'Settings'), ...heading(note), box), biz, premises, plan, custom, help, acct);
     }
 
     // ---------- one check ----------
@@ -364,7 +598,7 @@
 
     page('dash', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading your passport…')));
     await reload();
-    viewList(ctx.note);
+    viewHome(ctx.note);
   }
 
   window.TCPassport = { mount, addMonths, tally };

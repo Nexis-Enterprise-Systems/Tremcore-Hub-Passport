@@ -18,6 +18,7 @@
   const uuid = () => '00000000-0000-4000-8000-' + String(idn++).padStart(12, '0');
   const db = () => (M().tables = M().tables || {});
   const DEFAULTS = {
+    tasks: () => ({ status: 'pending', notes: '' }),
     companies: () => ({ level: 1, subscription: 'trial', monthly_value_pence: 0, require_mfa: false, billing_interval: 'monthly' }),
     compliance_items: () => ({ notes: '', grp: 'Other', basis: 'standard' }),
     properties: () => ({})
@@ -134,6 +135,17 @@
     },
     async rpc(name, args) {
       rec('rpc:' + name, args || null);
+      if (name === 'my_extras') return { data: M().extras || [
+        { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'Talks.', price_pence: 399, charged_per: 'company', owned: false },
+        { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'QR.', price_pence: 699, charged_per: 'site', owned: false }] };
+      if (name === 'complete_task') {
+        const t = (db().tasks || []).find((x) => x.id === args.p_id); if (!t || t.status !== 'pending') return { data: null, error: { message: 'task_not_found' } };
+        t.status = 'done'; t.completed_at = new Date().toISOString();
+        if (t.repeat_months) db().tasks.push(Object.assign({}, t, { id: 'n-' + t.id, status: 'pending', completed_at: null, due_date: '2027-03-01' }));
+        return { data: null };
+      }
+      if (name === 'update_business') { const c = (db().companies || [])[0]; if (c) Object.assign(c, { contact_phone: args.p_phone, address: args.p_address }); return { data: null }; }
+      if (name === 'update_site') { const p = (db().properties || []).find((x) => x.id === args.p_id); if (p) Object.assign(p, { name: args.p_name, address: args.p_address }); return { data: null }; }
       if (name === 'passport_rights') return { data: [M().rights || { can_edit: true, can_manage: true }] };
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
       if (name === 'request_cancellation') { rec('cancel', 'x'); if (M().cancelError) return { data: null, error: { message: 'x' } }; M().access = { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 }; return { data: '2026-12-08T00:00:00Z' }; }

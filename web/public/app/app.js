@@ -32,7 +32,7 @@
       else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v === true ? '' : v);
     }
-    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+    for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
     return el;
   }
   function show(...nodes) {
@@ -310,7 +310,7 @@
         const sitesOut = siteRows.map((x) => ({ id: x.id, name: titleCase(x.name.value.trim()) || x.was, address: x.address.value.trim() || null }));
         const r = await sb.rpc('finish_setup', { p_phone: phone.value.trim() || null, p_address: addr.value.trim() || null, p_codes: codes, p_sites: sitesOut });
         if (r.error) return message(box, 'err', 'Sorry, we could not save that. Please try again, or contact Tremcore.');
-        if (siteRows.length > 1 && codes.length) setupNote = 'The checks you ticked were added to every site. Different sites need different checks, so use "Checks by site" below to change what each site has.';
+        if (siteRows.length > 1 && codes.length) setupNote = 'The checks you ticked were added to every site. Different sites need different checks, so open Compliance and use "Checks by site" to change what each site has.';
         route();
       });
     } },
