@@ -201,10 +201,10 @@ async function handleCheckoutExtra(req, res) {
       if (/two_factor_needed/.test(why)) return out(403, { error: 'Please finish signing in with your 2FA code first, then try again.' });
       if (/not_self_managed/.test(why)) return out(403, { error: 'Add-ons are only for Self-Managed accounts.' });
       if (/not_active/.test(why)) return out(403, { error: 'Your subscription needs to be active before you can add this.' });
-      return out(403, { error: /not_allowed/.test(why) ? 'Add-ons are not fully switched on yet. Tremcore needs to finish a database update (migration 0018).' : 'Sorry, this cannot be added to your account right now. Please contact Tremcore.' });
+      return out(403, { error: /not_allowed/.test(why) ? 'Add-ons are not fully switched on yet. Tremcore needs to finish a database update (migration 0018).' : 'Sorry, this cannot be added to your account right now. Please contact Tremcore. (Reason: ' + String(why || r.status).replace(/[^\w .:-]/g, '').slice(0, 80) + ')' });
     }
     const info = (await r.json())[0];
-    if (!info) return out(403, { error: 'Sorry, this cannot be added to your account right now. Please contact Tremcore.' });
+    if (!info) return out(403, { error: 'Sorry, this cannot be added to your account right now. Please contact Tremcore. (Reason: no details returned)' });
     const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
     const params = billing.extraCheckoutParams({ companyId: info.company_id, code, name: info.name + (info.charged_per === 'site' ? ' (per site)' : ''), unitPence: info.price_pence, quantity: info.quantity,
       customerId: info.stripe_customer_id, email: info.email, origin: proto + '://' + req.headers.host });
