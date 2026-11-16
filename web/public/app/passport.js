@@ -68,7 +68,11 @@
     let site = 'all', filter = 'all', tab = 'home', ctab = 'overview', ttab = 'pending';
     const isHead = !!(ctx.req && ctx.req.role_name === 'client_super');
     // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
-    const page = (mode, ...nodes) => { onExtra = null; ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
+    // One clear back button (a chevron and the word Back, top left). The phone's own back button and the browser's back button do the same thing.
+    let pendingBack = null, activeBack = null;
+    const backBtn = (label, fn) => { pendingBack = fn; return h('button', { class: 'backbtn', type: 'button', 'data-back': '1', 'aria-label': label || 'Back', onclick: () => { activeBack = null; fn(); } }, h('span', { class: 'chev', 'aria-hidden': 'true' }, '\u2039'), h('span', {}, 'Back')); };
+    window.addEventListener('popstate', () => { const f = activeBack; activeBack = null; if (f) f(); });
+    const page = (mode, ...nodes) => { onExtra = null; ctx.show(...nodes); if (pendingBack) { activeBack = pendingBack; try { history.pushState({ tcBack: 1 }, ''); } catch (e) { /* ignore */ } } else activeBack = null; pendingBack = null; document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     const siteName = (id) => (props.find((p) => p.id === id) || {}).name || '';
 
     async function reload() {
@@ -100,7 +104,7 @@
       const n = r.days_left;
       return 'Due ' + f(r.due_date) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)');
     };
-    const goBack = (label) => h('button', { class: 'btn ghost', type: 'button', onclick: () => viewList() }, label || 'Back to compliance');
+    const goBack = (label) => backBtn(label || 'Back to compliance', () => viewList());
 
     // ---------- shell: bottom menu on a phone, left-hand menu on a computer ----------
     const TABS = [['home', 'Home'], ['compliance', 'Compliance'], ['tasks', 'Tasks'], ['settings', 'Settings']];
@@ -108,7 +112,7 @@
     const shell = (cur, ...nodes) => page('dash', h('div', { class: 'appshell' },
       h('nav', { class: 'appnav', 'aria-label': 'Main menu' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: 'navbtn' + (cur === k ? ' on' : ''), 'data-nav': k, 'aria-current': cur === k ? 'page' : null, onclick: () => go(k) }, icon(k), h('span', {}, l)))),
       h('div', { class: 'appbody' }, ...nodes)));
-    const backTo = (label) => h('button', { class: 'btn ghost', type: 'button', onclick: () => go(tab) }, label);
+    const backTo = (label) => backBtn(label, () => go(tab));
 
     // All sites, then each site underneath (up to 12 as cards; beyond that a plain drop-down).
     function sitePicker(refresh) {
@@ -346,7 +350,7 @@
       if (e.owned && state !== 'confirming' && code === 'toolbox_talks') {
         tab = 'home';
         return window.TCToolbox.open({ sb, h, ctx, page, backTo, props: () => props, site: () => site, rights: () => rights, isHead: () => isHead, shortDate, siteName,
-          companyName: () => (company && company.name) || '', companyId: () => company && company.id, openPeople: (pid) => viewClock(null, pid, 'toolbox') }, state === 'thanks' ? e.name + ' is now on your account. Pick a talk to get started.' : null);
+          companyName: () => (company && company.name) || '', companyId: () => company && company.id, back: backBtn, openPeople: (pid) => viewClock(null, pid, 'toolbox') }, state === 'thanks' ? e.name + ' is now on your account. Pick a talk to get started.' : null);
       }
       if (e.owned && state !== 'confirming' && code === 'staff_signin') return viewClock(state === 'thanks' ? e.name + ' is now on your account. Add the people who will use it below.' : null);
       const box = h('div', {});
@@ -393,7 +397,7 @@
           h('button', { class: 'btn small ghost', type: 'button', 'data-rm-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').delete().eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh('Person removed.'); } }, 'Remove')) : null);
       const sitePick = props.length > 1 ? [h('label', { for: 's-site' }, 'Site'), h('select', { id: 's-site', onchange: (ev) => viewClock(null, ev.target.value, from) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
       const fromTalks = from === 'toolbox';
-      page('form', h('div', { class: 'card form' }, fromTalks ? h('button', { class: 'btn ghost', type: 'button', onclick: () => viewExtra('toolbox_talks') }, 'Back to Toolbox Talks') : backTo('Back to home'), h('h1', {}, fromTalks ? 'People at this site' : 'Staff Clock In / Out'),
+      page('form', h('div', { class: 'card form' }, fromTalks ? backBtn('Back to Toolbox Talks', () => viewExtra('toolbox_talks')) : backTo('Back to home'), h('h1', {}, fromTalks ? 'People at this site' : 'Staff Clock In / Out'),
         note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, sitePick,
         h('h2', {}, (fromTalks ? 'People you can choose for talks at ' : 'People who use it at ') + siteName(pid)),
         ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, fromTalks ? 'Nobody added yet. Add the people who will attend talks at this site.' : 'Nobody added yet. Add the people who need to clock in and out at this site.')]),

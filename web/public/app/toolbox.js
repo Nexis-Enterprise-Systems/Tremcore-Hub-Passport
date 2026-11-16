@@ -49,7 +49,7 @@
     }
 
     function viewTalk(t) {
-      api.page('form', h('div', { class: 'card form', 'data-talk-page': t.id }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewLibrary() }, 'Back to all talks'),
+      api.page('form', h('div', { class: 'card form', 'data-talk-page': t.id }, api.back('Back to all talks', () => viewLibrary()),
         h('h1', {}, t.title), h('p', { class: 'muted' }, t.category + ' · about ' + t.minutes + ' minutes' + (t.company_id ? ' · your own talk' : '')),
         t.summary ? h('p', {}, t.summary) : null,
         h('h2', {}, 'Key points'), h('ul', { class: 'points' }, ...(t.points || []).map((p) => h('li', {}, p))),
@@ -101,7 +101,7 @@
         }) }, 'Save record');
         const cur = st.signing != null ? st.picked.get(st.signing) : null;
         const pad = cur ? signPad(cur.name, (strokes) => { cur.strokes = strokes; st.signing = null; render(); }, () => { st.signing = null; render(); }) : null;
-        api.page('form', h('div', { class: 'card form', 'data-deliver': t.id }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewTalk(t) }, 'Back to the talk'),
+        api.page('form', h('div', { class: 'card form', 'data-deliver': t.id }, api.back('Back to the talk', () => viewTalk(t)),
           h('h1', {}, t.title), h('p', { class: 'muted' }, 'Read the key points together, tick who attended, then ask each person to sign on the screen.'),
           sel, h('label', { for: 'd-date' }, 'Date'), date, h('label', { for: 'd-presenter' }, 'Given by'), pres, h('label', { for: 'd-notes' }, 'Notes (optional)'), notes,
           h('h2', {}, 'Who attended'),
@@ -144,7 +144,7 @@
       const multi = api.props().length > 1;
       const row = (s) => h('button', { class: 'talkrow', type: 'button', 'data-record': s.id, onclick: () => viewRecord(s.id) },
         h('span', { class: 'ttitle' }, s.talk_title), h('span', { class: 'muted small' }, api.shortDate(s.delivered_on) + (multi ? ' · ' + api.siteName(s.property_id) : '') + ' · ' + (count[s.id] || 0) + (count[s.id] === 1 ? ' person' : ' people') + ' · ' + s.presenter));
-      api.page('form', h('div', { class: 'card' }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewLibrary() }, 'Back to all talks'), h('h1', {}, 'Talk records'),
+      api.page('form', h('div', { class: 'card' }, api.back('Back to all talks', () => viewLibrary()), h('h1', {}, 'Talk records'),
         msg ? h('div', { class: 'msg ok', role: 'status' }, msg) : null,
         h('p', { class: 'muted' }, 'Every talk you have run, with who attended and their signatures. Records cannot be changed or deleted.'),
         ...(sessions.length ? sessions.map(row) : [h('p', { class: 'muted' }, 'No talks recorded yet.')])));
@@ -170,7 +170,7 @@
         const a = h('a', { href: url, download: 'toolbox-talk-' + s.delivered_on + '-' + s.talk_title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '.pdf' });
         document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
       } }, 'Download PDF');
-      api.page('form', h('div', { class: 'card form', 'data-record-page': id }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewRecords() }, 'Back to records'),
+      api.page('form', h('div', { class: 'card form', 'data-record-page': id }, api.back('Back to records', () => viewRecords()),
         h('h1', {}, s.talk_title), msg ? h('div', { class: 'msg ok', role: 'status' }, msg) : null,
         h('div', { class: 'kv' }, h('span', {}, 'Date'), h('span', {}, api.shortDate(s.delivered_on))), h('div', { class: 'kv' }, h('span', {}, 'Site'), h('span', {}, api.siteName(s.property_id))),
         h('div', { class: 'kv' }, h('span', {}, 'Given by'), h('span', {}, s.presenter)), s.notes ? h('div', { class: 'kv' }, h('span', {}, 'Notes'), h('span', {}, s.notes)) : null,
@@ -187,7 +187,7 @@
       const row = (t) => h('div', { class: 'econ', 'data-own': t.id }, h('span', {}, h('strong', {}, t.title), h('span', { class: 'muted small' }, ' · ' + t.category)),
         h('span', { class: 'rowtools' }, h('button', { class: 'btn small ghost', type: 'button', 'data-edit-own': t.id, onclick: () => viewOwnForm(t) }, 'Edit'),
           h('button', { class: 'btn small ghost', type: 'button', 'data-remove-own': t.id, onclick: async () => { const r = await sb.from('toolbox_talks').delete().eq('id', t.id); if (r.error) return viewOwn('Sorry, that did not work.'); viewOwn('Talk removed. Records of talks already given are kept.'); } }, 'Remove')));
-      api.page('form', h('div', { class: 'card' }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewLibrary() }, 'Back to all talks'), h('h1', {}, 'My own talks'),
+      api.page('form', h('div', { class: 'card' }, api.back('Back to all talks', () => viewLibrary()), h('h1', {}, 'My own talks'),
         msg ? h('div', { class: 'msg ok', role: 'status' }, msg) : null,
         h('p', { class: 'muted' }, 'Write talks that fit your own sites. You can have up to 10 (' + own.length + ' in use).'),
         ...(own.length ? own.map(row) : [h('p', { class: 'muted' }, 'You have not written any talks yet.')]),
@@ -210,7 +210,7 @@
         if (r.error) return ctx.message(box, 'err', /talk_limit/.test(r.error.message || '') ? 'You can have up to 10 of your own talks.' : 'Sorry, that did not save. Please try again.');
         viewOwn(t ? 'Talk saved.' : 'Talk added.');
       }) }, 'Save talk');
-      api.page('form', h('div', { class: 'card form' }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewOwn() }, 'Back'), h('h1', {}, t ? 'Edit talk' : 'Add my own talk'),
+      api.page('form', h('div', { class: 'card form' }, api.back('Back', () => viewOwn()), h('h1', {}, t ? 'Edit talk' : 'Add my own talk'),
         h('label', { for: 'o-title' }, 'Title'), title, h('label', { for: 'o-cat' }, 'Category'), category, h('label', { for: 'o-summary' }, 'Short summary (optional)'), summary,
         h('label', { for: 'o-points' }, 'Key points (one per line)'), points, h('label', { for: 'o-discuss' }, 'Questions to talk about (optional, one per line)'), discuss,
         h('label', { for: 'o-min' }, 'Minutes'), mins, save, box));

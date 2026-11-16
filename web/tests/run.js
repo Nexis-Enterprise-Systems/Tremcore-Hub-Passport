@@ -733,10 +733,10 @@ const USERS = {
     check('home: My Tasks tile counts pending tasks', (await t.page.locator('[data-q=tasks]').innerText()).includes('2 pending'));
     await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
     check('add-on not bought: explains the price and offers a pay-now button (not an email)', (await t.page.locator('.card').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('button#extra-add').count()) === 1 && (await t.page.locator('[data-extra] a[href^=mailto]').count()) === 0);
-    await t.page.click('text=Back to home'); await t.page.waitForSelector('#view-full');
+    await t.page.click('[data-back]'); await t.page.waitForSelector('#view-full');
     await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
     check('Staff Clock In / Out is charged per site', (await t.page.locator('.card').innerText()).includes('per site'));
-    await t.page.click('text=Back to home'); await t.page.click('#view-full'); await t.page.waitForSelector('[data-ctab]');
+    await t.page.click('[data-back]'); await t.page.click('#view-full'); await t.page.waitForSelector('[data-ctab]');
     check('compliance: three tabs, Overview / By Category / Due Soon', (await t.page.locator('[data-ctab]').allInnerTexts()).join() === 'Overview,By Category,Due Soon');
     await t.page.click('[data-ctab=due]');
     check('Due Soon lists overdue, due-soon and no-date checks but not in-date ones', (await t.page.locator('.item').count()) === 3 && (await t.page.locator('.item:has-text("EICR")').count()) === 0 && (await t.page.locator('.item').first().innerText()).includes('Fire Alarm Test'));
@@ -764,7 +764,7 @@ const USERS = {
     check('emergency: removing a contact works', (await t.page.locator('.econ').count()) === 1);
     await t.page.selectOption('#e-site', 's2'); await t.page.waitForSelector('#e-assembly');
     check('emergency: each site has its own details', (await t.page.locator('#e-assembly').inputValue()) === '' && (await t.page.locator('.econ').count()) === 0);
-    await t.page.click('text=Back to home'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#b-save');
+    await t.page.click('[data-back]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#b-save');
     check('settings: business info, premises, subscription, customised tasks, help and account are all there', (await t.page.locator('.appbody h2').allInnerTexts()).join('|').replace(/\s+/g, ' ') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
     check('settings: subscription shows the plan, two sites and the price including the extra site', (await t.page.locator('.appbody').innerText()).includes('Self-Managed') && (await t.page.locator('.appbody').innerText()).includes('£22.98 + VAT per month'));
     check('settings: customised tasks shows how many of the 10 repeating tasks are used', (await t.page.locator('.appbody').innerText()).includes('2 of 10'));
@@ -785,6 +785,10 @@ const USERS = {
     await t.page.click('[data-nav=tasks]'); await t.page.waitForSelector('.taskrow');
     check('view-only: tasks are listed with no add, done or remove buttons', (await t.page.locator('#add-task').count()) === 0 && (await t.page.locator('[data-done]').count()) === 0 && (await t.page.locator('[data-del]').count()) === 0);
     await t.page.click('[data-nav=home]'); await t.page.click('[data-q=emergency]'); await t.page.waitForSelector('.econ');
+    check('back: the page has one clear Back button', (await t.page.locator('[data-back]').count()) === 1 && (await t.page.locator('[data-back]').innerText()).includes('Back'));
+    await t.page.goBack(); await t.page.waitForSelector('[data-q=emergency]');
+    check('back: the phone/browser back button returns to the previous screen', (await t.page.locator('[data-back]').count()) === 0);
+    await t.page.click('[data-q=emergency]'); await t.page.waitForSelector('.econ');
     check('view-only: emergency information is shown as text only', (await t.page.locator('#e-save').count()) === 0 && (await t.page.locator('#c-add').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Car park'));
     await t.ctx.close();
     // an add-on that has been bought is shown as active, not offered again
@@ -814,11 +818,11 @@ const USERS = {
     check('toolbox talks: the saved record shows who attended with their signatures', (await t.page.locator('[data-attendee]').count()) === 2 && (await t.page.locator('[data-attendee] .sigsvg').count()) === 2 && (await t.page.locator('.msg.ok').innerText()).includes('Record saved'));
     const dl = t.page.waitForEvent('download'); await t.page.click('#rec-pdf'); const dd = await dl; const fs2 = require('fs'); const pth = await dd.path(); const pdfBytes = fs2.readFileSync(pth);
     check('toolbox talks: the record downloads as a real PDF named after the date and talk', pdfBytes.slice(0, 5).toString() === '%PDF-' && pdfBytes.toString('latin1').includes('Jo Bloggs') && pdfBytes.toString('latin1').includes('Slips, Trips and Falls') && /^toolbox-talk-\d{4}-\d{2}-\d{2}-slips-trips-and-falls\.pdf$/.test(dd.suggestedFilename()));
-    await t.page.click('text=Back to records'); await t.page.waitForSelector('.talkrow');
+    await t.page.click('[data-back]'); await t.page.waitForSelector('.talkrow');
     check('toolbox talks: the records list shows the old record and the new one, with attendance counts', (await t.page.locator('[data-record]').count()) === 2 && (await t.page.locator('.talkrow').first().innerText()).includes('2 people'));
     await t.page.click('[data-record=old1]'); await t.page.waitForSelector('[data-attendee]');
     check('toolbox talks: an older record opens with its signature', (await t.page.locator('[data-attendee]').innerText()).includes('Jo Bloggs'));
-    await t.page.click('text=Back to records'); await t.page.click('text=Back to all talks'); await t.page.click('#tb-own'); await t.page.waitForSelector('#own-add');
+    await t.page.click('[data-back]'); await t.page.click('[data-back]'); await t.page.click('#tb-own'); await t.page.waitForSelector('#own-add');
     check('toolbox talks: head office sees its own talks and how many of 10 are used', (await t.page.locator('[data-own]').count()) === 1 && (await t.page.locator('.card').innerText()).includes('1 in use'));
     await t.page.click('#own-add'); await t.page.click('#o-save'); check('toolbox talks: an own talk needs a title', (await t.page.locator('.msg.err').innerText()).includes('title'));
     await t.page.fill('#o-title', 'Ladder rules'); await t.page.click('#o-save'); check('toolbox talks: an own talk needs a key point', (await t.page.locator('.msg.err').innerText()).includes('key point'));
@@ -874,7 +878,7 @@ const USERS = {
     t = await newPage(appSeed, { owned: true, role: 'client_site', rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('.talkrow'); await t.page.click('[data-talk=tt1]'); await t.page.waitForSelector('.points');
     check('toolbox talks: a view-only user can read a talk but cannot run one, and has no own-talks button', (await t.page.locator('#tb-deliver').count()) === 0 && (await t.page.locator('.card').innerText()).includes('can read the talk'));
-    await t.page.click('text=Back to all talks'); await t.page.waitForSelector('.talkrow');
+    await t.page.click('[data-back]'); await t.page.waitForSelector('.talkrow');
     check('toolbox talks: only head office is offered My own talks', (await t.page.locator('#tb-own').count()) === 0 && (await t.page.locator('#tb-records').count()) === 1);
     await t.ctx.close();
 
