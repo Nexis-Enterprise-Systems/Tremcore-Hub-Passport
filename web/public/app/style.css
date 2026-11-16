@@ -209,6 +209,16 @@ body.passport main>:nth-child(n+3),body.formwide main>:nth-child(n+3){margin-top
 .item .meta{font-size:.76rem}
 .item .tag{font-size:.68rem;padding:2px 8px}
 .group h3{margin:14px 0 6px;font-size:.85rem}
+fieldset.checkrow,fieldset.sitepick{border:1px solid var(--line);border-radius:12px;padding:6px 14px 10px;margin:0 0 8px;min-width:0}
+fieldset.checkrow legend,fieldset.sitepick legend{padding:0 6px;font-size:.92rem;font-weight:600;color:var(--text)}
+.sitechecks{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
+.sitechecks .check,fieldset.sitepick .check{display:inline-flex;align-items:center;gap:8px;margin:2px 0;font-weight:400;font-size:.92rem}
+.sitechecks input[type=checkbox],fieldset.sitepick input[type=checkbox]{width:18px;height:18px;flex:none}
+fieldset.sitepick .check{display:flex}
+.rowtools{margin-left:auto;display:flex;gap:14px}
+.rowtools .linkbtn{padding:2px 0;font-size:.85rem}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.btnrow .btn.small{margin-top:0}
 @media (min-width:960px){
   body.passport,body.formwide{padding-top:20px}
   body.passport main>.logo,body.formwide main>.logo{width:84px}

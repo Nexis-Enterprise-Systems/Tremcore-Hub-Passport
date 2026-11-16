@@ -45,6 +45,7 @@
   // Managed clients (Levels 2 and 3) get Call Tremcore. The phone number is a placeholder until the real one is known.
   const SUPPORT_EMAIL = 'hello@tremcore.co.uk';
   let contactLevel = 1;
+  let setupNote = null;   // shown once on the passport right after first-run set-up
   const callBar = () => h('div', { class: 'callbar' }, contactLevel > 1
     ? h('a', { href: 'tel:+440000000000', id: 'contact-tremcore' }, 'Call Tremcore')
     : h('a', { href: 'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('Tremcore Passport help'), id: 'contact-tremcore' }, 'Email Tremcore'));
@@ -237,7 +238,8 @@
       a.is_head && h('button', { class: 'btn', id: 'team-open', onclick: () => viewTeam() }, 'Manage my team'),
       a.is_head && a.state !== 'cancelling' && h('button', { class: 'btn ghost', id: 'cancel-start', onclick: () => viewCancel() }, 'Cancel my subscription'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')];
-    return window.TCPassport.mount({ sb, h, show: showIn, message, busy, fmtDate, req, banner, account });
+    const note = setupNote; setupNote = null;
+    return window.TCPassport.mount({ sb, h, show: showIn, message, busy, fmtDate, req, banner, account, note });
   }
 
   // Pay now: the server makes a Stripe payment page for THIS company (it looks the company up from the signed-in token), and we go there.
@@ -308,6 +310,7 @@
         const sitesOut = siteRows.map((x) => ({ id: x.id, name: titleCase(x.name.value.trim()) || x.was, address: x.address.value.trim() || null }));
         const r = await sb.rpc('finish_setup', { p_phone: phone.value.trim() || null, p_address: addr.value.trim() || null, p_codes: codes, p_sites: sitesOut });
         if (r.error) return message(box, 'err', 'Sorry, we could not save that. Please try again, or contact Tremcore.');
+        if (siteRows.length > 1 && codes.length) setupNote = 'The checks you ticked were added to every site. Different sites need different checks, so use "Checks by site" below to change what each site has.';
         route();
       });
     } },

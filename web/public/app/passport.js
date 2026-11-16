@@ -52,7 +52,7 @@
 
   async function mount(ctx) {
     const { sb, h, message, busy, fmtDate } = ctx;
-    let props = [], items = [], rights = { can_edit: false, can_manage: false }, loadError = false;
+    let props = [], items = [], core = [], rights = { can_edit: false, can_manage: false }, loadError = false;
     let site = 'all', filter = 'all';
     // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
     const page = (mode, ...nodes) => { ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
@@ -60,13 +60,14 @@
 
     async function reload() {
       try {
-        const [p, i, r] = await Promise.all([
+        const [p, i, r, cc] = await Promise.all([
           sb.from('properties').select('id,name').order('name'),
           sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,status,days_left').order('title'),
-          sb.rpc('passport_rights')
+          sb.rpc('passport_rights'),
+          sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort')
         ]);
         if (p.error || i.error) throw new Error('load');
-        props = p.data || []; items = i.data || [];
+        props = p.data || []; items = i.data || []; core = (cc && cc.data) || [];
         rights = (r && r.data && r.data[0]) || { can_edit: false, can_manage: false };
         loadError = false;
       } catch { loadError = true; }
@@ -127,7 +128,7 @@
             h('span', { class: 'tag ' + r.status }, ST[r.status].label)))));
 
       const checksCard = h('div', { class: 'card' },
-        h('div', { class: 'titlerow' }, h('h2', {}, 'Your checks'), rights.can_manage && props.length ? h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check') : null),
+        h('div', { class: 'titlerow' }, h('h2', {}, 'Your checks'), rights.can_manage && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks'), h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check')) : null),
         rows.length ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
         ...(list.length ? list : [rows.length ? h('p', { class: 'muted' }, 'Nothing here.') : h('p', { class: 'muted' }, rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.')]));
 
@@ -249,6 +250,74 @@
         msg, form, remove), h('div', { class: 'card' }, docsBox)));
     }
 
+    // ---------- which checks apply to which site ----------
+    // Rows are check names (the standard ten plus anything the business added); columns are sites. Ticking adds the check to that site
+    // with no date yet; unticking removes it (after a warning if it holds dates, notes or documents).
+    async function viewSites(note) {
+      page('form', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
+      await reload();
+      const key = (t) => String(t || '').trim().toLowerCase();
+      const rowsBy = new Map();
+      core.forEach((c) => rowsBy.set(key(c.label), { k: key(c.label), title: c.label, grp: c.grp, basis: c.basis, frequency_months: c.frequency_months, order: c.sort }));
+      items.forEach((i) => { if (!rowsBy.has(key(i.title))) rowsBy.set(key(i.title), { k: key(i.title), title: i.title, grp: i.grp || 'Other', basis: i.basis || 'standard', frequency_months: i.frequency_months || null, order: 1000 }); });
+      const rowList = Array.from(rowsBy.values()).sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+      const at = (k, pid) => items.filter((i) => key(i.title) === k && i.property_id === pid);
+      const initial = new Set(); rowList.forEach((r) => props.forEach((p) => { if (at(r.k, p.id).length) initial.add(r.k + '|' + p.id); }));
+      const msg = h('div', { id: 'sites-msg' });
+      if (note) message(msg, 'ok', note);
+      const boxes = {};
+      const sections = {};
+      rowList.forEach((r) => { (sections[r.grp] = sections[r.grp] || []).push(r); });
+      const setRow = (r, on) => props.forEach((p) => { boxes[r.k + '|' + p.id].checked = on; });
+      const body = Object.keys(sections).map((g) => h('div', { class: 'group' }, h('h3', {}, g), ...sections[g].map((r) =>
+        h('fieldset', { class: 'checkrow', 'data-check': r.k }, h('legend', {}, r.title),
+          h('div', { class: 'sitechecks' }, ...props.map((p) => {
+            const box = h('input', { type: 'checkbox', 'data-row': r.k, 'data-site': p.id, 'aria-label': r.title + ' at ' + p.name, checked: initial.has(r.k + '|' + p.id) });
+            boxes[r.k + '|' + p.id] = box; return h('label', { class: 'check' }, box, ' ' + p.name);
+          }), props.length > 1 ? h('span', { class: 'rowtools' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => setRow(r, true) }, 'All'), h('button', { type: 'button', class: 'linkbtn', onclick: () => setRow(r, false) }, 'None')) : null)))));
+
+      const save = h('button', { class: 'btn', type: 'button', id: 'sites-save' }, 'Save changes');
+      async function apply(adds, removeIds, removeDocsOf) {
+        if (adds.length) {
+          let uid = null; try { uid = (await sb.auth.getSession()).data.session.user.id; } catch { uid = null; }
+          const ins = await sb.from('compliance_items').insert(adds.map((a) => ({ property_id: a.pid, grp: a.r.grp, title: a.r.title, basis: a.r.basis, frequency_months: a.r.frequency_months || null, created_by: uid })));
+          if (ins.error) return message(msg, 'err', 'Sorry, the new checks could not be added, so nothing was changed.');
+        }
+        if (removeIds.length) {
+          if (removeDocsOf.length) { const x = await sb.storage.from('documents').remove(removeDocsOf); if (x.error) return message(msg, 'err', 'Sorry, some documents could not be removed. Please try again.'); }
+          const del = await sb.from('compliance_items').delete().in('id', removeIds);
+          if (del.error) return message(msg, 'err', 'Sorry, some checks could not be removed. Please try again.');
+        }
+        await reload(); viewList('Checks updated: ' + adds.length + ' added, ' + removeIds.length + ' removed.');
+      }
+      save.addEventListener('click', async () => {
+        const adds = [], removeIds = [], removed = [];
+        rowList.forEach((r) => props.forEach((p) => {
+          const was = initial.has(r.k + '|' + p.id), now = boxes[r.k + '|' + p.id].checked;
+          if (now && !was) adds.push({ r, pid: p.id });
+          if (!now && was) at(r.k, p.id).forEach((i) => { removeIds.push(i.id); removed.push({ i, r, p }); });
+        }));
+        if (!adds.length && !removeIds.length) return message(msg, 'ok', 'No changes to save.');
+        await busy(save, async () => {
+          let docPaths = [], withDocs = new Set();
+          if (removeIds.length) {
+            const d = await sb.from('documents').select('item_id,storage_path').in('item_id', removeIds);
+            ((d && d.data) || []).forEach((x) => { docPaths.push(x.storage_path); withDocs.add(x.item_id); });
+          }
+          const holds = removed.filter((x) => x.i.due_date || x.i.last_done || x.i.notes || withDocs.has(x.i.id));
+          if (!holds.length) return apply(adds, removeIds, docPaths);
+          // Something with real information in it would be lost: say so, and ask again.
+          const sure = h('button', { class: 'btn', type: 'button', id: 'sites-confirm' }, 'Yes, save and delete them');
+          sure.addEventListener('click', () => busy(sure, () => apply(adds, removeIds, docPaths)));
+          msg.replaceChildren(h('div', { class: 'msg err', role: 'alert' }, h('strong', {}, 'These checks hold dates, notes or documents, which will be deleted: '),
+            h('ul', {}, ...holds.map((x) => h('li', {}, x.r.title + (props.length > 1 ? ' at ' + x.p.name : ''))))), sure);
+        });
+      });
+      page('form', h('div', { class: 'card' }, goBack(), h('h1', {}, props.length > 1 ? 'Checks by site' : 'Choose your checks'),
+        h('p', { class: 'muted' }, props.length > 1 ? 'Different buildings need different checks. Tick the checks each site needs. A newly ticked check starts with no date, so it shows as "No date" until you enter one.' : 'Tick the checks your site needs. A newly ticked check starts with no date, so it shows as "No date" until you enter one.'),
+        ...body, msg, save, h('p', { class: 'muted small' }, 'Need something that is not listed? Go back and use Add a check.')));
+    }
+
     // ---------- add your own check ----------
     function viewAdd() {
       const msg = h('div', { id: 'add-msg' });
@@ -259,7 +328,8 @@
       const freq = h('input', { id: 'a-freq', type: 'number', min: '1', max: '120', inputmode: 'numeric' });
       const last = h('input', { id: 'a-last', type: 'date' });
       const due = h('input', { id: 'a-due', type: 'date' });
-      const siteSel = props.length > 1 ? h('select', { id: 'a-site' }, h('option', { value: 'all' }, 'All my sites'), ...props.map((p) => h('option', { value: p.id, selected: site === p.id }, p.name))) : null;
+      const siteBoxes = props.length > 1 ? h('fieldset', { class: 'sitepick' }, h('legend', {}, 'Which sites need this check?'),
+        ...props.map((p) => h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'a-site', value: p.id, checked: site === 'all' || site === p.id }), ' ' + p.name))) : null;
       const suggest = () => { const d = addMonths(last.value, parseInt(freq.value, 10)); if (d) due.value = d; };
       last.addEventListener('input', suggest); freq.addEventListener('input', suggest);
       const save = h('button', { class: 'btn', type: 'submit' }, 'Add this check');
@@ -270,8 +340,8 @@
         const f = freq.value.trim() === '' ? null : Number(freq.value);
         if (f !== null && (!Number.isInteger(f) || f < 1 || f > 120)) return message(msg, 'err', 'Repeat every: please enter a whole number of months between 1 and 120, or leave it empty.');
         if (!validDate(last.value) || !validDate(due.value)) return message(msg, 'err', 'Please check the dates.');
-        const target = siteSel ? (siteSel.value === 'all' ? props.map((p) => p.id) : [siteSel.value]) : props.map((p) => p.id);
-        if (!target.length) return message(msg, 'err', 'You have no site to add this to yet.');
+        const target = siteBoxes ? Array.from(siteBoxes.querySelectorAll('input:checked')).map((x) => x.value) : props.map((p) => p.id);
+        if (!target.length) return message(msg, 'err', 'Please tick at least one site.');
         let uid = null; try { uid = (await sb.auth.getSession()).data.session.user.id; } catch { uid = null; }
         await busy(save, async () => {
           const rows = target.map((pid) => ({ property_id: pid, grp: grp.value, title: t, basis: basis.value, frequency_months: f, last_done: last.value || null, due_date: due.value || null, created_by: uid }));
@@ -280,7 +350,7 @@
           await reload(); viewList('Check added.');
         });
       } },
-        siteSel ? h('label', { for: 'a-site' }, 'Site') : null, siteSel,
+        siteBoxes,
         h('label', { for: 'a-title' }, 'Name of the check'), title,
         h('label', { for: 'a-grp' }, 'Group'), grp,
         h('label', { for: 'a-basis' }, 'Basis'), basis,
@@ -294,7 +364,7 @@
 
     page('dash', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading your passport…')));
     await reload();
-    viewList();
+    viewList(ctx.note);
   }
 
   window.TCPassport = { mount, addMonths, tally };

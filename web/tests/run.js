@@ -589,6 +589,7 @@ const USERS = {
       const rights = cfg && cfg.rights, level = cfg && cfg.level;
       const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       window.__mock.tables = { properties: [{ id: 's1', name: 'High Street' }, { id: 's2', name: 'Station Road' }], documents: [],
+        core_checks: [{ code: 'c0', label: 'Fire Risk Assessment', grp: 'Fire safety', basis: 'legal', frequency_months: 12, sort: 1 }, { code: 'c5', label: 'PAT Testing', grp: 'Electrical', basis: 'standard', frequency_months: 12, sort: 6 }],
         compliance_items: [
           { id: 'i1', property_id: 's1', grp: 'Fire safety', title: 'Fire Alarm Test', due_date: day(-3), basis: 'legal', notes: 'Quarterly' },
           { id: 'i2', property_id: 's1', grp: 'Gas', title: 'Gas Safety', due_date: day(10) },
@@ -638,11 +639,30 @@ const USERS = {
     await t.page.click('#add-check'); await t.page.waitForSelector('#a-title');
     await t.page.click('button[type=submit]');
     check('add check: a name is required', (await t.page.locator('#add-msg').innerText()).includes('give the check a name'));
-    await t.page.fill('#a-title', 'Kitchen Extract Cleaning'); await t.page.selectOption('#a-site', 'all'); await t.page.selectOption('#a-basis', 'best_practice'); await t.page.fill('#a-freq', '6'); await t.page.fill('#a-last', '2026-03-31');
+    await t.page.fill('#a-title', 'Kitchen Extract Cleaning'); await t.page.check('input[name=a-site][value=s2]'); await t.page.selectOption('#a-basis', 'best_practice'); await t.page.fill('#a-freq', '6'); await t.page.fill('#a-last', '2026-03-31');
     check('add check: the next due date is suggested here too (31 Mar + 6 months = 30 Sep)', (await t.page.inputValue('#a-due')) === '2026-09-30');
     await t.page.click('button[type=submit]'); await t.page.waitForSelector('text=Check added');
     const ins = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'insert').pop();
     check('add check: one record per chosen site, with its own title, basis and repeat period', ins.payload.length === 2 && ins.payload.map((x) => x.property_id).sort().join() === 's1,s2' && ins.payload[0].title === 'Kitchen Extract Cleaning' && ins.payload[0].basis === 'best_practice' && ins.payload[0].frequency_months === 6 && (await t.page.locator('.item:has-text("Kitchen Extract Cleaning")').count()) === 1);
+    // different sites need different checks
+    await t.page.click('#manage-sites'); await t.page.waitForSelector('.checkrow');
+    check('by site: one row per check name (standard ones plus the business\'s own), one tick box per site', (await t.page.locator('.checkrow').count()) === 6 && (await t.page.locator('[data-row="pat testing"]').count()) === 2 && (await t.page.locator('[data-row="pat testing"][data-site=s1]').isChecked()) && !(await t.page.locator('[data-row="pat testing"][data-site=s2]').isChecked()));
+    await t.page.check('[data-row="fire risk assessment"][data-site=s1]'); await t.page.check('[data-row="pat testing"][data-site=s2]'); await t.page.uncheck('[data-row="pat testing"][data-site=s1]');
+    await t.page.click('#sites-save'); await t.page.waitForSelector('text=Checks updated');
+    const addIns = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'insert').pop();
+    check('by site: ticking adds the check to that site only, with its standard group, basis and repeat period and no date', addIns.payload.length === 2 && addIns.payload.some((x) => x.property_id === 's1' && x.title === 'Fire Risk Assessment' && x.grp === 'Fire safety' && x.basis === 'legal' && x.frequency_months === 12 && !x.due_date) && addIns.payload.some((x) => x.property_id === 's2' && x.title === 'PAT Testing' && x.grp === 'Electrical'));
+    check('by site: an empty check can be removed from one site without a warning, and the other site keeps its own', (await t.page.locator('#sites-confirm').count()) === 0 && (await t.page.locator('.item:has-text("PAT Testing")').count()) === 0 && (await t.page.locator('text=2 added, 1 removed').count()) === 1);
+    await t.page.click('.sitecard[data-site=s2]');
+    check('by site: the other site now has its own PAT Testing, with no date', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date');
+    await t.page.click('.sitecard[data-site=s1]');
+    await t.page.click('#manage-sites'); await t.page.waitForSelector('.checkrow'); await t.page.uncheck('[data-row="gas safety"][data-site=s1]'); await t.page.click('#sites-save'); await t.page.waitForSelector('#sites-confirm');
+    check('by site: removing a check that has a date warns first and names it', (await t.page.locator('#sites-msg').innerText()).includes('Gas Safety at High Street') && (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'delete').length === 2);
+    await t.page.click('#sites-confirm'); await t.page.waitForSelector('text=1 removed');
+    const gdel = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'delete').pop();
+    check('by site: after the second confirmation only that check is deleted', gdel.filters.join() === 'id=i2' && (await t.page.locator('.item:has-text("Gas Safety")').count()) === 0);
+    await t.page.click('#add-check'); await t.page.waitForSelector('#a-title'); await t.page.fill('#a-title', 'Boiler Service'); await t.page.check('input[name=a-site][value=s2]'); await t.page.uncheck('input[name=a-site][value=s1]'); await t.page.click('button[type=submit]'); await t.page.waitForSelector('text=Check added');
+    const one = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'insert').pop();
+    check('add check: tick any combination of sites (here only the second one)', one.payload.length === 1 && one.payload[0].property_id === 's2' && one.payload[0].title === 'Boiler Service');
     check('date helper: end of month and leap years are handled', await t.page.evaluate(() => window.TCPassport.addMonths('2026-01-31', 1) === '2026-02-28' && window.TCPassport.addMonths('2028-01-31', 1) === '2028-02-29' && window.TCPassport.addMonths('2026-11-30', 3) === '2027-02-28' && window.TCPassport.addMonths('nope', 3) === '' && window.TCPassport.addMonths('2026-01-01', 0) === ''));
     await t.ctx.close();
     // view-only users (site user with view, or a managed client) see everything but can change nothing
