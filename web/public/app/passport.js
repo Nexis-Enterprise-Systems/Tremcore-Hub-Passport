@@ -68,7 +68,7 @@
     let site = 'all', filter = 'all', tab = 'home', ctab = 'overview', ttab = 'pending';
     const isHead = !!(ctx.req && ctx.req.role_name === 'client_super');
     // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
-    const page = (mode, ...nodes) => { ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
+    const page = (mode, ...nodes) => { onExtra = null; ctx.show(...nodes); document.body.classList.add(mode === 'dash' ? 'passport' : 'formwide'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     const siteName = (id) => (props.find((p) => p.id === id) || {}).name || '';
 
     async function reload() {
@@ -314,16 +314,84 @@
     }
 
     // ---------- paid add-ons (Toolbox Talks, Staff Clock In / Out) ----------
-    function viewExtra(code) {
+    // The head-office user is sent to Stripe to pay; the add-on switches on when Stripe confirms (the database decides, not this screen).
+    let onExtra = null, extraChecks = 0;
+    async function startExtraPayment(code, btn, box) {
+      await ctx.busy(btn, async () => {
+        try {
+          const { data: { session } } = await sb.auth.getSession();
+          const r = await fetch('/api/checkout-extra', { method: 'POST', headers: { Authorization: 'Bearer ' + ((session && session.access_token) || ''), 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+          const j = await r.json().catch(() => ({}));
+          if (r.ok && j.url) { location.href = j.url; return; }
+          ctx.message(box, 'err', j.error || 'Sorry, we could not start the payment. Please try again, or contact Tremcore.');
+        } catch { ctx.message(box, 'err', 'Sorry, we could not start the payment. Please try again, or contact Tremcore.'); }
+      });
+    }
+    // Coming back from Stripe: wait (up to about a minute) for the confirmation, then show the add-on.
+    async function afterExtraPayment(code, paid) {
+      const clean = () => { try { history.replaceState(null, '', '/app/'); } catch { /* ignore */ } };
+      if (!extraOf(code) || !EXTRA_DEFAULT.some((x) => x.code === code)) { clean(); return viewHome(); }
+      if (paid !== '1') { clean(); return viewExtra(code, 'cancelled'); }
+      await reload();
+      if (extraOf(code).owned) { clean(); extraChecks = 0; return viewExtra(code, 'thanks'); }
+      extraChecks += 1;
+      if (extraChecks > 20) { clean(); extraChecks = 0; return viewExtra(code, 'late'); }
+      viewExtra(code, 'confirming');
+      setTimeout(() => { if (onExtra === code) afterExtraPayment(code, '1'); }, 3000);
+    }
+    function viewExtra(code, state) {
       const e = extraOf(code);
-      const mail = 'mailto:hello@tremcore.co.uk?subject=' + encodeURIComponent('Add ' + e.name) + '&body=' + encodeURIComponent('Please add ' + e.name + ' to my account.');
+      if (e.owned && state !== 'confirming' && code === 'staff_signin') return viewClock(state === 'thanks' ? e.name + ' is now on your account. Add the people who will use it below.' : null);
+      const box = h('div', {});
+      const sites = props.length || 1, qty = e.charged_per === 'site' ? sites : 1;
+      const total = e.price_pence * qty;
       page('form', h('div', { class: 'card form', 'data-extra': code }, backTo('Back to home'), h('h1', {}, e.name),
         h('p', {}, e.description),
-        e.owned
+        state === 'confirming' ? h('div', { class: 'msg ok', role: 'status', id: 'extra-confirming' }, 'Thank you. We are waiting for your payment to be confirmed. This page updates by itself, usually within a few seconds.') : null,
+        state === 'cancelled' ? h('div', { class: 'msg err', role: 'status' }, 'The payment was not completed. You have not been charged. You can try again when you are ready.') : null,
+        state === 'late' ? h('div', { class: 'msg err', role: 'status' }, 'Your payment is taking longer than usual to confirm. Please check again in a few minutes. If it still has not appeared, email Tremcore and we will sort it out.') : null,
+        state === 'thanks' && e.owned ? h('div', { class: 'msg ok', role: 'status' }, 'Thank you. ' + e.name + ' is now on your account.') : null,
+        e.owned && state !== 'confirming'
           ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account. We are finishing this screen and it will appear here very soon.')
-          : [h('p', { class: 'big' }, priceText(e)),
-            isHead ? [h('a', { class: 'btn', id: 'extra-add', href: mail }, 'Add ' + e.name), h('p', { class: 'muted small' }, 'Online payment for add-ons is coming very soon. Until then, this button emails Tremcore and we will switch it on for you.')]
-              : h('p', { class: 'muted' }, 'Ask your head-office user to add this to your account.')]));
+          : state === 'confirming' ? null : [h('p', { class: 'big' }, priceText(e)),
+            e.charged_per === 'site' ? h('p', { class: 'muted' }, 'You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month.') : null,
+            isHead && ((company && company.level) || 1) === 1
+              ? [h('button', { class: 'btn', id: 'extra-add', type: 'button', onclick: (ev) => startExtraPayment(code, ev.target, box) }, 'Add ' + e.name + ' · pay now'),
+                h('p', { class: 'muted small' }, 'You will be taken to our secure payment page. The add-on starts as soon as your payment is confirmed and is added to your monthly subscription.')]
+              : h('p', { class: 'muted' }, 'Ask your head-office user to add this to your account.'), box]));
+      onExtra = code;
+    }
+
+    // ---------- Staff Clock In / Out: who uses it ----------
+    async function viewClock(note, pid) {
+      tab = 'home';
+      if (!props.length) return viewHome('Add a site first.');
+      pid = pid || (site !== 'all' ? site : props[0].id);
+      page('form', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
+      const r = await sb.from('staff_members').select('*').eq('property_id', pid).order('full_name');
+      const staff = (r && r.data) || [];
+      const can = rights.can_edit, box = h('div', {});
+      const name = h('input', { id: 's-name', maxlength: '120', autocomplete: 'off' }), title = h('input', { id: 's-title', maxlength: '120', autocomplete: 'off' });
+      const refresh = (n) => viewClock(n, pid);
+      const add = h('button', { class: 'btn small', id: 's-add', type: 'button', onclick: (ev) => ctx.busy(ev.target, async () => {
+        if (!name.value.trim()) return ctx.message(box, 'err', 'Please enter the person\'s name.');
+        const res = await sb.from('staff_members').insert({ property_id: pid, full_name: name.value.trim(), job_title: title.value.trim() });
+        if (res.error) return ctx.message(box, 'err', /staff_limit/.test(res.error.message || '') ? 'You can add up to 300 people per site.' : 'Sorry, that did not save. Please try again.');
+        refresh('Person added.');
+      }) }, 'Add person');
+      const row = (m) => h('div', { class: 'econ', 'data-staff': m.id },
+        h('span', {}, h('strong', {}, m.full_name), m.job_title ? h('span', { class: 'muted small' }, ' · ' + m.job_title) : null, m.active ? null : h('span', { class: 'tag missing' }, 'Not active')),
+        can ? h('span', { class: 'rowtools' },
+          h('button', { class: 'btn small ghost', type: 'button', 'data-toggle-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').update({ active: !m.active }).eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh(m.active ? 'Marked as not active.' : 'Marked as active.'); } }, m.active ? 'Stop' : 'Restore'),
+          h('button', { class: 'btn small ghost', type: 'button', 'data-rm-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').delete().eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh('Person removed.'); } }, 'Remove')) : null);
+      const sitePick = props.length > 1 ? [h('label', { for: 's-site' }, 'Site'), h('select', { id: 's-site', onchange: (ev) => viewClock(null, ev.target.value) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
+      page('form', h('div', { class: 'card form' }, backTo('Back to home'), h('h1', {}, 'Staff Clock In / Out'),
+        note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, sitePick,
+        h('h2', {}, 'People who use it at ' + siteName(pid)),
+        ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, 'Nobody added yet. Add the people who need to clock in and out at this site.')]),
+        can ? [h('label', { for: 's-name' }, 'Name'), name, h('label', { for: 's-title' }, 'Job title (optional)'), title, add] : h('p', { class: 'muted' }, 'You can see this list but not change it.'),
+        box),
+        h('div', { class: 'card', id: 'clock-soon' }, h('h2', {}, 'Site QR code and attendance'), h('p', { class: 'muted' }, 'The QR code for each site, the clock-in page staff will use and the attendance record are being finished and will appear here in the next update. The people you add now will be ready for it.')));
     }
 
     // ---------- Settings ----------
@@ -598,6 +666,7 @@
 
     page('dash', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading your passport…')));
     await reload();
+    if (ctx.returned && ctx.returned.extra) return afterExtraPayment(ctx.returned.extra, ctx.returned.paid);
     viewHome(ctx.note);
   }
 

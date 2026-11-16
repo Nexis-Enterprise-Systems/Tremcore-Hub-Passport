@@ -230,6 +230,7 @@
       banner = h('div', { class: 'msg err', role: 'status' }, 'Your account is due to close on ' + fmtDate(a.ends_at) + '. After that you will not be able to sign in and your data will be removed.',
         a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async () => { await sb.rpc('withdraw_cancellation'); route(); } }, 'Keep my account')));
     }
+    const returned = { extra: new URLSearchParams(location.search).get('extra'), paid: new URLSearchParams(location.search).get('paid') };   // coming back from paying for an add-on
     if (location.search.includes('paid=')) history.replaceState(null, '', '/app/');
     const account = [
       h('div', { class: 'kv' }, h('span', {}, 'Access'), h('span', {}, ROLE_LABEL[req.role_name] || req.role_name)),
@@ -239,7 +240,7 @@
       a.is_head && a.state !== 'cancelling' && h('button', { class: 'btn ghost', id: 'cancel-start', onclick: () => viewCancel() }, 'Cancel my subscription'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')];
     const note = setupNote; setupNote = null;
-    return window.TCPassport.mount({ sb, h, show: showIn, message, busy, fmtDate, req, banner, account, note });
+    return window.TCPassport.mount({ sb, h, show: showIn, message, busy, fmtDate, req, banner, account, note, returned });
   }
 
   // Pay now: the server makes a Stripe payment page for THIS company (it looks the company up from the signed-in token), and we go there.

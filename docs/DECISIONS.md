@@ -59,3 +59,11 @@
 - Compliance has Overview / By Category / Due Soon. My Tasks has Pending / Completed; up to 10 repeating ("customised") tasks per business. Emergency Information is per site: contacts, assembly point, gas/water/electric shut-offs. Settings holds business info, premises, subscription, customised tasks, help, account.
 - Toolbox Talks (£3.99 per company) and Staff Clock In / Out (£6.99 per site) are paid extras: always visible with an Add button when not bought; the real screens only open when the database says the business owns the extra (`my_extras()`). Stage 1 Add button emails Tremcore; Stripe purchase is the next stage.
 - Tasks and emergency details follow the same rights as checks: Level 1 head office / update / full can change them, view-only and Level 2/3 clients cannot (enforced in the database, tested).
+
+## Buying add-ons online (16 Nov 2026)
+- Add on Toolbox Talks / Staff Clock In / Out sends the head-office user of an active Level 1 account straight to Stripe Checkout. Tremcore is not emailed. The add-on switches on only when Stripe's signed message confirms payment.
+- Each add-on is its own monthly Stripe subscription on the same Stripe customer (card carries over). Staff Clock In / Out is charged per site (all current sites at purchase); Toolbox Talks per company. Add-ons are monthly even on a yearly account.
+- Add-on payments, failures and cancellation are routed by subscription id and can never change the main account's status (tested). A failed add-on payment is not yet acted on beyond Stripe's own retries.
+- `monthly_value_pence` now includes active add-ons.
+- Staff Clock In / Out: `staff_members` register (people per site, active/not active, up to 300 per site), only usable while the add-on is owned. The QR code per site, the public clock-in page and attendance records are the next stage. Toolbox Talks library and talk management are to be designed later.
+- Not yet handled: adding a site later does not yet raise the Staff Clock In / Out quantity.

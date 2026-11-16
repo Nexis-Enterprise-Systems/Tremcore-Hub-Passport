@@ -32,6 +32,26 @@ function checkoutParams({ companyId, sites, interval, email, origin, methods }) 
   return q;
 }
 
+// An add-on is its own small subscription, charged monthly. The Stripe customer is reused when we already have one, so the card details carry over.
+function extraCheckoutParams({ companyId, code, name, unitPence, quantity, customerId, email, origin }) {
+  if (!companyId || !code || !(unitPence > 0) || !(quantity >= 1 && quantity <= 100)) throw new Error('bad checkout details');
+  const q = new URLSearchParams();
+  q.set('mode', 'subscription');
+  q.set('client_reference_id', companyId);
+  if (customerId) q.set('customer', customerId); else if (email) q.set('customer_email', email);
+  for (const pre of ['metadata', 'subscription_data[metadata]']) {
+    q.set(pre + '[company_id]', companyId); q.set(pre + '[kind]', 'extra'); q.set(pre + '[extra_code]', code); q.set(pre + '[quantity]', String(quantity));
+  }
+  q.set('line_items[0][quantity]', String(quantity));
+  q.set('line_items[0][price_data][currency]', 'gbp');
+  q.set('line_items[0][price_data][unit_amount]', String(unitPence));
+  q.set('line_items[0][price_data][recurring][interval]', 'month');
+  q.set('line_items[0][price_data][product_data][name]', name);
+  q.set('success_url', origin + '/app/?extra=' + encodeURIComponent(code) + '&paid=1');
+  q.set('cancel_url', origin + '/app/?extra=' + encodeURIComponent(code) + '&paid=0');
+  return q;
+}
+
 // Stripe signs every message it sends us. Anything that does not verify is thrown away.
 function verifySignature(rawBody, header, secret, nowSeconds, toleranceSeconds) {
   if (!secret || !header) return false;
@@ -59,6 +79,10 @@ function eventToAction(ev) {
     case 'checkout.session.async_payment_succeeded':
       // Card payments are paid straight away. Direct Debit says 'unpaid' until the money clears, then sends async_payment_succeeded.
       if (o.payment_status !== 'paid') return null;
+      if (o.metadata && o.metadata.kind === 'extra') {
+        const qty = parseInt(o.metadata.quantity, 10);
+        return Object.assign(base, { action: 'extra_paid', company: o.client_reference_id || o.metadata.company_id || null, subscription: o.subscription || null, extra: o.metadata.extra_code || null, quantity: qty >= 1 ? qty : 1 });
+      }
       return Object.assign(base, { action: 'paid', company: o.client_reference_id || (o.metadata && o.metadata.company_id) || null, subscription: o.subscription || null });
     case 'invoice.paid':
       return Object.assign(base, { action: 'paid', subscription: invoiceSubscription(o) });
@@ -71,4 +95,4 @@ function eventToAction(ev) {
   }
 }
 
-module.exports = { PRICES, checkoutParams, verifySignature, eventToAction };
+module.exports = { PRICES, checkoutParams, extraCheckoutParams, verifySignature, eventToAction };

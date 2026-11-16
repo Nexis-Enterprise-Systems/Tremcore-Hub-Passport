@@ -72,11 +72,12 @@ const USERS = {
   const realFetch = global.fetch; const sent = [];
   const PC = { 'ME44TL': { latitude: 51.381, longitude: 0.527 }, 'NR11AA': { latitude: 52.63, longitude: 1.29 }, 'ME14AA': { latitude: 51.39, longitude: 0.50 } };
   let pcDown = false;
-  const stripeCalls = [], applied = []; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
+  const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   global.fetch = (u, o) => {
     const url = String(u);
     if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info') { sent.push({ u: url, o }); return Promise.resolve(extraReply.status === 200 ? new Response(JSON.stringify(extraReply.rows), { status: 200 }) : new Response(JSON.stringify({ message: extraReply.message || 'not_allowed' }), { status: extraReply.status })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/apply_stripe_event') { applied.push({ u: url, o, body: JSON.parse(o.body) }); return Promise.resolve(new Response(JSON.stringify(applyResult), { status: applyStatus })); }
     if (url.startsWith('https://api.postcodes.io/postcodes/')) {
       if (pcDown) return Promise.resolve(new Response('x', { status: 500 }));
@@ -123,6 +124,22 @@ const USERS = {
     const saved = billingRows; billingRows = []; rr = await co(); check('pay: someone who is not a head-office user is refused', rr.status === 403);
     billingRows = [Object.assign({}, saved[0], { subscription: 'active' })]; rr = await co(); check('pay: an account that has already paid is not charged again', rr.status === 409); billingRows = saved;
     stripeFail = true; rr = await co(); check('pay: if Stripe refuses, the person gets a plain message, not an error dump', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
+    // add-ons
+    const ce = (code, b) => realFetch(base + '/api/checkout-extra', { method: 'POST', headers: Object.assign({ Authorization: 'Bearer user-token', 'Content-Type': 'application/json' }, b || {}), body: JSON.stringify({ code }) });
+    const n0 = stripeCalls.length; rr = await ce('staff_signin'); const ep = new URLSearchParams(stripeCalls[n0] && stripeCalls[n0].o.body);
+    check('add-on: a head-office user is sent to a Stripe page', rr.status === 200 && (await rr.json()).url.startsWith('https://checkout.stripe.test/'));
+    check('add-on: charged monthly per site (3 sites = 3 x £6.99) as its own subscription, tagged so the webhook knows it is an add-on', ep.get('line_items[0][quantity]') === '3' && ep.get('line_items[0][price_data][unit_amount]') === '699' && ep.get('line_items[0][price_data][recurring][interval]') === 'month' && ep.get('metadata[kind]') === 'extra' && ep.get('subscription_data[metadata][extra_code]') === 'staff_signin' && ep.get('metadata[quantity]') === '3');
+    check('add-on: the existing Stripe customer is reused so their card carries over, and they return to the app', ep.get('customer') === 'cus_1' && !ep.get('customer_email') && ep.get('success_url').endsWith('/app/?extra=staff_signin&paid=1') && ep.get('cancel_url').endsWith('/app/?extra=staff_signin&paid=0'));
+    check('add-on: the person is checked with their own token', sent.filter((x) => x.u.endsWith('/rpc/extra_checkout_info')).pop().o.headers.Authorization === 'Bearer user-token');
+    rr = await realFetch(base + '/api/checkout-extra', { method: 'POST', body: '{"code":"staff_signin"}' }); check('add-on: no sign-in, no payment page', rr.status === 401);
+    rr = await ce('staff_signin', { Origin: 'https://evil.example' }); check('add-on: another website cannot start it', rr.status === 403);
+    rr = await ce('Bad Code!'); check('add-on: a nonsense code is refused before anything happens', rr.status === 400);
+    extraReply = { status: 400, message: 'already_owned' }; rr = await ce('staff_signin'); check('add-on: already owned is explained, not charged again', rr.status === 409);
+    extraReply = { status: 403, message: 'not_allowed' }; rr = await ce('staff_signin'); check('add-on: someone who may not buy it is refused', rr.status === 403);
+    extraReply = { status: 200, rows: [] }; rr = await ce('staff_signin'); check('add-on: no row back means refused', rr.status === 403);
+    extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'p@x', stripe_customer_id: null, name: 'Toolbox Talks', price_pence: 399, charged_per: 'company', quantity: 1 }] }; const n1 = stripeCalls.length; await ce('toolbox_talks'); const tp = new URLSearchParams(stripeCalls[n1].o.body);
+    check('add-on: Toolbox Talks is one £3.99 charge per company; a first-time customer is created from their email', tp.get('line_items[0][quantity]') === '1' && tp.get('line_items[0][price_data][unit_amount]') === '399' && !tp.get('customer') && tp.get('customer_email') === 'p@x');
+    stripeFail = true; rr = await ce('toolbox_talks'); check('add-on: if Stripe refuses, a plain message only', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
     // webhook
     const evt = (type, obj, id) => JSON.stringify({ id: id || 'evt_' + type, type, data: { object: obj } });
     const sign = (body, secret, t) => { const ts = t || Math.floor(Date.now() / 1000); return 't=' + ts + ',v1=' + crypto.createHmac('sha256', secret || 'whsec_testsecret').update(ts + '.' + body).digest('hex'); };
@@ -143,6 +160,9 @@ const USERS = {
     const del = evt('customer.subscription.deleted', { id: 'sub_1', customer: 'cus_1' }, 'evt_del');
     rr = await hook(del, sign(del)); check('webhook: a cancelled subscription is passed on as cancelled', applied.length === 4 && applied[3].body.p_action === 'cancelled');
     const other = evt('customer.created', { id: 'cus_9' }, 'evt_other'); rr = await hook(other, sign(other)); check('webhook: events we do not care about are accepted and ignored', rr.status === 200 && applied.length === 4);
+    const xs = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_x', metadata: { kind: 'extra', extra_code: 'staff_signin', quantity: '3', company_id: 'co-1' } }, 'evt_extra');
+    const nA = applied.length; rr = await realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'Stripe-Signature': sign(xs) }, body: xs });
+    check('webhook: a paid add-on is passed on as an add-on with its code and quantity (not as the main account)', rr.status === 200 && applied.length === nA + 1 && applied[nA].body.p_action === 'extra_paid' && applied[nA].body.p_extra === 'staff_signin' && applied[nA].body.p_quantity === 3 && applied[nA].body.p_subscription === 'sub_x');
     applyStatus = 500; rr = await hook(paidBody, sign(paidBody)); check('webhook: if the database is down we answer with an error so Stripe tries again', rr.status === 500); applyStatus = 200;
     check('billing helpers: signature check accepts a good one and rejects junk', billing.verifySignature('x', sign('x'), 'whsec_testsecret') && !billing.verifySignature('x', 'garbage', 'whsec_testsecret') && !billing.verifySignature('x', sign('x'), ''));
     check('billing helpers: price for 100 sites is built without error and 101 is refused', (() => { try { billing.checkoutParams({ companyId: 'c', sites: 100, interval: 'monthly', origin: 'https://x' }); } catch { return false; } try { billing.checkoutParams({ companyId: 'c', sites: 101, interval: 'monthly', origin: 'https://x' }); return false; } catch { return true; } })());
@@ -682,8 +702,8 @@ const USERS = {
 
     // the app-style screens: Home, Tasks, Emergency Information, Settings and the paid add-ons
     const appExtra = (cfg) => {
-      window.__mock.users['site@t'].profile.role_name = 'client_super';
-      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }];
+      window.__mock.users['site@t'].profile.role_name = (cfg && cfg.role) || 'client_super';
+      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: cfg.owned === true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: cfg.owned === 'staff' }];
       const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       window.__mock.tables.companies = [{ id: 'c1', name: 'Test Co', contact_phone: '01634 000000', address: '1 High St', level: (cfg && cfg.level) || 1, billing_interval: 'monthly', subscription: 'active' }];
       window.__mock.tables.properties[0].address = '1 High St';
@@ -692,6 +712,7 @@ const USERS = {
         { id: 't2', property_id: 's1', title: 'Monthly alarm test', notes: '', due_date: day(5), repeat_months: 1, status: 'pending' },
         { id: 't3', property_id: 's2', title: 'Old job', notes: '', due_date: day(-40), repeat_months: null, status: 'done', completed_at: new Date().toISOString() }];
       window.__mock.tables.site_emergency = [{ id: 'e1', property_id: 's1', assembly_point: 'Car park', gas_shutoff: 'Back store', water_shutoff: '', electric_shutoff: '', notes: '' }];
+      window.__mock.tables.staff_members = [{ id: 'm1', property_id: 's1', full_name: 'Jo Bloggs', job_title: 'Cleaner', active: true }];
       window.__mock.tables.emergency_contacts = [{ id: 'k1', property_id: 's1', name: 'Sam Keyholder', role: 'Keyholder', phone: '07000 000000' }];
     };
     // the page runs this as one self-contained function, so the two seeds are joined into one piece of text
@@ -702,7 +723,7 @@ const USERS = {
     check('home: Quick Access has the four tiles; the paid add-ons show an Add button and their price', (await t.page.locator('.qtile').count()) === 4 && (await t.page.locator('.qtile.locked .tag.add').count()) === 2 && (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('£3.99') && (await t.page.locator('[data-q=staff_signin]').innerText()).includes('£6.99'));
     check('home: My Tasks tile counts pending tasks', (await t.page.locator('[data-q=tasks]').innerText()).includes('2 pending'));
     await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
-    check('add-on not bought: explains the price, offers Add (head office) and has no working feature behind it', (await t.page.locator('.card').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('#extra-add').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk'));
+    check('add-on not bought: explains the price and offers a pay-now button (not an email)', (await t.page.locator('.card').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('button#extra-add').count()) === 1 && (await t.page.locator('[data-extra] a[href^=mailto]').count()) === 0);
     await t.page.click('text=Back to home'); await t.page.waitForSelector('#view-full');
     await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
     check('Staff Clock In / Out is charged per site', (await t.page.locator('.card').innerText()).includes('per site'));
@@ -756,6 +777,48 @@ const USERS = {
     check('a bought add-on is not shown as locked; one not bought still is', (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('30+ available') && (await t.page.locator('[data-q=toolbox_talks].locked').count()) === 0 && (await t.page.locator('.qtile.locked').count()) === 1);
     await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
     check('a bought add-on page shows it is active and has no Add button', (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.msg.ok').innerText()).includes('active'));
+    await t.ctx.close();
+
+    // buying an add-on: straight to Stripe, no email to Tremcore; the add-on appears when Stripe has confirmed
+    t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    let extraReq = null; await t.page.route('**/api/checkout-extra', (rt) => { extraReq = { auth: rt.request().headers().authorization, body: rt.request().postData() }; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
+    await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('#extra-add');
+    check('add-on: the page shows the per-site total (2 sites x £6.99 = £13.98 + VAT per month)', (await t.page.locator('.card').innerText()).includes('2 × £6.99 = £13.98 + VAT per month'));
+    await t.page.click('#extra-add'); await t.page.waitForURL('**/healthz');
+    check('add-on: Add sends the sign-in token and the add-on code to our server, then goes to the payment page', extraReq && extraReq.auth === 'Bearer tok-site@t' && JSON.parse(extraReq.body).code === 'staff_signin');
+    await t.ctx.close();
+    t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    await t.page.route('**/api/checkout-extra', (rt) => rt.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'You already have this add-on.' }) }));
+    await t.page.click('[data-q=toolbox_talks]'); await t.page.click('#extra-add'); await t.page.waitForSelector('.msg.err');
+    check('add-on: if the server refuses, the person sees its plain message and stays on the page', (await t.page.locator('.msg.err').innerText()).includes('already have') && (await t.page.locator('#extra-add').count()) === 1);
+    await t.ctx.close();
+    t = await newPage(appSeed, { role: 'client_site', rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra]');
+    check('add-on: a user who is not head office has no pay button and is told to ask head office', (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Ask your head-office user'));
+    await t.ctx.close();
+    // coming back from Stripe: waits for the confirmation, then opens the add-on
+    t = await newPage(appSeed, {}); await t.page.goto(base + '/app/?extra=toolbox_talks&paid=1'); await login(t.page, 'site@t'); await t.page.waitForSelector('#extra-confirming');
+    check('back from Stripe: the person sees that the payment is being confirmed, with no pay button', (await t.page.locator('#extra-add').count()) === 0);
+    await t.page.evaluate(() => { window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }]; });
+    await t.page.waitForSelector('text=is now on your account', { timeout: 8000 });
+    check('back from Stripe: once confirmed it says the add-on is on the account, and the web address is tidied', (await t.page.locator('.msg.ok').first().innerText()).includes('Toolbox Talks') && new URL(t.page.url()).search === '');
+    await t.ctx.close();
+    t = await newPage(appSeed, {}); await t.page.goto(base + '/app/?extra=staff_signin&paid=0'); await login(t.page, 'site@t'); await t.page.waitForSelector('.msg.err');
+    check('back from Stripe without paying: told they have not been charged and can try again', (await t.page.locator('.msg.err').innerText()).includes('not been charged') && (await t.page.locator('#extra-add').count()) === 1);
+    await t.ctx.close();
+    // Staff Clock In / Out once bought: the register of people who use it
+    t = await newPage(appSeed, { owned: 'staff' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    check('staff: a bought Staff Clock In / Out tile is not locked', (await t.page.locator('[data-q=staff_signin].locked').count()) === 0);
+    await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('#s-add');
+    check('staff: shows the people at the site and says the QR code and attendance are coming', (await t.page.locator('[data-staff]').count()) === 1 && (await t.page.locator('.econ').innerText()).includes('Jo Bloggs') && (await t.page.locator('#clock-soon').innerText()).includes('QR code'));
+    await t.page.click('#s-add'); check('staff: a person needs a name', (await t.page.locator('.msg.err').innerText()).includes('name'));
+    await t.page.fill('#s-name', 'Al Smith'); await t.page.fill('#s-title', 'Manager'); await t.page.click('#s-add'); await t.page.waitForSelector('text=Person added.');
+    check('staff: a person can be added and appears in the list', (await t.page.locator('[data-staff]').count()) === 2);
+    await t.page.click('[data-toggle-staff=m1]'); await t.page.waitForSelector('text=Marked as not active.');
+    check('staff: a person can be marked not active without losing them', (await t.page.locator('[data-staff=m1] .tag').innerText()) === 'Not active');
+    await t.page.click('[data-rm-staff=m1]'); await t.page.waitForSelector('text=Person removed.');
+    check('staff: a person can be removed', (await t.page.locator('[data-staff]').count()) === 1);
+    await t.page.selectOption('#s-site', 's2'); await t.page.waitForSelector('text=Nobody added yet');
+    check('staff: each site has its own list', (await t.page.locator('[data-staff]').count()) === 0);
     await t.ctx.close();
 
     // team page: the head-office user chooses who can do what

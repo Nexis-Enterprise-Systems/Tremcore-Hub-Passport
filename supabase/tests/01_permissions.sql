@@ -702,4 +702,62 @@ select 'settings: head office can rename a site (tidied to capital letters)' as 
 select * from deny('settings: head office cannot rename another company''s site', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select update_site('20000000-0000-0000-0000-0000000000b1','Hacked','x')$$);
 -- extras
 select * from chk('extras: a business that has bought nothing owns no extras but can see what is on offer', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select count(*)=2 from my_extras()) and (select count(*)=0 from my_extras() where owned)$$);
+-- buying add-ons, and keeping an add-on's payments away from the main account
+update companies set subscription='active', stripe_customer_id='cus_A', stripe_subscription_id='sub_main', access_ends_at=null, billing_interval='monthly' where id='10000000-0000-0000-0000-00000000000a';
+delete from company_extras where company_id='10000000-0000-0000-0000-00000000000a';
+select * from chk('extras buy: head office of an active Level 1 account gets the checkout details (staff sign in is per site)', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=(select count(*) from properties where company_id='10000000-0000-0000-0000-00000000000a') and price_pence=699 and stripe_customer_id='cus_A' from extra_checkout_info('staff_signin'))$$);
+select * from chk('extras buy: toolbox talks is one per company', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=1 and price_pence=399 from extra_checkout_info('toolbox_talks'))$$);
+select * from deny('extras buy: a site user cannot buy an add-on', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select * from extra_checkout_info('toolbox_talks')$$);
+select * from deny('extras buy: a Level 2 client cannot buy an add-on', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select * from extra_checkout_info('toolbox_talks')$$);
+select * from deny('extras buy: an unknown add-on is refused', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select * from extra_checkout_info('nonsense')$$);
+select * from deny('extras buy: head office without 2FA is refused', '00000000-0000-0000-0000-0000000000a2', 'aal1', $$select * from extra_checkout_info('toolbox_talks')$$);
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_x1','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','paid_dummy');
+exception when others then reset role; end $$;
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_x2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','extra_paid','toolbox_talks',1);
+  if r <> 'extra_applied' then raise exception 'got %', r; end if;
+  r := apply_stripe_event('evt_x2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','extra_paid','toolbox_talks',1);
+  if r <> 'duplicate' then raise exception 'not idempotent: %', r; end if;
+  reset role;
+end $$;
+select 'extras buy: a confirmed payment switches the add-on on, once (a repeated message changes nothing)' as test, (select count(*)=1 and bool_and(status='active' and stripe_item_id='sub_tt') from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks') as ok;
+select 'extras buy: the account value now includes the add-on' as test, (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') + 399 from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+select * from chk('extras buy: the business now owns Toolbox Talks and not Staff Clock In', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select owned from my_extras() where code='toolbox_talks') and not (select owned from my_extras() where code='staff_signin')$$);
+select * from deny('extras buy: an add-on already owned cannot be bought twice', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select * from extra_checkout_info('toolbox_talks')$$);
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_x3','invoice.payment_failed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','failed');
+  if r <> 'extra_ignored' then raise exception 'got %', r; end if;
+  r := apply_stripe_event('evt_x4','invoice.paid','10000000-0000-0000-0000-00000000000a','cus_A','sub_new_extra','paid');
+  if r <> 'other_subscription' then raise exception 'got %', r; end if;
+  reset role;
+end $$;
+select 'extras buy: an add-on payment failure, or an unknown subscription''s invoice, never touches the main account' as test, (select subscription='active' and stripe_subscription_id='sub_main' from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_x5','customer.subscription.deleted','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt','cancelled');
+  if r <> 'extra_cancelled' then raise exception 'got %', r; end if;
+  reset role;
+end $$;
+select 'extras buy: cancelling an add-on switches only it off; the account stays active' as test, (select subscription='active' from companies where id='10000000-0000-0000-0000-00000000000a') and (select status='cancelled' from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks') and (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+-- staff register
+select * from deny('staff: nobody can add staff before buying Staff Clock In', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$insert into staff_members(property_id,full_name) values ('20000000-0000-0000-0000-0000000000a1','Jo Bloggs')$$);
+insert into company_extras(company_id, extra_code, status, price_pence, quantity, stripe_item_id) values ('10000000-0000-0000-0000-00000000000a','staff_signin','active',699,2,'sub_ss') on conflict (company_id, extra_code) do update set status='active';
+select * from chk('staff: head office can add staff at a site once the add-on is bought (names tidied)', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with i as (insert into staff_members(property_id,full_name,job_title) values ('20000000-0000-0000-0000-0000000000a1','jo bloggs','Cleaner') returning full_name) select (select full_name from i)='Jo Bloggs'$$);
+select * from chk('staff: a site user with update can add staff at their site', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$with i as (insert into staff_members(property_id,full_name) values ('20000000-0000-0000-0000-0000000000a1','Al Smith') returning 1) select count(*)=1 from i$$);
+select * from deny('staff: a view-only user cannot add staff', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$insert into staff_members(property_id,full_name) values ('20000000-0000-0000-0000-0000000000a1','Nope')$$);
+select * from deny('staff: nobody can add staff at a site that is not theirs', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$insert into staff_members(property_id,full_name) values ('20000000-0000-0000-0000-0000000000a2','Nope')$$);
+select * from chk('staff: a view-only user can read the register, another company cannot', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select (select count(*)=2 from staff_members)$$);
+select * from chk('staff: a Level 2 client sees no staff of Company A', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select (select count(*)=0 from staff_members)$$);
+do $$ declare ok boolean := false; begin
+  update company_extras set status='cancelled', access_ends_at=now() where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='staff_signin';
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  if (select count(*) from staff_members) <> 0 then raise exception 'register still readable after the add-on stopped'; end if;
+  reset role;
+end $$;
+select 'staff: when the add-on stops, the register can no longer be read or changed' as test, true as ok;
 rollback;
