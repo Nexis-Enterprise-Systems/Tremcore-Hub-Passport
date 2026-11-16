@@ -802,4 +802,28 @@ do $$ begin
   reset role;
 end $$;
 select 'talks: when the add-on stops, the talks and records can no longer be read' as test, true as ok;
+-- standard formats
+select 'formats: phone numbers become 5 digits, a space, 6 digits (also from +44 and with odd spacing)' as test,
+  fmt_phone('01634123456')='01634 123456' and fmt_phone('+44 1634 123456')='01634 123456' and fmt_phone('07700 900 123')='07700 900123' and fmt_phone('(01634) 123-456')='01634 123456' and fmt_phone('')  is null as ok;
+select 'formats: a number that cannot be put in that shape is left as typed, not changed' as test, fmt_phone('12345')='12345' and fmt_phone('0800 111 999')='0800 111 999' as ok;
+select 'formats: postcodes become capitals with a space before the last 3 characters' as test,
+  fmt_postcode('me3 8fx')='ME3 8FX' and fmt_postcode('ME38FX')='ME3 8FX' and fmt_postcode('  sw1a1aa ')='SW1A 1AA' and fmt_postcode('m11ae')='M1 1AE' and fmt_postcode('')  is null and fmt_postcode('bad')='BAD' as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  perform update_business('01634123456','goldfinch grove, rochester','me38fx');
+  perform update_site('20000000-0000-0000-0000-0000000000a1','north road','12 high street, chatham','me4 4tl');
+  insert into emergency_contacts(property_id,name,role,phone) values ('20000000-0000-0000-0000-0000000000a2','sam keyholder','key holder','07700900123');
+  reset role;
+end $$;
+select 'formats: business phone, address and postcode are tidied when saved' as test,
+  (select contact_phone='01634 123456' and address='Goldfinch Grove, Rochester' and postcode='ME3 8FX' from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+select 'formats: a site address and postcode are tidied when saved' as test, (select address='12 High Street, Chatham' and postcode='ME4 4TL' from properties where id='20000000-0000-0000-0000-0000000000a1') as ok;
+select 'formats: an emergency contact name, role and phone are tidied' as test, (select name='Sam Keyholder' and role='Key Holder' and phone='07700 900123' from emergency_contacts where property_id='20000000-0000-0000-0000-0000000000a2' and phone='07700 900123') as ok;
+-- the people register works with either add-on
+update company_extras set status='active', access_ends_at=null where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks';
+update company_extras set status='cancelled', access_ends_at=now() where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='staff_signin';
+select * from chk('people: with only Toolbox Talks bought, head office can add and see people', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with i as (insert into staff_members(property_id,full_name) values ('20000000-0000-0000-0000-0000000000a1','pat jones') returning full_name) select (select full_name from i)='Pat Jones'$$);
+update company_extras set status='cancelled', access_ends_at=now() where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks';
+select * from chk('people: with neither add-on, the register cannot be read', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select count(*)=0 from staff_members$$);
 rollback;

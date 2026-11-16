@@ -79,3 +79,8 @@
 - Records are permanent: clients cannot change or delete them, and they keep the talk title and key points as they were on the day. A PDF is made in the browser on demand (`pdf.js`, no outside library), so nothing is stored twice.
 - If the add-on stops, the talks and records are hidden, like the staff register.
 - Not built yet: assigning a talk to a person in advance, reminders to run talks, a monthly schedule, and tick-box quiz questions.
+
+## Formats, postcodes and the people list (16 Nov 2026)
+- Names and addresses start every word with a capital; postcodes are capitals with a space (ME3 8FX), in their own box next to every address; phone numbers are 5 digits, a space, 6 digits (01634 123456, +44 accepted). Enforced by database triggers (migration 0022) and checked on screen with friendly messages (`web/public/app/format.js`).
+- Numbers that do not fit that shape (for example 0800 or 999 emergency numbers) are refused on screen for phone fields; the database leaves such text as typed.
+- One people list per site (`staff_members`) is shared by Staff Clock In/Out and Toolbox Talks. Talk attendees are ticked from that list; someone missing can be added on the spot. Reachable from Toolbox Talks via "People".

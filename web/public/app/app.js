@@ -296,20 +296,26 @@
   // ---------- First-run set-up: contact details, then tick the core checks that apply ----------
   async function viewSetup(co) {
     const checks = ((await sb.from('core_checks').select('code,label').order('sort')).data) || [];
-    const mySites = ((await sb.from('properties').select('id,name,address').order('name')).data) || [];
-    const siteRows = mySites.map((x) => ({ id: x.id, name: tidy(h('input', { 'aria-label': 'Name of ' + x.name, maxlength: '160', value: /^Site \d+$/.test(x.name) ? '' : x.name, placeholder: x.name })), address: h('input', { 'aria-label': 'Address of ' + x.name, maxlength: '300', value: x.address || '', autocomplete: 'off' }), was: x.name }));
+    const mySites = ((await sb.from('properties').select('id,name,address,postcode').order('name')).data) || [];
+    const siteRows = mySites.map((x) => ({ id: x.id, name: tidy(h('input', { 'aria-label': 'Name of ' + x.name, maxlength: '160', value: /^Site \d+$/.test(x.name) ? '' : x.name, placeholder: x.name })), address: window.TCFormat.tidyBox(h('input', { 'aria-label': 'Address of ' + x.name, maxlength: '300', value: x.address || '', autocomplete: 'off' })), postcode: window.TCFormat.tidyBox(h('input', { 'aria-label': 'Postcode of ' + x.name, maxlength: '12', value: x.postcode || '', autocomplete: 'off', placeholder: 'ME3 8FX' }), 'postcode'), was: x.name }));
     const box = h('div', { id: 'setup-msg' });
-    const phone = h('input', { id: 'st-phone', type: 'tel', autocomplete: 'tel', maxlength: '40' });
-    const addr = h('input', { id: 'st-addr', autocomplete: 'street-address', maxlength: '300' });
+    const F = window.TCFormat;
+    const phone = F.tidyBox(h('input', { id: 'st-phone', type: 'tel', autocomplete: 'tel', maxlength: '40', placeholder: '01634 123456' }), 'phone');
+    const addr = F.tidyBox(h('input', { id: 'st-addr', autocomplete: 'street-address', maxlength: '300' }));
+    const pcode = F.tidyBox(h('input', { id: 'st-pc', autocomplete: 'postal-code', maxlength: '12', placeholder: 'ME3 8FX' }), 'postcode');
     const boxes = checks.map((c) => h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'core', value: c.code }), h('span', {}, c.label)));
     const all = h('button', { type: 'button', class: 'linkbtn', id: 'st-all', onclick: () => root.querySelectorAll('input[name=core]').forEach((i) => { i.checked = true; }) }, 'Tick all');
     const btn = h('button', { class: 'btn', type: 'submit', id: 'st-go' }, 'Finish set-up');
     const form = h('form', { novalidate: true, onsubmit: async (e) => {
       e.preventDefault();
       const codes = [...root.querySelectorAll('input[name=core]:checked')].map((i) => i.value);
+      const ph = F.phone(phone.value), bpc = F.postcode(pcode.value);
+      if (!ph.ok) return message(box, 'err', F.PHONE_HELP);
+      if (!bpc.ok) return message(box, 'err', 'Business postcode: ' + F.POSTCODE_HELP);
+      const spcs = siteRows.map((x) => F.postcode(x.postcode.value)); if (spcs.some((q) => !q.ok)) return message(box, 'err', 'Site postcode: ' + F.POSTCODE_HELP);
       await busy(btn, async () => {
-        const sitesOut = siteRows.map((x) => ({ id: x.id, name: titleCase(x.name.value.trim()) || x.was, address: x.address.value.trim() || null }));
-        const r = await sb.rpc('finish_setup', { p_phone: phone.value.trim() || null, p_address: addr.value.trim() || null, p_codes: codes, p_sites: sitesOut });
+        const sitesOut = siteRows.map((x, i) => ({ id: x.id, name: titleCase(x.name.value.trim()) || x.was, address: F.cap(x.address.value.trim()) || null, postcode: spcs[i].value || null }));
+        const r = await sb.rpc('finish_setup', { p_phone: ph.value || null, p_address: F.cap(addr.value.trim()) || null, p_postcode: bpc.value || null, p_codes: codes, p_sites: sitesOut });
         if (r.error) return message(box, 'err', 'Sorry, we could not save that. Please try again, or contact Tremcore.');
         if (siteRows.length > 1 && codes.length) setupNote = 'The checks you ticked were added to every site. Different sites need different checks, so open Compliance and use "Checks by site" to change what each site has.';
         route();
@@ -318,9 +324,10 @@
       h('h3', {}, 'About your business'),
       h('label', { for: 'st-phone' }, 'Business phone number (optional)'), phone,
       h('label', { for: 'st-addr' }, 'Business address (optional)'), addr,
+      h('label', { for: 'st-pc' }, 'Postcode (optional)'), pcode,
       h('h3', {}, mySites.length === 1 ? 'Your site' : 'Your sites'),
       h('p', { class: 'muted small' }, 'Give each site a name and, if you like, its address. You can change these later.'),
-      ...siteRows.map((x, i) => h('div', { class: 'member', 'data-site-row': x.id }, h('label', {}, 'Site ' + (i + 1) + ' name'), x.name, h('label', {}, 'Address (optional)'), x.address)),
+      ...siteRows.map((x, i) => h('div', { class: 'member', 'data-site-row': x.id }, h('label', {}, 'Site ' + (i + 1) + ' name'), x.name, h('label', {}, 'Address (optional)'), x.address, h('label', {}, 'Postcode (optional)'), x.postcode)),
       h('h3', {}, 'Which compliance checks apply to your premises?'),
       h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
       h('div', { class: 'checklist' }, ...boxes), all, btn, box);

@@ -74,13 +74,13 @@
     async function reload() {
       try {
         const [p, i, r, cc, tk, ex, co] = await Promise.all([
-          sb.from('properties').select('id,name').order('name'),
+          sb.from('properties').select('id,name,address,postcode').order('name'),
           sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,status,days_left').order('title'),
           sb.rpc('passport_rights'),
           sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
           sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
           sb.rpc('my_extras'),
-          sb.from('companies').select('id,name,contact_phone,address,level,billing_interval,subscription').limit(1)
+          sb.from('companies').select('id,name,contact_phone,address,postcode,level,billing_interval,subscription').limit(1)
         ]);
         if (p.error || i.error) throw new Error('load');
         props = p.data || []; items = i.data || []; core = (cc && cc.data) || [];
@@ -291,10 +291,12 @@
         if (res.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please try again.');
         viewEmergency('Emergency information saved.', pid);
       }) }, 'Save');
-      const cname = h('input', { id: 'c-name', maxlength: '120', autocomplete: 'off' }), crole = h('input', { id: 'c-role', maxlength: '120', autocomplete: 'off' }), cphone = h('input', { id: 'c-phone', type: 'tel', maxlength: '40', autocomplete: 'off' });
+      const FM = window.TCFormat;
+      const cname = FM.tidyBox(h('input', { id: 'c-name', maxlength: '120', autocomplete: 'off' })), crole = FM.tidyBox(h('input', { id: 'c-role', maxlength: '120', autocomplete: 'off' })), cphone = FM.tidyBox(h('input', { id: 'c-phone', type: 'tel', maxlength: '40', autocomplete: 'off', placeholder: '01634 123456' }), 'phone');
       const addC = h('button', { class: 'btn small', id: 'c-add', type: 'button', onclick: async (ev) => ctx.busy(ev.target, async () => {
         if (!cname.value.trim()) return ctx.message(box, 'err', 'Please enter the contact\'s name.');
-        const res = await sb.from('emergency_contacts').insert({ property_id: pid, name: cname.value.trim(), role: crole.value.trim(), phone: cphone.value.trim() });
+        const ph = FM.phone(cphone.value); if (!ph.ok) return ctx.message(box, 'err', FM.PHONE_HELP);
+        const res = await sb.from('emergency_contacts').insert({ property_id: pid, name: FM.cap(cname.value.trim()), role: FM.cap(crole.value.trim()), phone: ph.value });
         if (res.error) return ctx.message(box, 'err', /contact_limit/.test(res.error.message || '') ? 'You can add up to 10 contacts per site.' : 'Sorry, that did not save. Please try again.');
         viewEmergency('Contact added.', pid);
       }) }, 'Add contact');
@@ -344,7 +346,7 @@
       if (e.owned && state !== 'confirming' && code === 'toolbox_talks') {
         tab = 'home';
         return window.TCToolbox.open({ sb, h, ctx, page, backTo, props: () => props, site: () => site, rights: () => rights, isHead: () => isHead, shortDate, siteName,
-          companyName: () => (company && company.name) || '', companyId: () => company && company.id }, state === 'thanks' ? e.name + ' is now on your account. Pick a talk to get started.' : null);
+          companyName: () => (company && company.name) || '', companyId: () => company && company.id, openPeople: (pid) => viewClock(null, pid, 'toolbox') }, state === 'thanks' ? e.name + ' is now on your account. Pick a talk to get started.' : null);
       }
       if (e.owned && state !== 'confirming' && code === 'staff_signin') return viewClock(state === 'thanks' ? e.name + ' is now on your account. Add the people who will use it below.' : null);
       const box = h('div', {});
@@ -368,7 +370,7 @@
     }
 
     // ---------- Staff Clock In / Out: who uses it ----------
-    async function viewClock(note, pid) {
+    async function viewClock(note, pid, from) {
       tab = 'home';
       if (!props.length) return viewHome('Add a site first.');
       pid = pid || (site !== 'all' ? site : props[0].id);
@@ -376,11 +378,11 @@
       const r = await sb.from('staff_members').select('*').eq('property_id', pid).order('full_name');
       const staff = (r && r.data) || [];
       const can = rights.can_edit, box = h('div', {});
-      const name = h('input', { id: 's-name', maxlength: '120', autocomplete: 'off' }), title = h('input', { id: 's-title', maxlength: '120', autocomplete: 'off' });
-      const refresh = (n) => viewClock(n, pid);
+      const name = window.TCFormat.tidyBox(h('input', { id: 's-name', maxlength: '120', autocomplete: 'off' })), title = window.TCFormat.tidyBox(h('input', { id: 's-title', maxlength: '120', autocomplete: 'off' }));
+      const refresh = (n) => viewClock(n, pid, from);
       const add = h('button', { class: 'btn small', id: 's-add', type: 'button', onclick: (ev) => ctx.busy(ev.target, async () => {
         if (!name.value.trim()) return ctx.message(box, 'err', 'Please enter the person\'s name.');
-        const res = await sb.from('staff_members').insert({ property_id: pid, full_name: name.value.trim(), job_title: title.value.trim() });
+        const res = await sb.from('staff_members').insert({ property_id: pid, full_name: window.TCFormat.cap(name.value.trim()), job_title: window.TCFormat.cap(title.value.trim()) });
         if (res.error) return ctx.message(box, 'err', /staff_limit/.test(res.error.message || '') ? 'You can add up to 300 people per site.' : 'Sorry, that did not save. Please try again.');
         refresh('Person added.');
       }) }, 'Add person');
@@ -389,39 +391,47 @@
         can ? h('span', { class: 'rowtools' },
           h('button', { class: 'btn small ghost', type: 'button', 'data-toggle-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').update({ active: !m.active }).eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh(m.active ? 'Marked as not active.' : 'Marked as active.'); } }, m.active ? 'Stop' : 'Restore'),
           h('button', { class: 'btn small ghost', type: 'button', 'data-rm-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').delete().eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh('Person removed.'); } }, 'Remove')) : null);
-      const sitePick = props.length > 1 ? [h('label', { for: 's-site' }, 'Site'), h('select', { id: 's-site', onchange: (ev) => viewClock(null, ev.target.value) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
-      page('form', h('div', { class: 'card form' }, backTo('Back to home'), h('h1', {}, 'Staff Clock In / Out'),
+      const sitePick = props.length > 1 ? [h('label', { for: 's-site' }, 'Site'), h('select', { id: 's-site', onchange: (ev) => viewClock(null, ev.target.value, from) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
+      const fromTalks = from === 'toolbox';
+      page('form', h('div', { class: 'card form' }, fromTalks ? h('button', { class: 'btn ghost', type: 'button', onclick: () => viewExtra('toolbox_talks') }, 'Back to Toolbox Talks') : backTo('Back to home'), h('h1', {}, fromTalks ? 'People at this site' : 'Staff Clock In / Out'),
         note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, sitePick,
-        h('h2', {}, 'People who use it at ' + siteName(pid)),
-        ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, 'Nobody added yet. Add the people who need to clock in and out at this site.')]),
+        h('h2', {}, (fromTalks ? 'People you can choose for talks at ' : 'People who use it at ') + siteName(pid)),
+        ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, fromTalks ? 'Nobody added yet. Add the people who will attend talks at this site.' : 'Nobody added yet. Add the people who need to clock in and out at this site.')]),
         can ? [h('label', { for: 's-name' }, 'Name'), name, h('label', { for: 's-title' }, 'Job title (optional)'), title, add] : h('p', { class: 'muted' }, 'You can see this list but not change it.'),
         box),
-        h('div', { class: 'card', id: 'clock-soon' }, h('h2', {}, 'Site QR code and attendance'), h('p', { class: 'muted' }, 'The QR code for each site, the clock-in page staff will use and the attendance record are being finished and will appear here in the next update. The people you add now will be ready for it.')));
+        fromTalks ? null : h('div', { class: 'card', id: 'clock-soon' }, h('h2', {}, 'Site QR code and attendance'), h('p', { class: 'muted' }, 'The QR code for each site, the clock-in page staff will use and the attendance record are being finished and will appear here in the next update. The people you add now will be ready for it.')));
     }
 
     // ---------- Settings ----------
     function viewSettings(note) {
       tab = 'settings';
       const box = h('div', {});
-      const bphone = h('input', { id: 'b-phone', type: 'tel', maxlength: '40', value: (company && company.contact_phone) || '' });
-      const baddr = h('input', { id: 'b-address', maxlength: '300', value: (company && company.address) || '' });
+      const F = window.TCFormat;
+      const bphone = F.tidyBox(h('input', { id: 'b-phone', type: 'tel', maxlength: '40', value: (company && company.contact_phone) || '', placeholder: '01634 123456' }), 'phone');
+      const baddr = F.tidyBox(h('input', { id: 'b-address', maxlength: '300', value: (company && company.address) || '' }));
+      const bpc = F.tidyBox(h('input', { id: 'b-postcode', maxlength: '12', value: (company && company.postcode) || '', placeholder: 'ME3 8FX' }), 'postcode');
       const bsave = h('button', { class: 'btn small', id: 'b-save', type: 'button', onclick: (ev) => ctx.busy(ev.target, async () => {
-        const r = await sb.rpc('update_business', { p_phone: bphone.value, p_address: baddr.value });
+        const ph = F.phone(bphone.value), pc = F.postcode(bpc.value);
+        if (!ph.ok) return ctx.message(box, 'err', F.PHONE_HELP);
+        if (!pc.ok) return ctx.message(box, 'err', F.POSTCODE_HELP);
+        const r = await sb.rpc('update_business', { p_phone: ph.value, p_address: F.cap(baddr.value.trim()), p_postcode: pc.value });
         if (r.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please try again.');
         await reload(); viewSettings('Business information saved.');
       }) }, 'Save');
       const biz = h('div', { class: 'card' }, h('h2', {}, 'Business Information'),
         h('div', { class: 'kv' }, h('span', {}, 'Business'), h('span', {}, (company && company.name) || '')),
-        isHead ? [h('label', { for: 'b-phone' }, 'Phone'), bphone, h('label', { for: 'b-address' }, 'Address'), baddr, bsave]
-          : [h('div', { class: 'kv' }, h('span', {}, 'Phone'), h('span', {}, (company && company.contact_phone) || '–')), h('div', { class: 'kv' }, h('span', {}, 'Address'), h('span', {}, (company && company.address) || '–'))]);
+        isHead ? [h('label', { for: 'b-phone' }, 'Phone'), bphone, h('label', { for: 'b-address' }, 'Address'), baddr, h('label', { for: 'b-postcode' }, 'Postcode'), bpc, bsave]
+          : [h('div', { class: 'kv' }, h('span', {}, 'Phone'), h('span', {}, (company && company.contact_phone) || '–')), h('div', { class: 'kv' }, h('span', {}, 'Address'), h('span', {}, [company && company.address, company && company.postcode].filter(Boolean).join(', ') || '–'))]);
       const siteRow = (p) => {
-        const n = h('input', { 'data-site-name': p.id, maxlength: '120', value: p.name, 'aria-label': 'Site name' });
-        const a = h('input', { 'data-site-addr': p.id, maxlength: '300', value: p.address || '', placeholder: 'Address', 'aria-label': 'Site address' });
-        return h('div', { class: 'siteedit' }, isHead ? [n, a, h('button', { class: 'btn small ghost', type: 'button', 'data-save-site': p.id, onclick: (ev) => ctx.busy(ev.target, async () => {
-          const r = await sb.rpc('update_site', { p_id: p.id, p_name: n.value, p_address: a.value });
+        const n = F.tidyBox(h('input', { 'data-site-name': p.id, maxlength: '120', value: p.name, 'aria-label': 'Site name' }));
+        const a = F.tidyBox(h('input', { 'data-site-addr': p.id, maxlength: '300', value: p.address || '', placeholder: 'Address', 'aria-label': 'Site address' }));
+        const z = F.tidyBox(h('input', { 'data-site-pc': p.id, maxlength: '12', value: p.postcode || '', placeholder: 'Postcode', 'aria-label': 'Site postcode' }), 'postcode');
+        return h('div', { class: 'siteedit' }, isHead ? [n, a, z, h('button', { class: 'btn small ghost', type: 'button', 'data-save-site': p.id, onclick: (ev) => ctx.busy(ev.target, async () => {
+          const pc = F.postcode(z.value); if (!pc.ok) return ctx.message(box, 'err', F.POSTCODE_HELP);
+          const r = await sb.rpc('update_site', { p_id: p.id, p_name: F.cap(n.value.trim()), p_address: F.cap(a.value.trim()), p_postcode: pc.value });
           if (r.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please check the name and try again.');
           await reload(); viewSettings('Site saved.');
-        }) }, 'Save')] : [h('strong', {}, p.name), h('span', { class: 'muted small' }, p.address || '')]);
+        }) }, 'Save')] : [h('strong', {}, p.name), h('span', { class: 'muted small' }, [p.address, p.postcode].filter(Boolean).join(', '))]);
       };
       const premises = h('div', { class: 'card' }, h('h2', {}, 'Manage Premises'), ...props.map(siteRow),
         h('p', { class: 'muted small' }, 'To add another site, ', h('a', { href: 'mailto:hello@tremcore.co.uk?subject=Add%20a%20site' }, 'email Tremcore'), '. Each site is £7.99 + VAT per month.'));

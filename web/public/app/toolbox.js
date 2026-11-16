@@ -40,7 +40,7 @@
       const row = (t) => h('button', { class: 'talkrow', type: 'button', 'data-talk': t.id, onclick: () => viewTalk(t) },
         h('span', { class: 'ttitle' }, t.title), h('span', { class: 'muted small' }, t.category + ' · ' + t.minutes + ' min'), t.company_id ? h('span', { class: 'tag green' }, 'Your own') : null);
       api.page('form', h('div', { class: 'card' }, api.backTo('Back to home'), h('div', { class: 'titlerow' }, h('h1', {}, 'Toolbox Talks'),
-        h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'tb-records', type: 'button', onclick: () => viewRecords() }, 'Records'), api.isHead() ? h('button', { class: 'btn small ghost', id: 'tb-own', type: 'button', onclick: () => viewOwn() }, 'My own talks') : null)),
+        h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'tb-records', type: 'button', onclick: () => viewRecords() }, 'Records'), h('button', { class: 'btn small ghost', id: 'tb-people', type: 'button', onclick: () => api.openPeople(api.site() !== 'all' ? api.site() : null) }, 'People'), api.isHead() ? h('button', { class: 'btn small ghost', id: 'tb-own', type: 'button', onclick: () => viewOwn() }, 'My own talks') : null)),
         msg ? h('div', { class: 'msg ok', role: 'status' }, msg) : null, loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load the talks. Please refresh the page.') : null,
         h('p', { class: 'muted' }, core.length + ' ready-made talks' + (own.length ? ' and ' + own.length + ' of your own' : '') + '. Pick one, run it with your team, and have everyone sign on screen. Each talk is saved as a record you can download as a PDF.'),
         h('div', { class: 'chips', role: 'group', 'aria-label': 'Categories' }, chip('all', 'All', talks.length), ...CATS.map((c) => chip(c, c, talks.filter((t) => t.category === c).length))),
@@ -58,42 +58,59 @@
         h('p', { class: 'muted small' }, NOTE)));
     }
 
-    // ---------- running a talk: attendees sign on screen ----------
-    function viewDeliver(t) {
+    // ---------- running a talk: choose who attended from the people list, then each signs on screen ----------
+    async function viewDeliver(t) {
       const props = api.props();
-      const st = { site: api.site() !== 'all' ? api.site() : (props[0] || {}).id, date: new Date().toISOString().slice(0, 10), presenter: (ctx.req && ctx.req.full_name) || '', notes: '', people: [], signing: null };
+      const st = { site: api.site() !== 'all' ? api.site() : (props[0] || {}).id, date: new Date().toISOString().slice(0, 10), presenter: (ctx.req && ctx.req.full_name) || '', notes: '', picked: new Map(), signing: null, roster: [] };
       const box = h('div', {});
+      async function loadRoster() {
+        const r = await sb.from('staff_members').select('id,full_name,job_title,active').eq('property_id', st.site).order('full_name');
+        st.roster = ((r && r.data) || []).filter((m) => m.active);
+      }
       function render() {
         box.replaceChildren();
-        const sel = props.length > 1 ? [h('label', { for: 'd-site' }, 'Site'), h('select', { id: 'd-site', onchange: (e) => { st.site = e.target.value; } }, ...props.map((p) => h('option', { value: p.id, selected: p.id === st.site }, p.name)))] : null;
+        const sel = props.length > 1 ? [h('label', { for: 'd-site' }, 'Site'), h('select', { id: 'd-site', onchange: async (e) => { st.site = e.target.value; st.picked = new Map(); st.signing = null; await loadRoster(); render(); } }, ...props.map((p) => h('option', { value: p.id, selected: p.id === st.site }, p.name)))] : null;
         const date = h('input', { id: 'd-date', type: 'date', value: st.date, oninput: (e) => { st.date = e.target.value; } });
-        const pres = h('input', { id: 'd-presenter', maxlength: '120', value: st.presenter, autocomplete: 'off', oninput: (e) => { st.presenter = e.target.value; } });
+        const pres = window.TCFormat.tidyBox(h('input', { id: 'd-presenter', maxlength: '120', value: st.presenter, autocomplete: 'off', oninput: (e) => { st.presenter = e.target.value; } }));
         const notes = h('textarea', { id: 'd-notes', rows: '2', maxlength: '2000', oninput: (e) => { st.notes = e.target.value; } }, st.notes);
-        const nm = h('input', { id: 'd-name', maxlength: '120', autocomplete: 'off', placeholder: 'Name of person attending' });
-        const addPerson = () => { const v = nm.value.trim(); if (!v) return; st.people.push({ name: v, strokes: null }); render(); const n = document.getElementById('d-name'); if (n) n.focus(); };
+        const pick = (m, on) => { if (on) st.picked.set(m.id, { name: m.full_name, strokes: (st.picked.get(m.id) || {}).strokes || null }); else { st.picked.delete(m.id); if (st.signing === m.id) st.signing = null; } render(); };
+        const roster = st.roster.map((m) => h('label', { class: 'check pickrow' }, h('input', { type: 'checkbox', 'data-pick': m.id, checked: st.picked.has(m.id), onchange: (e) => pick(m, e.target.checked) }),
+          h('span', {}, m.full_name, m.job_title ? h('span', { class: 'muted small' }, ' · ' + m.job_title) : null)));
+        const all = h('button', { class: 'linkbtn', id: 'd-all', type: 'button', onclick: () => { st.roster.forEach((m) => { if (!st.picked.has(m.id)) st.picked.set(m.id, { name: m.full_name, strokes: null }); }); render(); } }, 'Select everyone');
+        const none = h('button', { class: 'linkbtn', id: 'd-none', type: 'button', onclick: () => { st.picked = new Map(); st.signing = null; render(); } }, 'Clear');
+        const nm = window.TCFormat.tidyBox(h('input', { id: 'd-name', maxlength: '120', autocomplete: 'off', placeholder: 'Name of someone not on the list' }));
+        const addPerson = async () => {
+          const v = window.TCFormat.cap(nm.value.trim()); if (!v) return;
+          const r = await sb.from('staff_members').insert({ property_id: st.site, full_name: v }).select().single();
+          if (r.error || !r.data) return ctx.message(box, 'err', 'Sorry, that person could not be added.');
+          await loadRoster(); const m = st.roster.find((x) => x.id === r.data.id) || r.data; st.picked.set(m.id, { name: m.full_name, strokes: null }); render();
+        };
         nm.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(); } });
-        const prow = (p, i) => h('div', { class: 'econ', 'data-person': String(i) },
+        const people = [...st.picked.entries()];
+        const prow = ([id, p]) => h('div', { class: 'econ', 'data-person': id },
           h('span', {}, h('strong', {}, p.name)), p.strokes ? h('span', { class: 'sigwrap' }, sigSvg(p.strokes)) : null,
-          h('span', { class: 'rowtools' }, h('button', { class: 'btn small' + (p.strokes ? ' ghost' : ''), type: 'button', 'data-sign': String(i), onclick: () => { st.signing = i; render(); } }, p.strokes ? 'Sign again' : 'Sign'),
-            h('button', { class: 'btn small ghost', type: 'button', 'data-remove-person': String(i), onclick: () => { st.people.splice(i, 1); st.signing = null; render(); } }, 'Remove')));
+          h('span', { class: 'rowtools' }, h('button', { class: 'btn small' + (p.strokes ? ' ghost' : ''), type: 'button', 'data-sign': id, onclick: () => { st.signing = id; render(); } }, p.strokes ? 'Sign again' : 'Sign')));
         const save = h('button', { class: 'btn', id: 'd-save', type: 'button', onclick: (e) => ctx.busy(e.target, async () => {
           if (!st.site) return ctx.message(box, 'err', 'Please choose a site.');
           if (!st.presenter.trim()) return ctx.message(box, 'err', 'Please enter who is giving the talk.');
-          if (!st.people.length) return ctx.message(box, 'err', 'Add at least one person who attended.');
-          if (st.people.some((p) => !p.strokes)) return ctx.message(box, 'err', 'Everyone listed needs to sign before you save the record.');
-          const r = await sb.rpc('record_talk', { p_property: st.site, p_talk: t.id, p_date: st.date || null, p_presenter: st.presenter.trim(), p_notes: st.notes.trim(), p_attendees: st.people.map((p) => ({ name: p.name, signature: p.strokes })) });
+          if (!people.length) return ctx.message(box, 'err', 'Choose at least one person who attended.');
+          if (people.some(([, p]) => !p.strokes)) return ctx.message(box, 'err', 'Everyone chosen needs to sign before you save the record.');
+          const r = await sb.rpc('record_talk', { p_property: st.site, p_talk: t.id, p_date: st.date || null, p_presenter: window.TCFormat.cap(st.presenter.trim()), p_notes: st.notes.trim(), p_attendees: people.map(([, p]) => ({ name: p.name, signature: p.strokes })) });
           if (r.error) return ctx.message(box, 'err', 'Sorry, the record did not save. You may not have permission, or the add-on may have stopped.');
           viewRecord(r.data, 'Record saved. Everyone who signed is on it.');
         }) }, 'Save record');
-        const pad = st.signing != null && st.people[st.signing] ? signPad(st.people[st.signing].name, (strokes) => { st.people[st.signing].strokes = strokes; st.signing = null; render(); }, () => { st.signing = null; render(); }) : null;
+        const cur = st.signing != null ? st.picked.get(st.signing) : null;
+        const pad = cur ? signPad(cur.name, (strokes) => { cur.strokes = strokes; st.signing = null; render(); }, () => { st.signing = null; render(); }) : null;
         api.page('form', h('div', { class: 'card form', 'data-deliver': t.id }, h('button', { class: 'btn ghost', type: 'button', onclick: () => viewTalk(t) }, 'Back to the talk'),
-          h('h1', {}, t.title), h('p', { class: 'muted' }, 'Read the key points together, then add each person and ask them to sign on the screen.'),
+          h('h1', {}, t.title), h('p', { class: 'muted' }, 'Read the key points together, tick who attended, then ask each person to sign on the screen.'),
           sel, h('label', { for: 'd-date' }, 'Date'), date, h('label', { for: 'd-presenter' }, 'Given by'), pres, h('label', { for: 'd-notes' }, 'Notes (optional)'), notes,
-          h('h2', {}, 'Who attended'), ...(st.people.length ? st.people.map(prow) : [h('p', { class: 'muted' }, 'Nobody added yet.')]),
-          pad, !pad ? [nm, h('button', { class: 'btn small ghost', id: 'd-add', type: 'button', onclick: addPerson }, 'Add person')] : null,
-          !pad ? save : null, box));
+          h('h2', {}, 'Who attended'),
+          roster.length ? [h('div', { class: 'btnrow' }, all, none), h('div', { class: 'checklist' }, ...roster)] : h('p', { class: 'muted' }, 'Nobody is on the people list for this site yet. Add them below, or use People on the talks page.'),
+          !pad ? [nm, h('button', { class: 'btn small ghost', id: 'd-add', type: 'button', onclick: addPerson }, 'Add to list and tick')] : null,
+          people.length ? h('h2', {}, 'Signatures (' + people.filter(([, p]) => p.strokes).length + ' of ' + people.length + ')') : null, ...people.map(prow),
+          pad, !pad ? save : null, box));
       }
-      render();
+      await loadRoster(); render();
     }
 
     // A signing box: draw with a finger, stylus or mouse.

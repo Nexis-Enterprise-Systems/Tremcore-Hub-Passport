@@ -174,8 +174,8 @@
       subscription: select(SUBS, c.subscription || 'trial'),
       billing: select(BILLING, c.billing_interval || 'monthly'),
       value: text(((c.monthly_value_pence || 0) / 100).toFixed(2), { inputmode: 'decimal' }),
-      contact_name: nameBox(c.contact_name), contact_email: text(c.contact_email, { type: 'email' }), contact_phone: text(c.contact_phone, { type: 'tel' }),
-      address: area(c.address), notes: area(c.notes),
+      contact_name: nameBox(c.contact_name), contact_email: text(c.contact_email, { type: 'email' }), contact_phone: window.TCFormat.tidyBox(text(c.contact_phone, { type: 'tel', placeholder: '01634 123456' }), 'phone'),
+      address: window.TCFormat.tidyBox(area(c.address)), postcode: window.TCFormat.tidyBox(text(c.postcode, { maxlength: '12', placeholder: 'ME3 8FX' }), 'postcode'), notes: area(c.notes),
       mfa: h('input', { type: 'checkbox', checked: !!c.require_mfa })
     };
     if (c.level === 3) f.level = select(LEVELS, 3);   // keep an existing Level 3 client editable
@@ -186,11 +186,14 @@
       if (!name) return note(box, 'err', 'Enter the client name.');
       if (pence === null) return note(box, 'err', 'Enter the monthly value as pounds, for example 49 or 49.50.');
       if (email && !EMAIL.test(email)) return note(box, 'err', 'Check the contact email address.');
+      const ph = window.TCFormat.phone(f.contact_phone.value), pc = window.TCFormat.postcode(f.postcode.value);
+      if (!ph.ok) return note(box, 'err', window.TCFormat.PHONE_HELP);
+      if (!pc.ok) return note(box, 'err', window.TCFormat.POSTCODE_HELP);
       await busy(btn, async () => {
         try {
           await onSave({ name, level: Number(f.level.value), subscription: f.subscription.value, billing_interval: f.billing.value, monthly_value_pence: pence,
-            contact_name: f.contact_name.value.trim() || null, contact_email: email || null, contact_phone: f.contact_phone.value.trim() || null,
-            address: f.address.value.trim() || null, notes: f.notes.value.trim() || null, require_mfa: f.mfa.checked }, box);
+            contact_name: f.contact_name.value.trim() || null, contact_email: email || null, contact_phone: ph.value || null,
+            address: window.TCFormat.cap(f.address.value.trim()) || null, postcode: pc.value || null, notes: f.notes.value.trim() || null, require_mfa: f.mfa.checked }, box);
         } catch (err) { note(box, 'err', 'Could not save: ' + err.message); }
       });
     } },
@@ -203,7 +206,7 @@
         field('c-cname', 'Contact name', f.contact_name),
         field('c-cemail', 'Contact email', f.contact_email),
         field('c-cphone', 'Contact phone', f.contact_phone)),
-      field('c-address', 'Address', f.address),
+      h('div', { class: 'grid2' }, field('c-address', 'Address', f.address), field('c-postcode', 'Postcode', f.postcode)),
       field('c-notes', 'Private notes (clients never see these)', f.notes),
       h('label', { class: 'check' }, f.mfa, ' Ask this client’s site users for 2FA too (head-office users always need it)'),
       btn, box);
@@ -257,13 +260,15 @@
     const siteBox = h('div');
     const addSite = h('form', { class: 'inline', novalidate: true, onsubmit: async (e) => {
       e.preventDefault();
-      const name = sn.value.trim();
+      const name = window.TCFormat.cap(sn.value.trim()), spc = window.TCFormat.postcode(sp.value);
       if (!name) return note(siteBox, 'err', 'Enter the site name.');
-      try { const made = await q(ctx.sb.from('properties').insert({ company_id: id, name, address: sa.value.trim() || null }).select().single());
+      if (!spc.ok) return note(siteBox, 'err', window.TCFormat.POSTCODE_HELP);
+      try { const made = await q(ctx.sb.from('properties').insert({ company_id: id, name, address: window.TCFormat.cap(sa.value.trim()) || null, postcode: spc.value || null }).select().single());
         location.hash = '#/sites/' + made.id; } catch (err) { note(siteBox, 'err', 'Could not add the site: ' + err.message); }
     } });
     const sn = nameBox('', { placeholder: 'Site name', 'aria-label': 'New site name' }), sa = text('', { placeholder: 'Address (optional)', 'aria-label': 'New site address' });
-    addSite.append(sn, sa, h('button', { class: 'btn small', type: 'submit' }, 'Add site'));
+    const sp = window.TCFormat.tidyBox(text('', { placeholder: 'Postcode', 'aria-label': 'New site postcode', maxlength: '12' }), 'postcode');
+    addSite.append(sn, sa, sp, h('button', { class: 'btn small', type: 'submit' }, 'Add site'));
     const saved = h('div');
     chrome('clients',
       h('p', {}, h('a', { href: '#/clients' }, '← All clients')),
