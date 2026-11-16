@@ -80,7 +80,7 @@
           sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
           sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
           sb.rpc('my_extras'),
-          sb.from('companies').select('name,contact_phone,address,level,billing_interval,subscription').limit(1)
+          sb.from('companies').select('id,name,contact_phone,address,level,billing_interval,subscription').limit(1)
         ]);
         if (p.error || i.error) throw new Error('load');
         props = p.data || []; items = i.data || []; core = (cc && cc.data) || [];
@@ -341,6 +341,11 @@
     }
     function viewExtra(code, state) {
       const e = extraOf(code);
+      if (e.owned && state !== 'confirming' && code === 'toolbox_talks') {
+        tab = 'home';
+        return window.TCToolbox.open({ sb, h, ctx, page, backTo, props: () => props, site: () => site, rights: () => rights, isHead: () => isHead, shortDate, siteName,
+          companyName: () => (company && company.name) || '', companyId: () => company && company.id }, state === 'thanks' ? e.name + ' is now on your account. Pick a talk to get started.' : null);
+      }
       if (e.owned && state !== 'confirming' && code === 'staff_signin') return viewClock(state === 'thanks' ? e.name + ' is now on your account. Add the people who will use it below.' : null);
       const box = h('div', {});
       const sites = props.length || 1, qty = e.charged_per === 'site' ? sites : 1;
@@ -352,7 +357,7 @@
         state === 'late' ? h('div', { class: 'msg err', role: 'status' }, 'Your payment is taking longer than usual to confirm. Please check again in a few minutes. If it still has not appeared, email Tremcore and we will sort it out.') : null,
         state === 'thanks' && e.owned ? h('div', { class: 'msg ok', role: 'status' }, 'Thank you. ' + e.name + ' is now on your account.') : null,
         e.owned && state !== 'confirming'
-          ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account. We are finishing this screen and it will appear here very soon.')
+          ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account.')
           : state === 'confirming' ? null : [h('p', { class: 'big' }, priceText(e)),
             e.charged_per === 'site' ? h('p', { class: 'muted' }, 'This is charged for each site. You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month. Add-ons are always charged monthly, with no yearly discount.') : null,
             isHead && ((company && company.level) || 1) === 1

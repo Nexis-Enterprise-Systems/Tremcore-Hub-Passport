@@ -715,6 +715,12 @@ const USERS = {
         { id: 't2', property_id: 's1', title: 'Monthly alarm test', notes: '', due_date: day(5), repeat_months: 1, status: 'pending' },
         { id: 't3', property_id: 's2', title: 'Old job', notes: '', due_date: day(-40), repeat_months: null, status: 'done', completed_at: new Date().toISOString() }];
       window.__mock.tables.site_emergency = [{ id: 'e1', property_id: 's1', assembly_point: 'Car park', gas_shutoff: 'Back store', water_shutoff: '', electric_shutoff: '', notes: '' }];
+      window.__mock.tables.toolbox_talks = [
+        { id: 'tt1', company_id: null, code: 'tt01', category: 'Health & Safety', title: 'Slips, Trips and Falls', summary: 'Prevent falls.', points: ['Clean spills', 'Keep clear'], discuss: ['Where is it wet?'], minutes: 8, sort: 1 },
+        { id: 'tt2', company_id: null, code: 'tt11', category: 'Fire Safety', title: 'If You Discover a Fire', summary: 'Know what to do.', points: ['Raise the alarm'], discuss: [], minutes: 10, sort: 2 },
+        { id: 'tt3', company_id: 'c1', code: null, category: 'Industry Specific', title: 'Our Forklift Rules', summary: '', points: ['Keep clear'], discuss: [], minutes: 5, sort: 0 }];
+      window.__mock.tables.talk_sessions = [{ id: 'old1', property_id: 's1', talk_id: 'tt1', talk_title: 'Slips, Trips and Falls', talk_category: 'Health & Safety', talk_points: ['Clean spills'], delivered_on: '2026-10-01', presenter: 'Leah', notes: '' }];
+      window.__mock.tables.talk_attendees = [{ id: 'oa1', session_id: 'old1', full_name: 'Jo Bloggs', signature: [[[10, 10], [200, 300], [900, 50]]], signed_at: '2026-10-01T09:00:00Z' }];
       window.__mock.tables.staff_members = [{ id: 'm1', property_id: 's1', full_name: 'Jo Bloggs', job_title: 'Cleaner', active: true }];
       window.__mock.tables.emergency_contacts = [{ id: 'k1', property_id: 's1', name: 'Sam Keyholder', role: 'Keyholder', phone: '07000 000000' }];
     };
@@ -778,8 +784,42 @@ const USERS = {
     // an add-on that has been bought is shown as active, not offered again
     t = await newPage(appSeed, { owned: true }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     check('a bought add-on is not shown as locked; one not bought still is', (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('30+ available') && (await t.page.locator('[data-q=toolbox_talks].locked').count()) === 0 && (await t.page.locator('.qtile.locked').count()) === 1);
-    await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
-    check('a bought add-on page shows it is active and has no Add button', (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.msg.ok').innerText()).includes('active'));
+    await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('.talkrow');
+    check('toolbox talks: the library lists the core talks and the company\'s own, with category counts', (await t.page.locator('.talkrow').count()) === 3 && (await t.page.locator('[data-cat=all]').innerText()) === 'All (3)' && (await t.page.locator('[data-cat="Fire Safety"]').innerText()) === 'Fire Safety (1)' && (await t.page.locator('.talkrow:has-text("Our Forklift Rules") .tag').innerText()) === 'Your own');
+    check('toolbox talks: the guidance note says it needs professional review', (await t.page.locator('.card').innerText()).includes('needs professional review'));
+    await t.page.click('[data-cat="Fire Safety"]'); check('toolbox talks: a category filters the list', (await t.page.locator('.talkrow').count()) === 1);
+    await t.page.click('[data-cat=all]'); await t.page.click('[data-talk=tt1]'); await t.page.waitForSelector('#tb-deliver');
+    check('toolbox talks: a talk shows its key points and discussion questions', (await t.page.locator('.points li').allInnerTexts()).join('|') === 'Clean spills|Keep clear|Where is it wet?');
+    await t.page.click('#tb-deliver'); await t.page.waitForSelector('#d-name');
+    await t.page.click('#d-save'); check('toolbox talks: nobody listed means no record', (await t.page.locator('.msg.err').innerText()).includes('at least one person'));
+    await t.page.fill('#d-name', 'Jo Bloggs'); await t.page.click('#d-add'); await t.page.fill('#d-name', 'Al Smith'); await t.page.press('#d-name', 'Enter');
+    check('toolbox talks: attendees are added by name', (await t.page.locator('[data-person]').count()) === 2);
+    await t.page.click('#d-save'); check('toolbox talks: a record cannot be saved until everyone has signed', (await t.page.locator('.msg.err').innerText()).includes('needs to sign'));
+    const draw = async (pg, y0) => { await pg.locator('#sigpad').scrollIntoViewIfNeeded(); const bb = await pg.locator('#sigpad').boundingBox(); y0 = Math.min(y0, bb.height - 70); await pg.mouse.move(bb.x + 40, bb.y + y0); await pg.mouse.down(); await pg.mouse.move(bb.x + 200, bb.y + y0 + 60, { steps: 5 }); await pg.mouse.move(bb.x + 320, bb.y + y0 - 10, { steps: 5 }); await pg.mouse.up(); };
+    await t.page.click('[data-sign="0"]'); await t.page.waitForSelector('#sigpad'); await t.page.click('#sig-save');
+    check('toolbox talks: an empty signature is refused', (await t.page.locator('.msg.err').innerText()).includes('sign in the box'));
+    await draw(t.page, 80); await t.page.click('#sig-save'); await t.page.waitForSelector('[data-person="0"] .sigsvg');
+    check('toolbox talks: a signature is drawn on screen and shown next to the name', (await t.page.locator('[data-person="0"] .sigline').count()) === 1);
+    await t.page.click('[data-sign="1"]'); await t.page.waitForSelector('#sigpad'); await draw(t.page, 100); await t.page.click('#sig-clear'); await draw(t.page, 120); await t.page.click('#sig-save'); await t.page.waitForSelector('[data-person="1"] .sigsvg');
+    await t.page.fill('#d-notes', 'Went well'); await t.page.click('#d-save'); await t.page.waitForSelector('[data-record-page]');
+    const rec = (await calls(t.page, 'rpc:record_talk'))[0];
+    check('toolbox talks: saving sends the talk, site, presenter and both signed attendees to the database', rec.p_talk === 'tt1' && rec.p_property === 's1' && rec.p_presenter === 'Leah Dunn' && rec.p_notes === 'Went well' && rec.p_attendees.length === 2 && rec.p_attendees.every((a) => Array.isArray(a.signature) && a.signature[0].length > 2 && a.signature[0].every((p) => p[0] >= 0 && p[0] <= 1000 && p[1] >= 0 && p[1] <= 400)));
+    check('toolbox talks: the saved record shows who attended with their signatures', (await t.page.locator('[data-attendee]').count()) === 2 && (await t.page.locator('[data-attendee] .sigsvg').count()) === 2 && (await t.page.locator('.msg.ok').innerText()).includes('Record saved'));
+    const dl = t.page.waitForEvent('download'); await t.page.click('#rec-pdf'); const dd = await dl; const fs2 = require('fs'); const pth = await dd.path(); const pdfBytes = fs2.readFileSync(pth);
+    check('toolbox talks: the record downloads as a real PDF named after the date and talk', pdfBytes.slice(0, 5).toString() === '%PDF-' && pdfBytes.toString('latin1').includes('Jo Bloggs') && pdfBytes.toString('latin1').includes('Slips, Trips and Falls') && /^toolbox-talk-\d{4}-\d{2}-\d{2}-slips-trips-and-falls\.pdf$/.test(dd.suggestedFilename()));
+    await t.page.click('text=Back to records'); await t.page.waitForSelector('.talkrow');
+    check('toolbox talks: the records list shows the old record and the new one, with attendance counts', (await t.page.locator('[data-record]').count()) === 2 && (await t.page.locator('.talkrow').first().innerText()).includes('2 people'));
+    await t.page.click('[data-record=old1]'); await t.page.waitForSelector('[data-attendee]');
+    check('toolbox talks: an older record opens with its signature', (await t.page.locator('[data-attendee]').innerText()).includes('Jo Bloggs'));
+    await t.page.click('text=Back to records'); await t.page.click('text=Back to all talks'); await t.page.click('#tb-own'); await t.page.waitForSelector('#own-add');
+    check('toolbox talks: head office sees its own talks and how many of 10 are used', (await t.page.locator('[data-own]').count()) === 1 && (await t.page.locator('.card').innerText()).includes('1 in use'));
+    await t.page.click('#own-add'); await t.page.click('#o-save'); check('toolbox talks: an own talk needs a title', (await t.page.locator('.msg.err').innerText()).includes('title'));
+    await t.page.fill('#o-title', 'Ladder rules'); await t.page.click('#o-save'); check('toolbox talks: an own talk needs a key point', (await t.page.locator('.msg.err').innerText()).includes('key point'));
+    await t.page.fill('#o-points', 'Check the feet\nThree points of contact\n'); await t.page.selectOption('#o-cat', 'Health & Safety'); await t.page.click('#o-save'); await t.page.waitForSelector('text=Talk added.');
+    const mine = await t.page.evaluate(() => window.__mock.tables.toolbox_talks.find((x) => x.title === 'Ladder rules'));
+    check('toolbox talks: an own talk is saved for the company with one point per line', mine && mine.company_id === 'c1' && mine.points.join('|') === 'Check the feet|Three points of contact');
+    await t.page.click('[data-remove-own]>> nth=0'); await t.page.waitForSelector('text=Talk removed.');
+    check('toolbox talks: an own talk can be removed', (await t.page.locator('[data-own]').count()) === 1);
     await t.ctx.close();
 
     // buying an add-on: straight to Stripe, no email to Tremcore; the add-on appears when Stripe has confirmed
@@ -822,6 +862,13 @@ const USERS = {
     check('staff: a person can be removed', (await t.page.locator('[data-staff]').count()) === 1);
     await t.page.selectOption('#s-site', 's2'); await t.page.waitForSelector('text=Nobody added yet');
     check('staff: each site has its own list', (await t.page.locator('[data-staff]').count()) === 0);
+    await t.ctx.close();
+
+    t = await newPage(appSeed, { owned: true, role: 'client_site', rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
+    await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('.talkrow'); await t.page.click('[data-talk=tt1]'); await t.page.waitForSelector('.points');
+    check('toolbox talks: a view-only user can read a talk but cannot run one, and has no own-talks button', (await t.page.locator('#tb-deliver').count()) === 0 && (await t.page.locator('.card').innerText()).includes('can read the talk'));
+    await t.page.click('text=Back to all talks'); await t.page.waitForSelector('.talkrow');
+    check('toolbox talks: only head office is offered My own talks', (await t.page.locator('#tb-own').count()) === 0 && (await t.page.locator('#tb-records').count()) === 1);
     await t.ctx.close();
 
     // team page: the head-office user chooses who can do what

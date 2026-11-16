@@ -760,4 +760,46 @@ do $$ declare ok boolean := false; begin
   reset role;
 end $$;
 select 'staff: when the add-on stops, the register can no longer be read or changed' as test, true as ok;
+-- toolbox talks
+select 'talks: the core library has 30 talks across the 5 categories' as test, (select count(*)=30 and count(distinct category)=5 from toolbox_talks where company_id is null) as ok;
+select 'talks: every core talk has key points and discussion questions' as test, (select bool_and(coalesce(array_length(points,1),0) >= 5 and coalesce(array_length(discuss,1),0) >= 2 and char_length(summary) > 10) from toolbox_talks where company_id is null) as ok;
+select * from chk('talks: a business that has not bought Toolbox Talks sees no talks', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select count(*)=0 from toolbox_talks$$);
+insert into company_extras(company_id, extra_code, status, price_pence, quantity, stripe_item_id) values ('10000000-0000-0000-0000-00000000000a','toolbox_talks','active',399,2,'sub_tt2') on conflict (company_id, extra_code) do update set status='active', access_ends_at=null;
+select * from chk('talks: once bought, head office sees all 30 core talks', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select count(*)=30 from toolbox_talks$$);
+select * from chk('talks: a Level 2 client without the add-on still sees none', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select count(*)=0 from toolbox_talks$$);
+select * from chk('talks: a client cannot even see that a core talk was changed (no rows touched)', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with u as (update toolbox_talks set title='x' where company_id is null returning 1) select count(*)=0 from u$$);
+select * from chk('talks: head office can write its own talk', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with i as (insert into toolbox_talks(company_id,category,title,points) values ('10000000-0000-0000-0000-00000000000a','Health & Safety','Our forklift rules',array['Keep clear']) returning 1) select count(*)=1 from i$$);
+select * from deny('talks: a site user cannot write a company talk', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$insert into toolbox_talks(company_id,category,title) values ('10000000-0000-0000-0000-00000000000a','Health & Safety','Nope')$$);
+select * from deny('talks: head office cannot write a talk for another company', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$insert into toolbox_talks(company_id,category,title) values ('10000000-0000-0000-0000-00000000000b','Health & Safety','Nope')$$);
+select * from chk('talks: a site user sees the core library and their own company talk', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select count(*)=31 from toolbox_talks$$);
+do $$ declare ok boolean := false; begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  for i in 2..10 loop insert into toolbox_talks(company_id,category,title) values ('10000000-0000-0000-0000-00000000000a','Wellbeing','Own '||i); end loop;
+  begin insert into toolbox_talks(company_id,category,title) values ('10000000-0000-0000-0000-00000000000a','Wellbeing','Eleventh'); exception when check_violation then ok := true; end;
+  reset role;
+  if not ok then raise exception 'own talk limit not enforced'; end if;
+end $$;
+select 'talks: a business can have at most 10 of its own talks' as test, true as ok;
+-- recording a talk
+select * from chk('talks record: a site user with update records a talk with two signed attendees', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select record_talk('20000000-0000-0000-0000-0000000000a1', (select id from toolbox_talks where code='tt01'), current_date, 'Leah', 'Went well', '[{"name":"Jo Bloggs","signature":[[[10,10],[50,80]]]},{"name":"Al Smith","signature":[[[5,5],[9,9]]]}]'::jsonb) is not null$$);
+select 'talks record: the record keeps the talk title and points as they were, and both signatures' as test,
+  (select count(*)=1 and bool_and(talk_title='Slips, Trips and Falls' and presenter='Leah' and array_length(talk_points,1) >= 5) from talk_sessions) and (select count(*)=2 from talk_attendees) as ok;
+select * from deny('talks record: a view-only user cannot record a talk', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select record_talk('20000000-0000-0000-0000-0000000000a1', (select id from toolbox_talks where code='tt01'), current_date, 'X', '', '[{"name":"Jo","signature":[[[1,1],[2,2]]]}]'::jsonb)$$);
+select * from deny('talks record: nobody can record at a site that is not theirs', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select record_talk('20000000-0000-0000-0000-0000000000a2', (select id from toolbox_talks where code='tt01'), current_date, 'X', '', '[{"name":"Jo","signature":[[[1,1],[2,2]]]}]'::jsonb)$$);
+select * from deny('talks record: a Level 2 client cannot record a talk', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select record_talk('20000000-0000-0000-0000-0000000000b1', (select id from toolbox_talks where code='tt01'), current_date, 'X', '', '[{"name":"Jo","signature":[[[1,1],[2,2]]]}]'::jsonb)$$);
+select * from deny('talks record: an attendee without a signature is refused', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select record_talk('20000000-0000-0000-0000-0000000000a1', (select id from toolbox_talks where code='tt01'), current_date, 'X', '', '[{"name":"Jo","signature":[]}]'::jsonb)$$);
+select * from deny('talks record: no attendees is refused', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select record_talk('20000000-0000-0000-0000-0000000000a1', (select id from toolbox_talks where code='tt01'), current_date, 'X', '', '[]'::jsonb)$$);
+select * from deny('talks record: a nameless attendee is refused', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select record_talk('20000000-0000-0000-0000-0000000000a1', (select id from toolbox_talks where code='tt01'), current_date, 'X', '', '[{"name":" ","signature":[[[1,1],[2,2]]]}]'::jsonb)$$);
+select * from chk('talks record: a view-only user can read the records, another company cannot', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select (select count(*)=1 from talk_sessions) and (select count(*)=2 from talk_attendees)$$);
+select * from chk('talks record: a Level 2 client sees none of them', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select (select count(*)=0 from talk_sessions) and (select count(*)=0 from talk_attendees)$$);
+select * from chk('talks record: head office cannot change or delete a record (it is permanent)', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with u as (update talk_sessions set presenter='Changed' returning 1), d as (delete from talk_attendees returning 1), d2 as (delete from talk_sessions returning 1) select (select count(*) from u)=0 and (select count(*) from d)=0 and (select count(*) from d2)=0$$);
+do $$ begin
+  update company_extras set status='cancelled', access_ends_at=now() where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks';
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  if (select count(*) from toolbox_talks) <> 0 or (select count(*) from talk_sessions) <> 0 then raise exception 'talks or records still readable after the add-on stopped'; end if;
+  reset role;
+end $$;
+select 'talks: when the add-on stops, the talks and records can no longer be read' as test, true as ok;
 rollback;

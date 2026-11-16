@@ -297,3 +297,17 @@ body.passport{padding-bottom:84px}
   .qtiles{grid-template-columns:repeat(4,1fr)}
   .siteedit{grid-template-columns:1fr 1.6fr auto;align-items:center}
 }
+
+/* ---- Toolbox Talks ---- */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.chip{background:#0d0d0d;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:inherit;font-size:.82rem;cursor:pointer}
+.chip[aria-pressed=true]{color:#0a0a0a;background:var(--gold);border-color:var(--gold)}
+.talkrow{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:#0d0d0d;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;font:inherit;cursor:pointer}
+.talkrow .ttitle{font-weight:700}
+.points{padding-left:20px;margin:6px 0 14px}.points li{margin:6px 0}
+.sigbox{border:1px solid var(--gold);border-radius:14px;padding:14px;margin:12px 0}
+.sigpad{display:block;width:100%;height:auto;aspect-ratio:5/2;background:#0d0d0d;border:1px dashed var(--muted);border-radius:12px;touch-action:none;cursor:crosshair;margin:8px 0}
+.sigsvg{width:150px;height:60px;background:#0d0d0d;border:1px solid var(--line);border-radius:8px}
+.sigline{stroke:#f4efe2;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.sigdot{fill:#f4efe2}
+.sigwrap{display:inline-flex}

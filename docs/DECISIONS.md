@@ -71,3 +71,11 @@
 ## Toolbox Talks is per site (16 Nov 2026, migration 0018)
 - Toolbox Talks is £3.99 + VAT **per site** per month (changed from per company), same as Staff Clock In / Out at £6.99 per site. Add-ons are always monthly; no yearly discount.
 - Buying refusals now say why (not head office, 2FA not finished, not Self-Managed, subscription not active, database update not run).
+
+## Toolbox Talks built (16 Nov 2026, migrations 0020 and 0021)
+- 30 core talks across Health & Safety (9), Fire Safety (6), Wellbeing (5), Workplace Responsibilities (5) and Industry Specific (5, matching the property-compliance checks: Legionella, asbestos, gas, emergency shut-offs, pest control). Each has a summary, key points and discussion questions. Content lives in `supabase/tools/make_talks_seed.py`; changes after go-live need a NEW migration. The wording is general guidance and **needs professional review** (shown on every talk screen).
+- Up to 10 own talks per company, written by the head-office user only. Visible only while Toolbox Talks is owned.
+- Running a talk: pick the site, date and presenter, add each attendee by name, each signs on screen (stored as strokes, not an image). One database call (`record_talk`) saves the record and all signatures together.
+- Records are permanent: clients cannot change or delete them, and they keep the talk title and key points as they were on the day. A PDF is made in the browser on demand (`pdf.js`, no outside library), so nothing is stored twice.
+- If the add-on stops, the talks and records are hidden, like the staff register.
+- Not built yet: assigning a talk to a person in advance, reminders to run talks, a monthly schedule, and tick-box quiz questions.
