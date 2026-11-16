@@ -640,4 +640,66 @@ select * from chk('rights: a site user with view can do neither', '00000000-0000
 select * from chk('rights: a Level 2 client is view-only even as head office', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select (select not can_edit and not can_manage from passport_rights())$$);
 select * from chk('rights: a Level 3 client is view-only even as head office', '00000000-0000-0000-0000-0000000000c1', 'aal2', $$select (select not can_edit and not can_manage from passport_rights())$$);
 select * from chk('rights: a Level 2 client cannot edit a record even by calling the database directly', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$with u as (update compliance_items set notes='x' where id='30000000-0000-0000-0000-000000000006' returning 1) select count(*)=0 from u$$);
+-- tasks, emergency information, settings, extras
+select * from chk('tasks: a Level 1 head-office user can add a task', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with i as (insert into tasks(property_id,title,due_date) values ('20000000-0000-0000-0000-0000000000a1','Check fire exit signage',current_date) returning 1) select count(*)=1 from i$$);
+select * from chk('tasks: a site user with update can add a task at their site', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$with i as (insert into tasks(property_id,title) values ('20000000-0000-0000-0000-0000000000a1','Review COSHH sheets') returning 1) select count(*)=1 from i$$);
+select * from deny('tasks: a view-only site user cannot add a task', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$insert into tasks(property_id,title) values ('20000000-0000-0000-0000-0000000000a1','Nope')$$);
+select * from deny('tasks: a site user cannot add a task at a site that is not theirs', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$insert into tasks(property_id,title) values ('20000000-0000-0000-0000-0000000000a2','Nope')$$);
+select * from deny('tasks: a Level 2 client cannot add a task', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$insert into tasks(property_id,title) values ('20000000-0000-0000-0000-0000000000b1','Nope')$$);
+select * from chk('tasks: a view-only user can read their site tasks but not another site''s', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select (select count(*)=2 from tasks) and (select count(*)=0 from tasks where property_id='20000000-0000-0000-0000-0000000000a2')$$);
+select * from chk('tasks: a Level 2 client sees none of Company A tasks', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select (select count(*)=0 from tasks)$$);
+select * from chk('tasks: a view-only user cannot change a task even directly', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$with u as (update tasks set title='x' where property_id='20000000-0000-0000-0000-0000000000a1' returning 1) select count(*)=0 from u$$);
+-- repeating tasks: next one is created on completion; at most 10 live at once
+do $$ declare tid uuid; nid uuid; begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  insert into tasks(property_id,title,due_date,repeat_months) values ('20000000-0000-0000-0000-0000000000a1','Annual alarm test',current_date-5,3) returning id into tid;
+  nid := complete_task(tid);
+  reset role;
+  if nid is null then raise exception 'no next task'; end if;
+  if not exists (select 1 from tasks where id=tid and status='done' and completed_at is not null) then raise exception 'not done'; end if;
+  if not exists (select 1 from tasks where id=nid and status='pending' and repeat_months=3 and due_date >= current_date) then raise exception 'next task wrong'; end if;
+end $$;
+select 'tasks: completing a repeating task finishes it and creates the next one, never in the past' as test, true as ok;
+do $$ declare n int := 0; ok boolean := false; begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  while (select count(*) from tasks t join properties p on p.id=t.property_id where p.company_id='10000000-0000-0000-0000-00000000000a' and t.status='pending' and t.repeat_months is not null) < 10 loop
+    insert into tasks(property_id,title,repeat_months) values ('20000000-0000-0000-0000-0000000000a1','Repeat '||n,1); n := n + 1;
+  end loop;
+  begin insert into tasks(property_id,title,repeat_months) values ('20000000-0000-0000-0000-0000000000a1','One too many',1); exception when check_violation then ok := true; end;
+  reset role;
+  if not ok then raise exception 'limit not enforced'; end if;
+end $$;
+select 'tasks: a business cannot have more than 10 repeating tasks live at once' as test, true as ok;
+select * from chk('tasks: one-off tasks are not limited by the repeating limit', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with i as (insert into tasks(property_id,title) values ('20000000-0000-0000-0000-0000000000a1','One-off') returning 1) select count(*)=1 from i$$);
+-- emergency information
+select * from chk('emergency: head office can save a site''s emergency details and contacts', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with a as (insert into site_emergency(property_id,assembly_point,gas_shutoff) values ('20000000-0000-0000-0000-0000000000a1','Car park','Back store') returning 1), b as (insert into emergency_contacts(property_id,name,phone) values ('20000000-0000-0000-0000-0000000000a1','Sam Keyholder','07000 000000') returning 1) select (select count(*) from a)=1 and (select count(*) from b)=1$$);
+select * from deny('emergency: a view-only user cannot change emergency details', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$insert into site_emergency(property_id,assembly_point) values ('20000000-0000-0000-0000-0000000000a2','x')$$);
+select * from chk('emergency: a view-only user can read their site''s emergency details', '00000000-0000-0000-0000-0000000000a4', 'aal1', $$select (select count(*)=1 from site_emergency) and (select count(*)=1 from emergency_contacts)$$);
+select * from chk('emergency: another company cannot read them', '00000000-0000-0000-0000-0000000000b1', 'aal2', $$select (select count(*)=0 from site_emergency) and (select count(*)=0 from emergency_contacts)$$);
+do $$ declare ok boolean := false; begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  for i in 1..9 loop insert into emergency_contacts(property_id,name) values ('20000000-0000-0000-0000-0000000000a1','C'||i); end loop;
+  begin insert into emergency_contacts(property_id,name) values ('20000000-0000-0000-0000-0000000000a1','Eleventh'); exception when check_violation then ok := true; end;
+  reset role;
+  if not ok then raise exception 'contact limit not enforced'; end if;
+end $$;
+select 'emergency: at most 10 contacts per site' as test, true as ok;
+-- settings
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated; perform update_business('01634 111111','1 High St'); reset role;
+end $$;
+select 'settings: head office can change the business phone and address' as test, (select contact_phone='01634 111111' and address='1 High St' from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+select * from deny('settings: a site user cannot change the business details', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select update_business('x','y')$$);
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated; perform update_site('20000000-0000-0000-0000-0000000000a1','north  road shop','2 North Rd'); reset role;
+end $$;
+select 'settings: head office can rename a site (tidied to capital letters)' as test, (select name ilike 'north%road%shop' and name <> lower(name) and address='2 North Rd' from properties where id='20000000-0000-0000-0000-0000000000a1') as ok;
+select * from deny('settings: head office cannot rename another company''s site', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select update_site('20000000-0000-0000-0000-0000000000b1','Hacked','x')$$);
+-- extras
+select * from chk('extras: a business that has bought nothing owns no extras but can see what is on offer', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select count(*)=2 from my_extras()) and (select count(*)=0 from my_extras() where owned)$$);
 rollback;
