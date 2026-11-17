@@ -615,6 +615,14 @@ const USERS = {
     if (t.problems.length) console.log(t.problems);
     await t.ctx.close();
 
+    // money first, with email confirmation switched off: sign-up goes straight to Stripe, with no 2FA set-up and no extra click
+    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.signupSession = true; window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
+    let autoAuth = null; await t.page.route('**/api/checkout', (rt) => { autoAuth = rt.request().headers().authorization; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
+    await t.page.fill('#su-name', 'Pat'); await t.page.fill('#su-company', 'Co'); await t.page.fill('#su-sites', '2'); await t.page.fill('#su-email', 'auto@co.example'); await t.page.fill('#su-pass', 'a-long-enough-password'); await t.page.check('#su-terms'); await t.page.click('button[type=submit]');
+    await t.page.waitForURL('**/healthz');
+    check('pay first: with email confirmation off, sign-up goes straight to Stripe with no extra click and no 2FA set-up in between', t.page.url().endsWith('/healthz') && autoAuth === 'Bearer tok-auto@co.example');
+    await t.ctx.close();
     // money first: signing up goes straight to Stripe, before the email is confirmed
     t = await newPage(() => { window.__mock.signupOpen = true; });
     await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');

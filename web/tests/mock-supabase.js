@@ -102,6 +102,7 @@
         if (M().signupError) return { data: {}, error: Object.assign({ message: M().signupError.message }, M().signupError) };
         if (M().signupHidden) return { data: { user: { email, identities: [] }, session: null }, error: null };
         if (M().users[email]) return { data: {}, error: { status: 422, message: 'User already registered' } };
+        if (M().signupSession) { M().users[email] = { password, factor: false, profile: null, confirmed: true, meta: options && options.data }; current = email; aal = 'aal1'; return { data: { user: { email }, session: { access_token: 'tok-' + email } }, error: null }; }
         M().users[email] = { password, factor: false, profile: null, confirmed: false, meta: options && options.data };
         return { data: { user: { email }, session: null }, error: null };
       },

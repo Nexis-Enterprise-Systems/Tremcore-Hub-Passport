@@ -40,7 +40,10 @@ body.hub main{max-width:1100px;margin:0 auto;padding:0 16px}
 select,textarea{width:100%;border-radius:12px;border:1px solid var(--line);background:#0d0d0d;color:var(--text);padding:10px 14px;font:inherit;font-size:1rem}
 select{height:48px;padding:0 10px}
 select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold)}
-input[type=checkbox]{width:20px;height:20px;accent-color:var(--gold);flex:none}
+/* Tick boxes and round choices: small, with no big gold ring when clicked (a thin ring shows only for keyboard users) */
+input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;margin:0;accent-color:var(--gold);flex:none;border-radius:0}
+input[type=checkbox]:focus,input[type=radio]:focus{outline:none;border-color:var(--line)}
+input[type=checkbox]:focus-visible,input[type=radio]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .hubbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:22px}
 .hublogo{width:44px;height:auto}
 .hubnav{display:flex;flex-wrap:wrap;gap:4px;flex:1}
@@ -111,7 +114,7 @@ td input,td select{height:40px;min-width:110px}
 .btn.small[href]{line-height:40px}
 .card a:not(.btn){color:var(--gold)}
 
-.plans{border:0;padding:0;margin:20px 0 0}.plans legend{font-weight:600;padding:0;margin-bottom:4px}.check.plan{align-items:flex-start;margin-top:10px}.check.plan input{margin-top:4px}
+.plans{border:0;padding:0;margin:20px 0 0}.plans legend{font-weight:600;padding:0;margin-bottom:4px}.check.plan{align-items:flex-start;margin-top:10px}.check.plan input{margin-top:5px}
 .renewal{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.renewal.stack{flex-direction:column;align-items:stretch;gap:6px}.renewal .grow{flex:1;min-width:200px;text-decoration:none}.renewal.stack .row{justify-content:flex-start}.renewal input,.renewal select{width:auto;min-width:140px}
 .card.wide{max-width:720px}
 .member{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
@@ -213,7 +216,7 @@ fieldset.checkrow,fieldset.sitepick{border:1px solid var(--line);border-radius:1
 fieldset.checkrow legend,fieldset.sitepick legend{padding:0 6px;font-size:.92rem;font-weight:600;color:var(--text)}
 .sitechecks{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
 .sitechecks .check,fieldset.sitepick .check{display:inline-flex;align-items:center;gap:8px;margin:2px 0;font-weight:400;font-size:.92rem}
-.sitechecks input[type=checkbox],fieldset.sitepick input[type=checkbox]{width:18px;height:18px;flex:none}
+.sitechecks input[type=checkbox],fieldset.sitepick input[type=checkbox]{width:16px;height:16px;flex:none}
 fieldset.sitepick .check{display:flex}
 .rowtools{margin-left:auto;display:flex;gap:14px}
 .rowtools .linkbtn{padding:2px 0;font-size:.85rem}

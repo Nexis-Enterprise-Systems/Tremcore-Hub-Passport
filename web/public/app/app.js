@@ -251,7 +251,9 @@
   async function viewAwaitingPayment(a) {
     const q = new URLSearchParams(location.search).get('paid');
     const box = h('div', { id: 'pay-msg' });
+    let auto = false; try { auto = sessionStorage.getItem('tc_autopay') === '1'; sessionStorage.removeItem('tc_autopay'); } catch (e) { auto = false; }   // just signed up: go straight to Stripe
     const confirming = q === '1' && payChecks < 20;
+    auto = auto && a.is_head && !confirming && q !== '0';
     if (confirming) { payChecks += 1; setTimeout(route, 3000); }
     const btn = h('button', { class: 'btn', id: 'pay-now', onclick: async (e) => {
       await busy(e.target, async () => {
@@ -266,10 +268,11 @@
     } }, 'Pay now');
     showIn(h('div', { class: 'card' }, h('h1', {}, confirming ? 'Confirming your payment' : 'One step left: payment'),
       confirming ? h('p', {}, 'Thank you. We are waiting for your payment to be confirmed. This page updates by itself, usually within a few seconds.')
-        : h('p', {}, a.is_head ? 'Your account has been created. It opens as soon as your payment is confirmed.' : 'This account is waiting for its first payment. Please ask your head-office user.'),
+        : h('p', {}, auto ? 'Taking you to our secure payment page…' : a.is_head ? 'Your account has been created. It opens as soon as your payment is confirmed.' : 'This account is waiting for its first payment. Please ask your head-office user.'),
       q === '0' && h('div', { class: 'msg err', role: 'status' }, 'The payment was not completed. You have not been charged. You can try again when you are ready.'),
       a.is_head && !confirming && btn, box,
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
+    if (auto) btn.click();
   }
 
   function viewAccessProblem(why) {
@@ -485,7 +488,7 @@
         // Supabase hides whether an email is already registered: it "succeeds" but the new user has no identities. Say so plainly.
         if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return message(box, 'err', 'That email already has an account, so we have not taken a payment. Try signing in, or reset your password. To start a new business, use a different email address.');
         pass.value = '';
-        if (data && data.session) return route();     // email confirmation is off (testing only): carry straight on
+        if (data && data.session) { try { sessionStorage.setItem('tc_autopay', '1'); } catch (e) { /* ignore */ } return route(); }     // email confirmation is off: carry straight on, and on to Stripe
         // Money first: go straight to Stripe. The login exists but nothing opens until the payment is confirmed.
         const billingChoice = (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly';
         let pay = null, why = '';
@@ -587,6 +590,8 @@
     }
     if (error || !req) return viewNoAccount();
     contactLevel = Number(req.level) || 1;
+    // Money first: a new, unpaid account goes to the payment step before 2FA set-up (2FA comes right after the payment is confirmed).
+    try { const ac = await sb.rpc('my_access'); if (ac && ac.data && ac.data[0] && ac.data[0].state === 'awaiting_payment') return viewHome(req, false); } catch (e) { /* the normal path below decides */ }
     const aal = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data || {};
     const factors = (await sb.auth.mfa.listFactors()).data || {};
     const verified = factors.totp || [];
