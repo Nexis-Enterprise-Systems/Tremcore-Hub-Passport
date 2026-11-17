@@ -191,6 +191,7 @@ const USERS = {
       rr = await sp(Object.assign({}, good, { email: 'nope' })); check('pay first: a bad email is refused before anything is made', rr.status === 422 && prepCalls.length === np);
       rr = await sp(good, { Origin: 'https://evil.example' }); check('pay first: another website cannot start it', rr.status === 403 && prepCalls.length === np);
       prepReply = { status: 400, message: 'not_allowed' }; rr = await sp(good); check('pay first: an account that is already confirmed, or not new, is refused with no payment page', rr.status === 403 && stripeCalls.length === ns + 1);
+      prepReply = { status: 404, message: 'Could not find the function public.signup_prepare' }; rr = await sp(good); check('pay first: if the database update has not been run, the message says so', rr.status === 503 && (await rr.json()).error.includes('0024'));
       prepReply = { status: 400, message: 'already_paid' }; rr = await sp(good); check('pay first: an already-paid sign-up is told so and not charged twice', rr.status === 409);
       prepReply = { status: 400, message: 'signup_closed' }; rr = await sp(good); check('pay first: closed sign-up is refused', rr.status === 403 && (await rr.json()).error.includes('not open'));
       prepReply = { status: 200 }; stripeFail = true; rr = await sp(good); check('pay first: if Stripe refuses, a plain message only', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
@@ -637,6 +638,13 @@ const USERS = {
     check('the confirmation email can be sent again from the screen', (await calls(t.page, 'resend'))[0].email === 'pat@co.example' && (await calls(t.page, 'resend'))[0].type === 'signup');
     await t.ctx.close();
 
+    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.signupHidden = true; });
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
+    let hiddenPay = 0; await t.page.route('**/api/signup-checkout', (rt) => { hiddenPay++; rt.fulfill({ status: 200, contentType: 'application/json', body: '{"url":"x"}' }); });
+    await t.page.fill('#su-name', 'Aaron'); await t.page.fill('#su-company', 'Co'); await t.page.fill('#su-sites', '1'); await t.page.fill('#su-email', 'me@mine.example'); await t.page.fill('#su-pass', 'a-long-enough-password'); await t.page.check('#su-terms'); await t.page.click('button[type=submit]');
+    await t.page.waitForSelector('.msg.err');
+    check('an email that is already registered (Supabase hides it) is told so, and no payment is started', (await t.page.locator('.msg.err').innerText()).includes('already has an account') && hiddenPay === 0);
+    await t.ctx.close();
     // existing email, closed-at-the-last-moment, and a signup rule refusal
     t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.users['taken@example.com'] = { password: 'x', factor: false, profile: null, confirmed: true }; });
     await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');

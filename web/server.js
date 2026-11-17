@@ -196,10 +196,11 @@ async function handleSignupCheckout(req, res) {
     if (!r.ok) {
       const e = await r.json().catch(() => ({})), m = String(e.message || '');
       console.error('signup_prepare refused', r.status, m.slice(0, 120));
+      if (r.status === 404 && /function/i.test(m)) return out(503, { error: 'Sign-up payment has not been fully installed yet (database update 0024 is missing). Please contact Tremcore.' });
       if (/already_paid/.test(m)) return out(409, { error: 'This sign-up has already been paid for. Please confirm your email and sign in.' });
       if (/signup_closed/.test(m)) return out(403, { error: 'Sign-up is not open at the moment.' });
       if (/invalid_details/.test(m)) return out(422, { error: 'Some of the details were not accepted.' });
-      return out(403, { error: 'We could not start your payment. Please contact Tremcore and we will help.' });
+      return out(403, { error: 'We could not start your payment. If this email already has an account, please sign in instead. Otherwise contact Tremcore and we will help.' });
     }
     const info = (await r.json())[0];
     if (!info) return out(403, { error: 'We could not start your payment. Please contact Tremcore and we will help.' });

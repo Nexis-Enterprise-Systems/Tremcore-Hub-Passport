@@ -482,6 +482,8 @@
             : /signups? .*(not allowed|disabled)/i.test(m) ? 'Sign-up is not available right now. Please contact Tremcore and we will help.'
             : /password/i.test(m) ? m : 'Sorry, we could not create the account: ' + m);
         }
+        // Supabase hides whether an email is already registered: it "succeeds" but the new user has no identities. Say so plainly.
+        if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return message(box, 'err', 'That email already has an account, so we have not taken a payment. Try signing in, or reset your password. To start a new business, use a different email address.');
         pass.value = '';
         if (data && data.session) return route();     // email confirmation is off (testing only): carry straight on
         // Money first: go straight to Stripe. The login exists but nothing opens until the payment is confirmed.

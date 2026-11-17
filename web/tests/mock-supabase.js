@@ -100,6 +100,7 @@
       async signUp({ email, password, options }) {
         rec('signUp', { email, meta: options && options.data, redirect: options && options.emailRedirectTo });
         if (M().signupError) return { data: {}, error: Object.assign({ message: M().signupError.message }, M().signupError) };
+        if (M().signupHidden) return { data: { user: { email, identities: [] }, session: null }, error: null };
         if (M().users[email]) return { data: {}, error: { status: 422, message: 'User already registered' } };
         M().users[email] = { password, factor: false, profile: null, confirmed: false, meta: options && options.data };
         return { data: { user: { email }, session: null }, error: null };
