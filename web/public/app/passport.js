@@ -154,7 +154,7 @@
         !ss.owned ? promo('staff_signin', 'Staff Clock In / Out', 'A unique QR code for each site. Staff scan to clock in and out, and you see who is on site and download attendance records.', money(ss.price_pence) + ' / site / month + VAT', 'Add now') : null].filter(Boolean) : [];
       shell('home',
         h('div', { class: 'card overview' },
-          h('div', { class: 'welcome' }, h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
+          h('div', { class: 'welcome' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
           ...heading(note),
           h('h2', {}, 'Overall Compliance'),
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
