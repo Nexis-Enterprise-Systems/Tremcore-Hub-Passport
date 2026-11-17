@@ -313,9 +313,9 @@
     const siteRows = mySites.map((x) => ({ id: x.id, name: tidy(h('input', { 'aria-label': 'Name of ' + x.name, maxlength: '160', value: /^Site \d+$/.test(x.name) ? '' : x.name, placeholder: x.name })), address: window.TCFormat.tidyBox(h('input', { 'aria-label': 'Address of ' + x.name, maxlength: '300', value: x.address || '', autocomplete: 'off' })), postcode: window.TCFormat.tidyBox(h('input', { 'aria-label': 'Postcode of ' + x.name, maxlength: '12', value: x.postcode || '', autocomplete: 'off', placeholder: 'ME3 8FX' }), 'postcode'), was: x.name }));
     const box = h('div', { id: 'setup-msg' });
     const F = window.TCFormat;
-    const phone = F.tidyBox(h('input', { id: 'st-phone', type: 'tel', autocomplete: 'tel', maxlength: '40', placeholder: '01634 123456' }), 'phone');
-    const addr = F.tidyBox(h('input', { id: 'st-addr', autocomplete: 'street-address', maxlength: '300' }));
-    const pcode = F.tidyBox(h('input', { id: 'st-pc', autocomplete: 'postal-code', maxlength: '12', placeholder: 'ME3 8FX' }), 'postcode');
+    const phone = F.tidyBox(h('input', { id: 'st-phone', required: 'required', 'aria-required': 'true', type: 'tel', autocomplete: 'tel', maxlength: '40', placeholder: '01634 123456' }), 'phone');
+    const addr = F.tidyBox(h('input', { id: 'st-addr', required: 'required', 'aria-required': 'true', autocomplete: 'street-address', maxlength: '300' }));
+    const pcode = F.tidyBox(h('input', { id: 'st-pc', required: 'required', 'aria-required': 'true', autocomplete: 'postal-code', maxlength: '12', placeholder: 'ME3 8FX' }), 'postcode');
     const boxes = checks.map((c) => h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'core', value: c.code }), h('span', {}, c.label)));
     const all = h('button', { type: 'button', class: 'linkbtn', id: 'st-all', onclick: () => root.querySelectorAll('input[name=core]').forEach((i) => { i.checked = true; }) }, 'Tick all');
     const btn = h('button', { class: 'btn', type: 'submit', id: 'st-go' }, 'Finish set-up');
@@ -323,8 +323,17 @@
       e.preventDefault();
       const codes = [...root.querySelectorAll('input[name=core]:checked')].map((i) => i.value);
       const ph = F.phone(phone.value), bpc = F.postcode(pcode.value);
+      if (!ph.value) return message(box, 'err', 'Please add your business phone number.');
       if (!ph.ok) return message(box, 'err', F.PHONE_HELP);
+      if (!addr.value.trim()) return message(box, 'err', 'Please add your business address.');
+      if (!bpc.value) return message(box, 'err', 'Please add your business postcode.');
       if (!bpc.ok) return message(box, 'err', 'Business postcode: ' + F.POSTCODE_HELP);
+      for (let i = 0; i < siteRows.length; i++) {
+        const x = siteRows[i];
+        if (!x.name.value.trim()) return message(box, 'err', 'Please give site ' + (i + 1) + ' a name.');
+        if (!x.address.value.trim()) return message(box, 'err', 'Please add the address of ' + (x.name.value.trim() || 'site ' + (i + 1)) + '.');
+        if (!x.postcode.value.trim()) return message(box, 'err', 'Please add the postcode of ' + (x.name.value.trim() || 'site ' + (i + 1)) + '.');
+      }
       const spcs = siteRows.map((x) => F.postcode(x.postcode.value)); if (spcs.some((q) => !q.ok)) return message(box, 'err', 'Site postcode: ' + F.POSTCODE_HELP);
       await busy(btn, async () => {
         const sitesOut = siteRows.map((x, i) => ({ id: x.id, name: titleCase(x.name.value.trim()) || x.was, address: F.cap(x.address.value.trim()) || null, postcode: spcs[i].value || null }));
@@ -335,12 +344,12 @@
       });
     } },
       h('h3', {}, 'About your business'),
-      h('label', { for: 'st-phone' }, 'Business phone number (optional)'), phone,
-      h('label', { for: 'st-addr' }, 'Business address (optional)'), addr,
-      h('label', { for: 'st-pc' }, 'Postcode (optional)'), pcode,
+      h('label', { for: 'st-phone' }, 'Business phone number'), phone,
+      h('label', { for: 'st-addr' }, 'Business address'), addr,
+      h('label', { for: 'st-pc' }, 'Postcode'), pcode,
       h('h3', {}, mySites.length === 1 ? 'Your site' : 'Your sites'),
-      h('p', { class: 'muted small' }, 'Give each site a name and, if you like, its address. You can change these later.'),
-      ...siteRows.map((x, i) => h('div', { class: 'member', 'data-site-row': x.id }, h('label', {}, 'Site ' + (i + 1) + ' name'), x.name, h('label', {}, 'Address (optional)'), x.address, h('label', {}, 'Postcode (optional)'), x.postcode)),
+      h('p', { class: 'muted small' }, 'Give each site a name, its address and its postcode. You can change these later.'),
+      ...siteRows.map((x, i) => h('div', { class: 'member', 'data-site-row': x.id }, h('label', {}, 'Site ' + (i + 1) + ' name'), x.name, h('label', {}, 'Address'), x.address, h('label', {}, 'Postcode'), x.postcode)),
       h('h3', {}, 'Which compliance checks apply to your premises?'),
       h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
       h('div', { class: 'checklist' }, ...boxes), all, btn, box);

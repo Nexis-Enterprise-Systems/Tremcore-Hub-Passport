@@ -726,10 +726,19 @@ const USERS = {
     check('set-up: a new head-office user is asked for details and shown the ten core checks, none ticked', (await t.page.locator('input[name=core]').count()) === 10 && (await t.page.locator('input[name=core]:checked').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Fire Risk Assessment') && (await t.page.locator('.card').innerText()).includes('F-Gas'));
     check('set-up: one row per site to name, with no name filled in yet', (await t.page.locator('[data-site-row]').count()) === 2 && (await t.page.locator('[data-site-row] input').first().inputValue()) === '');
     await t.page.fill('[data-site-row=s1] input >> nth=0', 'high street shop'); await t.page.fill('[data-site-row=s1] input >> nth=1', '1 High St'); await t.page.press('[data-site-row=s1] input >> nth=0', 'Tab');
-    await t.page.fill('#st-phone', '01634 000000'); await t.page.check('input[value=c0]'); await t.page.check('input[value=c5]');
+    await t.page.check('input[value=c0]'); await t.page.check('input[value=c5]');
+    // phone, business address/postcode and every site's name, address and postcode are all required
+    await t.page.click('#st-go');
+    check('set-up: nothing is optional (phone, address, postcode) and nothing is sent while they are missing', (await t.page.locator('#setup-msg').innerText()).includes('phone number') && (await calls(t.page, 'rpc:finish_setup')).length === 0 && (await t.page.locator('label:has-text("optional")').count()) === 0);
+    await t.page.fill('#st-phone', '01634 000000'); await t.page.click('#st-go');
+    check('set-up: business address is asked for next', (await t.page.locator('#setup-msg').innerText()).includes('business address'));
+    await t.page.fill('#st-addr', '1 Dock Road, Chatham'); await t.page.fill('#st-pc', 'ME4 4TE'); await t.page.click('#st-go');
+    check('set-up: a site with no postcode is refused', (await t.page.locator('#setup-msg').innerText()).includes('postcode of') && (await calls(t.page, 'rpc:finish_setup')).length === 0);
+    await t.page.fill('[data-site-row=s1] input >> nth=2', 'ME3 8FX');
+    await t.page.fill('[data-site-row=s2] input >> nth=0', 'Rear Yard'); await t.page.fill('[data-site-row=s2] input >> nth=1', '2 High St'); await t.page.fill('[data-site-row=s2] input >> nth=2', 'ME1 1AA');
     await t.page.click('#st-go'); await t.page.waitForSelector('text=Overall Compliance');
     const fs = (await calls(t.page, 'rpc:finish_setup'))[0];
-    check('set-up: only the ticked checks and the details are sent, with the site names capitalised and the unnamed one left as it was', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000' && fs.p_sites[0].name === 'High Street Shop' && fs.p_sites[0].address === '1 High St' && fs.p_sites[1].name === 'Site 2');
+    check('set-up: only the ticked checks and the details are sent, with the site names capitalised and the details sent', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000' && fs.p_sites[0].name === 'High Street Shop' && fs.p_sites[0].address === '1 High St' && fs.p_sites[1].name === 'Rear Yard');
     await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('set-up: the ticked checks appear as "No date" (never green), and set-up is not asked again', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('#st-go').count()) === 0);
     await t.ctx.close();
