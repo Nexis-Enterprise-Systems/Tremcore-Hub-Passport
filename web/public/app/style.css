@@ -370,3 +370,6 @@ body.passport{padding-bottom:84px}
 #view-full::after{display:none}
 .btn.ghost{background:#141414;color:var(--text);box-shadow:none;border:1px solid #3a3a3a}
 .btn.ghost::after{display:none}
+
+/* Add-on button: centred in the card, with the words centred inside it */
+.promo-cta{align-self:center;display:flex;align-items:center;justify-content:center;width:72%;min-width:160px;max-width:100%;text-align:center;line-height:1}
