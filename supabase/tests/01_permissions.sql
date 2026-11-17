@@ -532,19 +532,32 @@ begin;
 select 'setup: the core list has the ten checks the owner chose' as test, (select count(*)=10 from core_checks) as ok;
 select * from chk('setup: a signed-in client can read the list', :'superA', 'aal2', $$select count(*)=10 from core_checks$$);
 select * from chk('setup: a client cannot change the list', :'superA', 'aal2', $$with u as (update core_checks set label='x' returning 1) select count(*)=0 from u$$);
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true);
+  perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform finish_setup(null,'1 High St','{}'::text[],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,'ME4 4TE'); raise exception 'set-up accepted without a phone'; exception when invalid_parameter_value then null; end;
+  begin perform finish_setup('01634 000000',null,'{}'::text[],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,'ME4 4TE'); raise exception 'set-up accepted without an address'; exception when invalid_parameter_value then null; end;
+  begin perform finish_setup('01634 000000','1 High St','{}'::text[],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,null); raise exception 'set-up accepted without a postcode'; exception when invalid_parameter_value then null; end;
+  begin perform finish_setup('01634 000000','1 High St','{}'::text[],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"}]'::jsonb,'ME4 4TE'); raise exception 'set-up accepted with a site left blank'; exception when invalid_parameter_value then null; end;
+  begin perform finish_setup('01634 000000','1 High St','{}'::text[],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,'ME4 4TE'); raise exception 'set-up accepted with a site missing its postcode'; exception when invalid_parameter_value then null; end;
+  reset role;
+end $$;
+select 'setup: refused without the business phone, address or postcode, or with any site missing its name, address or postcode' as test, true as ok;
+select 'setup: the refused attempts saved nothing' as test, (select setup_completed_at is null from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
 select * from chk('setup: super admin ticks three checks; they go onto both sites (6 items)', :'superA', 'aal2',
-  $$select finish_setup('01634 000000','1 High St, Rochester', array['fra','pat','legionella']) = 6$$);
+  $$select finish_setup('01634 000000','1 High St, Rochester', array['fra','pat','legionella'], '[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb, 'ME4 4TE') = 6$$);
 select 'setup: the new items have no date, so they show as missing, never green' as test,
   (select count(*)=6 and bool_and(due_date is null) from compliance_items where title in ('Fire Risk Assessment','PAT Testing','Legionella (water) Risk Management') and created_by='00000000-0000-0000-0000-0000000000a2') as ok;
 select 'setup: marked done, with the contact details saved' as test,
   (select setup_completed_at is not null and contact_phone='01634 000000' and address like '1 High St%' from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
 select * from chk('setup: running it again does not duplicate anything', :'superA', 'aal2',
-  $$select finish_setup(null,null,array['fra','pat']) = 0$$);
+  $$select finish_setup('01634 000000','1 High St, Rochester',array['fra','pat'],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,'ME4 4TE') = 0$$);
 do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true);
   perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
   set local role authenticated;
-  begin perform finish_setup(null,null,array['not_a_check']); raise exception 'odd code accepted'; exception when invalid_parameter_value then null; end;
+  begin perform finish_setup('01634 000000','1 High St',array['not_a_check'],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,'ME4 4TE'); raise exception 'odd code accepted'; exception when invalid_parameter_value then null; end;
   reset role;
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a3', true);
   perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
@@ -554,7 +567,7 @@ do $$ begin
 end $$;
 select 'setup: an unknown check is refused, and a site user cannot run the set-up' as test, true as ok;
 select * from chk('setup: sites are named and given addresses in the first-run set-up, tidied to capitals', :'superA', 'aal2',
-  $$select finish_setup(null,null,array[]::text[], '[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St"}]'::jsonb)=0$$);
+  $$select finish_setup('01634 000000','1 High St, Rochester',array[]::text[],'[{"id":"20000000-0000-0000-0000-0000000000a1","name":"high street shop","address":"1 High St","postcode":"ME4 4TE"},{"id":"20000000-0000-0000-0000-0000000000a2","name":"Rear Yard","address":"2 High St","postcode":"ME1 1AA"}]'::jsonb,'ME4 4TE')=0$$);
 select 'setup: the site was renamed' as test, exists (select 1 from properties where id='20000000-0000-0000-0000-0000000000a1' and name='High Street Shop' and address='1 High St') as ok;
 select 'setup: another company got nothing' as test, (select count(*)=0 from compliance_items where property_id='20000000-0000-0000-0000-0000000000b1' and title='Fire Risk Assessment') as ok;
 rollback;
