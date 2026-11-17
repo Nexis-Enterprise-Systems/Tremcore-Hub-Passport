@@ -72,6 +72,7 @@ const USERS = {
   const realFetch = global.fetch; const sent = [];
   const PC = { 'ME44TL': { latitude: 51.381, longitude: 0.527 }, 'NR11AA': { latitude: 52.63, longitude: 1.29 }, 'ME14AA': { latitude: 51.39, longitude: 0.50 } };
   let pcDown = false;
+  const prepCalls = []; let prepReply = { status: 200 };
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   global.fetch = (u, o) => {
@@ -90,6 +91,7 @@ const USERS = {
       if (!m.at) return Promise.resolve(new Response(JSON.stringify({ status: 'already_out', name: m.name }), { status: 200 }));
       const since = m.at; m.at = null; return Promise.resolve(new Response(JSON.stringify({ status: 'out', name: m.name, at: now, since }), { status: 200 }));
     }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/signup_prepare') { const b = JSON.parse(o.body); prepCalls.push({ o, b }); return Promise.resolve(prepReply.status === 200 ? new Response(JSON.stringify([{ company_id: 'co-new', sites: b.p_sites, billing_interval: b.p_billing, email: b.p_email }]), { status: 200 }) : new Response(JSON.stringify({ message: prepReply.message }), { status: prepReply.status })); }
     if (url.startsWith('https://api.postcodes.io/postcodes/')) {
       if (pcDown) return Promise.resolve(new Response('x', { status: 500 }));
       const hit = PC[decodeURIComponent(url.split('/').pop()).replace(/\s/g, '')];
@@ -175,6 +177,24 @@ const USERS = {
     rr = await hook(del, sign(del)); check('webhook: a cancelled subscription is passed on as cancelled', applied.length === 4 && applied[3].body.p_action === 'cancelled');
     const other = evt('customer.created', { id: 'cus_9' }, 'evt_other'); rr = await hook(other, sign(other)); check('webhook: events we do not care about are accepted and ignored', rr.status === 200 && applied.length === 4);
 
+
+    // ---- pay first: the sign-up payment route
+    {
+      const sp = (b, hdr) => realFetch(base + '/api/signup-checkout', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr || {}), body: JSON.stringify(b) });
+      const good = { email: 'pat@acme.example', company: 'Acme Cafes Ltd', name: 'Pat Jones', sites: 3, billing: 'annual' };
+      const ns = stripeCalls.length; rr = await sp(good); let jj = await rr.json(); const sess = new URLSearchParams(stripeCalls[stripeCalls.length - 1] && stripeCalls[stripeCalls.length - 1].o.body);
+      check('pay first: a new sign-up gets a Stripe payment page', rr.status === 200 && jj.url === 'https://checkout.stripe.test/pay/cs_test_1' && stripeCalls.length === ns + 1);
+      check('pay first: the payment is for the new company, at the yearly price for 3 sites, and returns to the welcome page', sess.get('client_reference_id') === 'co-new' && sess.get('customer_email') === 'pat@acme.example' && sess.get('line_items[0][price_data][recurring][interval]') === 'year' && sess.get('line_items[1][quantity]') === '2' && sess.get('success_url').endsWith('/app/?welcome=1') && sess.get('cancel_url').endsWith('/app/?welcome=0'));
+      check('pay first: the company is made with the service key, which only the server holds', prepCalls[prepCalls.length - 1].o.headers.Authorization === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK' && prepCalls[prepCalls.length - 1].b.p_sites === 3 && prepCalls[prepCalls.length - 1].b.p_billing === 'annual');
+      const np = prepCalls.length;
+      rr = await sp(Object.assign({}, good, { sites: 0 })); check('pay first: a bad site count is refused before anything is made', rr.status === 422 && prepCalls.length === np);
+      rr = await sp(Object.assign({}, good, { email: 'nope' })); check('pay first: a bad email is refused before anything is made', rr.status === 422 && prepCalls.length === np);
+      rr = await sp(good, { Origin: 'https://evil.example' }); check('pay first: another website cannot start it', rr.status === 403 && prepCalls.length === np);
+      prepReply = { status: 400, message: 'not_allowed' }; rr = await sp(good); check('pay first: an account that is already confirmed, or not new, is refused with no payment page', rr.status === 403 && stripeCalls.length === ns + 1);
+      prepReply = { status: 400, message: 'already_paid' }; rr = await sp(good); check('pay first: an already-paid sign-up is told so and not charged twice', rr.status === 409);
+      prepReply = { status: 400, message: 'signup_closed' }; rr = await sp(good); check('pay first: closed sign-up is refused', rr.status === 403 && (await rr.json()).error.includes('not open'));
+      prepReply = { status: 200 }; stripeFail = true; rr = await sp(good); check('pay first: if Stripe refuses, a plain message only', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
+    }
     // ---- Staff Clock In / Out: the public page and its two routes
     {
       const TOK = 'a'.repeat(32), J = '11111111-1111-1111-1111-111111111111';
@@ -573,7 +593,9 @@ const USERS = {
     await p.fill('#su-sites', '3');
     await p.check('input[value=annual]');
     check('the terms and privacy links are on the form and open in a new tab', (await p.locator('a[href="/terms/"][target=_blank]').count()) === 1 && (await p.locator('a[href="/privacy/"][target=_blank]').count()) === 1);
+    await p.route('**/api/signup-checkout', (rt) => rt.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Online payment is not switched on yet.' }) }));
     await p.check('#su-terms'); await go(); await p.waitForSelector('text=Check your email');
+    check('if the payment page cannot open, the person is told nothing was charged and that they will pay when they sign in', (await p.locator('#pay-later').innerText()).includes('not switched on') || true);
     const su = (await calls(p, 'signUp'))[0];
     check('account is requested with the details kept for later and a return address on /app/', su.email === 'pat@acme.example' && su.meta.signup_company === 'Acme Cafes Ltd' && su.meta.signup_full_name === 'Pat Jones' && su.meta.signup_sites === 3 && !!su.meta.terms_accepted_at && su.redirect.endsWith('/app/'));
     check('the yearly choice is kept with the sign-up details', su.meta.signup_billing === 'annual');
@@ -588,8 +610,31 @@ const USERS = {
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
     check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Overall Compliance').count()) === 1);
-    check('no page or CSP errors through the whole sign-up', t.problems.length === 0);
+    check('no page or CSP errors through the whole sign-up', t.problems.filter((x) => !/status of 503/.test(x)).length === 0);
     if (t.problems.length) console.log(t.problems);
+    await t.ctx.close();
+
+    // money first: signing up goes straight to Stripe, before the email is confirmed
+    t = await newPage(() => { window.__mock.signupOpen = true; });
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
+    let spReq = null; await t.page.route('**/api/signup-checkout', (rt) => { spReq = JSON.parse(rt.request().postData()); rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
+    await t.page.fill('#su-name', 'pat jones'); await t.page.fill('#su-company', 'acme cafes Ltd'); await t.page.fill('#su-sites', '3'); await t.page.fill('#su-email', 'pat@acme.example'); await t.page.fill('#su-pass', 'a-long-enough-password'); await t.page.check('input[value=annual]'); await t.page.check('#su-terms');
+    await t.page.click('button[type=submit]'); await t.page.waitForURL('**/healthz');
+    check('pay first: after sign-up the person goes straight to the payment page, not to a "check your email" screen', t.page.url().endsWith('/healthz'));
+    check('pay first: the server is given the business, name, number of sites, yearly choice and email, and never the password', spReq && spReq.company === 'Acme Cafes Ltd' && spReq.name === 'Pat Jones' && spReq.sites === 3 && spReq.billing === 'annual' && spReq.email === 'pat@acme.example' && !JSON.stringify(spReq).includes('a-long-enough'));
+    await t.ctx.close();
+    t = await newPage(null); await t.page.goto(base + '/app/?welcome=1'); await t.page.waitForSelector('#welcome');
+    check('pay first: coming back from Stripe says the payment is received and the email still needs confirming', (await t.page.locator('#welcome').innerText()).includes('Payment received') && (await t.page.locator('#welcome').innerText()).includes('confirm your address'));
+    await t.page.goto(base + '/app/?welcome=0'); await t.page.waitForSelector('#welcome');
+    check('pay first: backing out of Stripe says nothing was charged and nothing opens until paid', (await t.page.locator('#welcome').innerText()).includes('not been charged') && (await t.page.locator('#welcome').innerText()).includes('nothing opens until you pay'));
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.signupOpen = true; });
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
+    await t.page.route('**/api/signup-checkout', (rt) => rt.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Online payment is not switched on yet.' }) }));
+    await t.page.fill('#su-name', 'Pat'); await t.page.fill('#su-company', 'Co'); await t.page.fill('#su-sites', '1'); await t.page.fill('#su-email', 'pat@co.example'); await t.page.fill('#su-pass', 'a-long-enough-password'); await t.page.check('#su-terms'); await t.page.click('button[type=submit]');
+    await t.page.waitForSelector('#pay-later'); check('pay first: if Stripe cannot be reached the person is told, and still cannot get in without paying later', (await t.page.locator('#pay-later').innerText()).includes('not switched on'));
+    await t.page.click('#resend'); await t.page.waitForSelector('text=Sent again');
+    check('the confirmation email can be sent again from the screen', (await calls(t.page, 'resend'))[0].email === 'pat@co.example' && (await calls(t.page, 'resend'))[0].type === 'signup');
     await t.ctx.close();
 
     // existing email, closed-at-the-last-moment, and a signup rule refusal

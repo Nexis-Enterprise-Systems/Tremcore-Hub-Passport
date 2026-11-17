@@ -176,6 +176,43 @@ async function handleCheckout(req, res) {
   } catch (e) { console.error('checkout error', e.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
 }
 
+// A brand-new sign-up pays FIRST. The sign-up page has just made the login (not yet confirmed); here, with the service key, we make the unpaid
+// company for it and send the person straight to Stripe. Nothing opens until Stripe confirms the payment (the webhook), and the login cannot be
+// used until the email is confirmed, so it takes both to get in.
+async function handleSignupCheckout(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const origin = req.headers.origin;
+  if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+  if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return out(503, { error: 'Online payment is not switched on yet.' });
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (checkoutLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
+  let d; try { d = JSON.parse(await readBody(req, 4000)); } catch { return out(400, { error: 'Sorry, that could not be read.' }); }
+  const email = clip(d && d.email, 200), company = clip(d && d.company, 160), name = clip(d && d.name, 120), sites = Math.floor(Number(d && d.sites)), billingInterval = d && d.billing === 'annual' ? 'annual' : 'monthly';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !company || !name || !(sites >= 1 && sites <= 100)) return out(422, { error: 'Some of the details were not accepted.' });
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/signup_prepare', { method: 'POST',
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_email: email, p_company: company, p_full_name: name, p_sites: sites, p_billing: billingInterval }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({})), m = String(e.message || '');
+      console.error('signup_prepare refused', r.status, m.slice(0, 120));
+      if (/already_paid/.test(m)) return out(409, { error: 'This sign-up has already been paid for. Please confirm your email and sign in.' });
+      if (/signup_closed/.test(m)) return out(403, { error: 'Sign-up is not open at the moment.' });
+      if (/invalid_details/.test(m)) return out(422, { error: 'Some of the details were not accepted.' });
+      return out(403, { error: 'We could not start your payment. Please contact Tremcore and we will help.' });
+    }
+    const info = (await r.json())[0];
+    if (!info) return out(403, { error: 'We could not start your payment. Please contact Tremcore and we will help.' });
+    const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, welcome: true });
+    const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
+      headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
+    const sj = await sr.json().catch(() => ({}));
+    if (!sr.ok || !sj.url) { console.error('stripe signup checkout failed', sr.status, sj && sj.error && sj.error.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
+    return out(200, { url: sj.url });
+  } catch (e) { console.error('signup checkout error', e.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
+}
+
 // Add-ons (Toolbox Talks, Staff Clock In / Out): the signed-in head-office user is sent to Stripe to pay. The database decides who may buy what.
 async function handleCheckoutExtra(req, res) {
   const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
@@ -286,6 +323,7 @@ const server = http.createServer((req, res) => {
   try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return send(res, 400, 'Bad request'); }
   if (req.method === 'POST' && pathname === '/api/enquiry') return handleEnquiry(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
+  if (req.method === 'POST' && pathname === '/api/signup-checkout') return handleSignupCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout-extra') return handleCheckoutExtra(req, res);
   if (req.method === 'POST' && pathname === '/api/stripe-webhook') return handleWebhook(req, res);
   if (pathname === '/api/clock' && (req.method === 'GET' || req.method === 'POST')) return handleClock(req, res, new URL(req.url, 'http://x').searchParams);

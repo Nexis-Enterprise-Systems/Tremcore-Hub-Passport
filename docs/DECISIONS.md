@@ -91,3 +91,11 @@
 - Attendance records are made only by the clock function. Managers can only close a record that was left open, and cannot change a start time. Someone who forgot to clock out is shown as "no clock-out recorded"; no time is invented.
 - Known gap (Aaron to decide): there is no PIN, so anyone who can see the QR code could clock in as someone else. A per-person PIN is the usual fix if it matters.
 - Needs `SUPABASE_SERVICE_ROLE_KEY` set in Railway (same key the payment webhook uses).
+
+## Pay first, at sign-up (17 Nov 2026)
+- Signing up now goes straight to Stripe. The login is made (email not yet confirmed) and our server makes the unpaid company with the service key (`signup_prepare`, migration 0024, closed to every browser user), then sends the person to Stripe. Nothing opens until Stripe confirms the payment AND the email is confirmed.
+- The password never leaves Supabase: the server is given only business name, name, number of sites, billing choice and email.
+- Only a brand-new, unconfirmed login (under 2 hours old) can be prepared; a confirmed or older account can never be re-priced from this route. Returning from a cancelled Stripe page re-uses the same unpaid company.
+- If payment cannot be started, the person is told nothing was charged and still has to pay at first sign-in (the old payment page remains as a safety net).
+- If the account check (my_access) fails the app no longer assumes "all fine"; nothing opens and the person can try again.
+- Open risk: the confirmation email is sent by Supabase's built-in sender, which is limited. A customer who has paid but never receives the email is stuck, so custom email sending must be set up before real customers. A "Send the email again" button is on the screens.

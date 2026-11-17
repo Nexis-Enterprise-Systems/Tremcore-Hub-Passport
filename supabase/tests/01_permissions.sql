@@ -919,4 +919,46 @@ update company_extras set status='cancelled', access_ends_at=now() where company
 do $$ declare tk text; begin select clock_token into tk from properties where id = '20000000-0000-0000-0000-0000000000a1'; set local role service_role;
   if clock_site_info(tk) is not null then raise exception 'page still works after stop'; end if; reset role; end $$;
 select 'clock: when the add-on stops, the public page stops answering' as test, true as ok;
+
+-- ===== Pay before the email is confirmed =====
+insert into auth.users(id, email, email_confirmed_at) values ('00000000-0000-0000-0000-0000000000d1', 'new@pay.test', null), ('00000000-0000-0000-0000-0000000000d2', 'done@pay.test', now());
+insert into auth.users(id, email, email_confirmed_at, created_at) values ('00000000-0000-0000-0000-0000000000d3', 'old@pay.test', null, now() - interval '3 hours');
+create temp table pp(company_id uuid, sites int, billing_interval text, email text); grant all on pp to public;
+do $$ begin
+  begin set local role authenticated; perform signup_prepare('new@pay.test', 'x', 'y', 1, 'monthly'); reset role; raise exception 'user could call it'; exception when insufficient_privilege then reset role; end;
+  begin set local role anon; perform signup_prepare('new@pay.test', 'x', 'y', 1, 'monthly'); reset role; raise exception 'anon could call it'; exception when insufficient_privilege then reset role; end;
+end $$;
+select 'pay first: signed-in and anonymous users cannot call the prepare function (only our server can)' as test, true as ok;
+do $$ declare e text; begin
+  set local role service_role;
+  begin perform signup_prepare('done@pay.test', 'Z Ltd', 'Zed', 1, 'monthly'); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '42501' then raise exception 'confirmed account not refused: %', e; end if;
+  begin perform signup_prepare('old@pay.test', 'Z Ltd', 'Zed', 1, 'monthly'); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '42501' then raise exception 'old login not refused: %', e; end if;
+  begin perform signup_prepare('nobody@pay.test', 'Z Ltd', 'Zed', 1, 'monthly'); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '42501' then raise exception 'unknown email not refused: %', e; end if;
+  begin perform signup_prepare('new@pay.test', 'Z Ltd', 'Zed', 101, 'monthly'); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '22023' then raise exception 'bad site count not refused: %', e; end if;
+  begin perform signup_prepare('new@pay.test', 'Z Ltd', 'Zed', 1, 'weekly'); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '22023' then raise exception 'bad billing not refused: %', e; end if;
+  reset role;
+end $$;
+select 'pay first: a confirmed account, an old login, an unknown email and bad details are all refused' as test, true as ok;
+do $$ begin set local role service_role; insert into pp select * from signup_prepare('NEW@pay.test', '  zed trading ltd ', 'zed jones', 3, 'annual'); reset role; end $$;
+select 'pay first: a new unconfirmed sign-up gets an unpaid company, its head-office user and its sites (names tidied)' as test,
+  (select sites = 3 and billing_interval = 'annual' and email = 'new@pay.test' from pp)
+  and (select name = 'Zed Trading Ltd' and subscription = 'trial' and not company_access_ok(id) and billing_interval = 'annual' and source = 'self_signup' from companies where name = 'Zed Trading Ltd')
+  and (select count(*) = 3 from properties where company_id = (select id from companies where name = 'Zed Trading Ltd'))
+  and (select role = 'client_super' and full_name = 'Zed Jones' from profiles where id = '00000000-0000-0000-0000-0000000000d1') as ok;
+select 'pay first: nothing opens until payment: the new account is awaiting payment' as test,
+  (select state = 'awaiting_payment' from (select (case when c.subscription = 'trial' and not company_access_ok(c.id) then 'awaiting_payment' else 'ok' end) as state from companies c where c.name = 'Zed Trading Ltd') x) as ok;
+do $$ begin set local role service_role; delete from pp; insert into pp select * from signup_prepare('new@pay.test', 'Zed Trading Ltd', 'Zed Jones', 2, 'monthly'); reset role; end $$;
+select 'pay first: coming back from the Stripe page re-uses the same company with the new details, no duplicates' as test,
+  (select count(*) = 1 from companies where name = 'Zed Trading Ltd') and (select billing_interval = 'monthly' from companies where name = 'Zed Trading Ltd')
+  and (select count(*) = 2 from properties where company_id = (select id from companies where name = 'Zed Trading Ltd')) as ok;
+update companies set subscription = 'active' where name = 'Zed Trading Ltd';
+do $$ declare e text; begin set local role service_role;
+  begin perform signup_prepare('new@pay.test', 'Zed Trading Ltd', 'Zed Jones', 2, 'monthly'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '23505' then raise exception 'paid account could be re-prepared: %', e; end if; end $$;
+select 'pay first: once paid, the sign-up cannot be re-prepared or re-priced' as test, true as ok;
 rollback;

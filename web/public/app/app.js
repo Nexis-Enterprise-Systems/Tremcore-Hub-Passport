@@ -484,7 +484,15 @@
         }
         pass.value = '';
         if (data && data.session) return route();     // email confirmation is off (testing only): carry straight on
-        viewCheckEmail(v.email);
+        // Money first: go straight to Stripe. The login exists but nothing opens until the payment is confirmed.
+        const billingChoice = (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly';
+        let pay = null, why = '';
+        try {
+          const r = await fetch('/api/signup-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: v.email, company: v.company, name: v.name, sites: v.sites, billing: billingChoice }) });
+          const j = await r.json().catch(() => ({})); if (r.ok && j.url) pay = j.url; else why = j.error || '';
+        } catch { why = ''; }
+        if (pay) { try { sessionStorage.setItem('tc_signup_email', v.email); } catch (e) { /* ignore */ } location.href = pay; return; }
+        viewCheckEmail(v.email, why || 'We could not open the payment page just now. Nothing has been charged. Confirm your email, sign in, and you will be taken to the payment step.');
       });
     } },
       h('label', { for: 'su-name' }, 'Your name'), name,
@@ -501,10 +509,32 @@
       h('p', { class: 'muted' }, 'Self-Managed Compliance Passport, for businesses. You can add more sites and people after you sign in.'), form));
   }
 
-  function viewCheckEmail(email) {
+  // "Send it again": the sign-up email is sometimes slow or lands in spam.
+  function resendButton(email) {
+    const note = h('div', { id: 'resend-msg' });
+    return h('div', {}, h('button', { class: 'linkbtn', id: 'resend', type: 'button', onclick: async (e) => { await busy(e.target, async () => {
+      const r = await sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: location.origin + '/app/' } });
+      message(note, r.error ? 'err' : 'ok', r.error ? (r.error.status === 429 ? 'Please wait a minute before asking for another email.' : 'Sorry, that did not send. Please try again, or contact Tremcore.') : 'Sent again. Please check your inbox and spam folder.');
+    }); } }, 'Send the email again'), note);
+  }
+
+  // Back from Stripe after paying at sign-up (signed out: the email still has to be confirmed).
+  function viewWelcome(paid) {
+    let email = ''; try { email = sessionStorage.getItem('tc_signup_email') || ''; } catch (e) { /* ignore */ }
+    show(h('div', { class: 'card', id: 'welcome' }, h('h1', {}, paid ? 'Payment received. Thank you' : 'Payment not completed'),
+      paid ? h('p', {}, 'One last step: we have emailed you a link' + (email ? ' at ' : '. '), email ? h('strong', {}, email) : null, email ? '. ' : '', 'Open it to confirm your address, then sign in. Your account opens as soon as your payment is confirmed, usually within seconds.')
+        : h('p', {}, 'You have not been charged. Your sign-up is saved but nothing opens until you pay. Open the link we emailed you to confirm your address, sign in, and you will be taken to the payment step.'),
+      h('p', { class: 'muted' }, 'You will be asked to set up 2FA with an authenticator app the first time you sign in. Nothing arrived? Check your spam folder.'),
+      email ? resendButton(email) : null,
+      h('button', { class: 'btn', onclick: () => viewLogin() }, 'Go to sign in')));
+  }
+
+  function viewCheckEmail(email, extra) {
     show(h('div', { class: 'card' }, h('h1', {}, 'Check your email'),
+      extra ? h('div', { class: 'msg err', role: 'status', id: 'pay-later' }, extra) : null,
       h('p', {}, 'We have sent a link to ', h('strong', {}, email), '. Open it to confirm your address, then sign in.'),
       h('p', { class: 'muted' }, 'You will be asked to set up 2FA with an authenticator app the first time you sign in. It keeps your records safe. Nothing arrived? Check your spam folder.'),
+      resendButton(email),
       h('button', { class: 'btn ghost', onclick: () => viewLogin() }, 'Go to sign in')));
   }
 
@@ -529,7 +559,9 @@
   // ---------- routing: decide which screen the current session should see ----------
   async function route() {
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) { const q = new URLSearchParams(location.search); return q.has('invite') ? viewInviteSignup() : q.has('signup') ? viewSignup() : viewLogin(); }
+    if (!session) { const q = new URLSearchParams(location.search);
+      if (q.get('welcome') === '1' || q.get('welcome') === '0') { const paid = q.get('welcome') === '1'; history.replaceState(null, '', '/app/'); return viewWelcome(paid); }
+      return q.has('invite') ? viewInviteSignup() : q.has('signup') ? viewSignup() : viewLogin(); }
     if (recovering) return viewReset();
     let { data: rows, error } = await sb.rpc('auth_requirements');
     let req = rows && rows[0];

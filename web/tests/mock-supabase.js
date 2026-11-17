@@ -104,6 +104,7 @@
         M().users[email] = { password, factor: false, profile: null, confirmed: false, meta: options && options.data };
         return { data: { user: { email }, session: null }, error: null };
       },
+      async resend(args) { rec('resend', args); return { error: M().resendError ? { status: 429, message: 'rate' } : null }; },
       async signInWithPassword({ email, password }) {
         rec('signIn', email);
         const u = M().users[email];

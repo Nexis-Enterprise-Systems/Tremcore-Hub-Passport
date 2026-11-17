@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const PRICES = { monthly: [1499, 799], annual: [15290, 8150] };   // [first site, each extra site]
 
 // The form fields Stripe wants for a subscription Checkout page. The prices are written into the request itself, so nothing needs setting up in the Stripe dashboard.
-function checkoutParams({ companyId, sites, interval, email, origin, methods }) {
+function checkoutParams({ companyId, sites, interval, email, origin, methods, welcome }) {
   const p = PRICES[interval];
   if (!p || !companyId || !(sites >= 1 && sites <= 100)) throw new Error('bad checkout details');
   const per = interval === 'annual' ? 'year' : 'month';
@@ -27,8 +27,9 @@ function checkoutParams({ companyId, sites, interval, email, origin, methods }) 
   });
   // Stripe now picks payment methods from the Dashboard settings; only send a list if one was set on purpose.
   (methods || []).forEach((m, i) => q.set(`payment_method_types[${i}]`, m));
-  q.set('success_url', origin + '/app/?paid=1');
-  q.set('cancel_url', origin + '/app/?paid=0');
+  // A brand-new sign-up pays before confirming their email, so they come back signed out: "welcome" pages explain the next step.
+  q.set('success_url', origin + (welcome ? '/app/?welcome=1' : '/app/?paid=1'));
+  q.set('cancel_url', origin + (welcome ? '/app/?welcome=0' : '/app/?paid=0'));
   return q;
 }
 
