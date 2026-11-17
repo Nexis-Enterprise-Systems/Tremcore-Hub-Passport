@@ -277,7 +277,7 @@ fieldset.sitepick .check{display:flex}
 body.passport{padding-bottom:84px}
 .qtiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
 .qtile{background:#0d0d0d;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:4px;font:inherit;cursor:pointer;position:relative;min-height:84px}
-.qtile.locked{border-style:dashed}
+.qtile.locked{border:1px solid var(--gold);background:#17130a}
 .qtile .tag.add{align-self:flex-start;background:var(--gold);color:#0a0a0a;border-color:var(--gold);margin-top:2px}
 .subtabs{display:flex;gap:6px;margin:10px 0;border-bottom:1px solid var(--line)}
 .subtab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 10px;font:inherit;font-size:.9rem;cursor:pointer}
@@ -337,3 +337,24 @@ body.passport{padding-bottom:84px}
   .poster{position:absolute;left:0;top:0;width:100%}
   .poster .p-brand{color:#000 !important}
 }
+
+/* Add-on promo cards (Toolbox Talks, Staff Clock In / Out): bold gold so they are not overlooked */
+.card.addons{border-color:var(--gold);background:linear-gradient(180deg,#1a1507,#141414 70%)}
+.card.addons>h2{color:var(--gold)}
+.promos{display:grid;grid-template-columns:1fr;gap:12px;margin-top:8px}
+.promo{display:flex;flex-direction:column;gap:8px;text-align:left;font:inherit;color:var(--text);cursor:pointer;background:#0d0d0d;border:2px solid var(--gold);border-radius:16px;padding:16px;box-shadow:0 0 0 1px rgba(217,177,59,.25),0 6px 22px rgba(217,177,59,.12)}
+.promo:hover{background:#17130a;box-shadow:0 0 0 1px var(--gold),0 8px 26px rgba(217,177,59,.25)}
+.promo:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.promo-top{display:flex;align-items:center;justify-content:space-between}
+.promo-ic{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--gold);color:#0a0a0a;font-size:1.4rem;font-weight:700}
+.promo-flag{background:var(--gold);color:#0a0a0a;border-radius:999px;padding:3px 12px;font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.promo-name{font-size:1.2rem;color:var(--gold)}
+.promo-tag{color:var(--text);font-size:.95rem}
+.promo-list{margin:2px 0 4px;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:.9rem}
+.promo-list li::before{content:"\2713";color:var(--gold);font-weight:700;margin-right:8px}
+.promo-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px}
+.promo-price{font-weight:700;font-size:1.05rem}
+.promo-cta{background:var(--gold);color:#0a0a0a;border-radius:999px;padding:9px 20px;font-weight:800}
+.promo:hover .promo-cta{background:var(--gold-dark)}
+@media (min-width:700px){.promos{grid-template-columns:1fr 1fr}}
+.goldbox{border:2px solid var(--gold);background:#17130a;color:var(--gold);border-radius:14px;padding:14px 16px;text-align:center;font-weight:800}

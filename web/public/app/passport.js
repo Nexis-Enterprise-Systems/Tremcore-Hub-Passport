@@ -145,6 +145,16 @@
       const q = (code, label, sub, onclick, locked) => h('button', { class: 'qtile' + (locked ? ' locked' : ''), type: 'button', 'data-q': code, onclick },
         h('strong', {}, label), h('span', { class: 'muted small' }, sub), locked ? h('span', { class: 'tag add' }, 'Add') : null);
       const tt = extraOf('toolbox_talks'), ss = extraOf('staff_signin');
+      // Add-on promo cards: bold gold, so the two paid extras are not overlooked (only for Self-Managed accounts that do not have them yet)
+      const isL1 = !company || (company.level || 1) === 1;
+      const promo = (code, glyph, name, tagline, points, price, e) => h('button', { class: 'promo', type: 'button', 'data-promo': code, onclick: () => viewExtra(code) },
+        h('span', { class: 'promo-top' }, h('span', { class: 'promo-ic', 'aria-hidden': 'true' }, glyph), h('span', { class: 'promo-flag' }, 'Add-on')),
+        h('strong', { class: 'promo-name' }, name), h('span', { class: 'promo-tag' }, tagline),
+        h('ul', { class: 'promo-list' }, points.map((x) => h('li', {}, x))),
+        h('span', { class: 'promo-foot' }, h('span', { class: 'promo-price' }, price), h('span', { class: 'promo-cta' }, 'Add now \u203a')));
+      const promos = isL1 ? [
+        !tt.owned ? promo('toolbox_talks', '\u2714', 'Toolbox Talks', 'Safety talks for your team, signed off on a phone.', ['30 ready-made talks, plus 10 of your own', 'Digital sign-off by your team', 'Saved PDF records for audits'], money(tt.price_pence) + ' / month', tt) : null,
+        !ss.owned ? promo('staff_signin', '\u25F7', 'Staff Clock In / Out', 'Know who is on site, with no paperwork.', ['A unique QR code for each site', 'See who is on site right now', 'Attendance records you can download'], money(ss.price_pence) + ' / site / month', ss) : null].filter(Boolean) : [];
       shell('home',
         h('div', { class: 'card overview' },
           h('div', { class: 'welcome' }, h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
@@ -153,6 +163,7 @@
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
           h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
         sitePicker(viewHome),
+        promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Get more from your passport'), h('div', { class: 'promos' }, ...promos)) : null,
         h('div', { class: 'card' }, h('h2', {}, 'Quick Access'),
           h('div', { class: 'qtiles' },
             q('toolbox_talks', 'Toolbox Talks', tt.owned ? '30+ available' : 'Add-on · ' + money(tt.price_pence) + '/month', () => viewExtra('toolbox_talks'), !tt.owned),
@@ -364,7 +375,7 @@
         state === 'thanks' && e.owned ? h('div', { class: 'msg ok', role: 'status' }, 'Thank you. ' + e.name + ' is now on your account.') : null,
         e.owned && state !== 'confirming'
           ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account.')
-          : state === 'confirming' ? null : [h('p', { class: 'big' }, priceText(e)),
+          : state === 'confirming' ? null : [h('p', { class: 'big goldbox' }, priceText(e)),
             e.charged_per === 'site' ? h('p', { class: 'muted' }, 'This is charged for each site. You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month. Add-ons are always charged monthly, with no yearly discount.') : null,
             isHead && ((company && company.level) || 1) === 1
               ? [h('button', { class: 'btn', id: 'extra-add', type: 'button', onclick: (ev) => startExtraPayment(code, ev.target, box) }, 'Add ' + e.name + ' · pay now'),
