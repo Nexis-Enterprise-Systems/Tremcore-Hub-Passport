@@ -105,3 +105,8 @@
 - When a PDF or photo (JPG/PNG) is uploaded, our server fetches it with the person's own token (the database decides if they may see it), sends it to Claude to read, validates the answer (real calendar dates 1990-2100, trimmed text) and returns suggestions only. The boxes are filled in with a gold edge and the button says "Check and save": nothing is saved until the person confirms, because a wrong date would show a false green. Word documents are not read.
 - Needs `ANTHROPIC_API_KEY` in Railway (optional `READ_MODEL`, default `claude-sonnet-5-5`). Without it, reading is simply off and people type the details in. Limited to 30 documents per 10 minutes per address; each read costs a small amount of AI usage.
 - Open: the privacy page now names the AI provider; whether it keeps documents and its terms must be confirmed before real customers (ICO / DPA review). Hub (Tremcore staff) upload does not read documents yet.
+
+## Insurance added later, and add-ons in Subscription Details (17 Nov 2026)
+- On the Compliance page, a head-office user whose sites lack the three insurance checks sees an "Add insurance checks" card; one tap adds the missing ones (no dates, so they show as missing). "We do not need this" hides it on that device only. The same checks can also be ticked in "Checks by site" / "Choose checks".
+- Settings > Subscription Details now lists every add-on the business has with its monthly cost (per-site add-ons as sites x price) and an add-ons total; add-ons not yet taken are offered with their price.
+- Known gap: the price shown for a per-site add-on uses the number of sites today. Adding a site later does not yet raise the Stripe quantity, so the bill and this figure can differ until that is built.

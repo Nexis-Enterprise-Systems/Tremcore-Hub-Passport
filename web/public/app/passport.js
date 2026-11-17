@@ -216,7 +216,24 @@
           rights.can_manage && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks'), h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check')) : null),
         body.length && ctab !== 'category' ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
         ...(body.length ? body : [h('p', { class: 'muted' }, empty)]));
-      shell('compliance', summary, sitePicker(viewList), checksCard);
+      // Business insurance missed at set-up: one tap adds the missing insurance checks to the sites being shown.
+      const INS = core.filter((c) => c.grp === 'Insurance');
+      const targetSites = site === 'all' ? props : props.filter((p) => p.id === site);
+      const haveCheck = (pid, label) => items.some((i) => i.property_id === pid && String(i.title).toLowerCase() === String(label).toLowerCase());
+      const insMissing = []; targetSites.forEach((p) => INS.forEach((c) => { if (!haveCheck(p.id, c.label)) insMissing.push({ pid: p.id, c }); }));
+      let insHidden = false; try { insHidden = localStorage.getItem('tc_noins') === '1'; } catch (e) { insHidden = false; }
+      const insCard = rights.can_manage && INS.length && insMissing.length && !insHidden ? h('div', { class: 'card insprompt', id: 'ins-prompt' },
+        h('h2', {}, 'Business insurance'),
+        h('p', { class: 'muted' }, 'Employers\u2019 Liability, Public Liability and Buildings and contents insurance are not all on your list yet. Add them to keep your policy numbers, renewal dates and certificates here with everything else.'),
+        h('button', { class: 'btn', id: 'ins-add', type: 'button', onclick: async (e) => { await busy(e.target, async () => {
+          let uid = null; try { uid = (await sb.auth.getSession()).data.session.user.id; } catch (x) { uid = null; }
+          const ins = await sb.from('compliance_items').insert(insMissing.map((m) => ({ property_id: m.pid, grp: m.c.grp, title: m.c.label, basis: m.c.basis, frequency_months: m.c.frequency_months || null, created_by: uid })));
+          if (ins.error) return ctx.message(document.getElementById('ins-msg'), 'err', 'Sorry, the insurance checks could not be added. Please try again.');
+          await reload(); viewList('Insurance checks added. Open each one and upload the policy certificate: we will read the dates and number for you to check.');
+        }); } }, 'Add insurance checks'),
+        h('div', { id: 'ins-msg' }),
+        h('button', { class: 'linkbtn', id: 'ins-hide', type: 'button', onclick: () => { try { localStorage.setItem('tc_noins', '1'); } catch (x) { /* ignore */ } viewList(); } }, 'We do not need this')) : null;
+      shell('compliance', summary, sitePicker(viewList), insCard, checksCard);
     }
 
     // ---------- My Tasks ----------
@@ -504,12 +521,21 @@
       const lvl = (company && company.level) || (ctx.req && ctx.req.level) || 1;
       const n = props.length, yearly = company && company.billing_interval === 'annual';
       const owned = extras.filter((e) => e.owned).map((e) => e.name);
+      // Each add-on the business has, with what it costs; the ones it does not have can be added from here.
+      const addonsOwned = extras.filter((e) => e.owned), addonsNot = extras.filter((e) => !e.owned && EXTRA_DEFAULT.some((x) => x.code === e.code));
+      const perMonth = (e) => e.price_pence * (e.charged_per === 'site' ? Math.max(n, 1) : 1);
+      const addonRows = addonsOwned.length ? [
+        ...addonsOwned.map((e) => h('div', { class: 'kv', 'data-addon': e.code }, h('span', {}, e.name), h('span', {}, (e.charged_per === 'site' ? Math.max(n, 1) + (n === 1 ? ' site \u00d7 ' : ' sites \u00d7 ') + money(e.price_pence) + ' = ' : '') + money(perMonth(e)) + ' + VAT per month'))),
+        h('div', { class: 'kv', id: 'addons-total' }, h('span', {}, 'Add-ons total'), h('span', {}, money(addonsOwned.reduce((a, e) => a + perMonth(e), 0)) + ' + VAT per month'))
+      ] : [h('div', { class: 'kv' }, h('span', {}, 'Add-ons'), h('span', {}, 'None'))];
+      const addLinks = lvl === 1 && isHead ? addonsNot.map((e) => h('button', { class: 'linkbtn', type: 'button', 'data-add-addon': e.code, onclick: () => viewExtra(e.code) }, 'Add ' + e.name + ' (' + money(e.price_pence) + (e.charged_per === 'site' ? ' per site' : '') + ' + VAT per month)')) : [];
       const plan = h('div', { class: 'card' }, h('h2', {}, 'Subscription Details'),
         h('div', { class: 'kv' }, h('span', {}, 'Plan'), h('span', {}, lvl === 1 ? 'Self-Managed' : lvl === 2 ? 'Managed Compliance' : 'Property & Compliance Managed')),
         h('div', { class: 'kv' }, h('span', {}, 'Sites'), h('span', {}, String(n))),
         lvl === 1 ? h('div', { class: 'kv' }, h('span', {}, 'Price'), h('span', {}, yearly ? money(15290 + 8150 * Math.max(n - 1, 0)) + ' + VAT per year' : money(1499 + 799 * Math.max(n - 1, 0)) + ' + VAT per month')) : null,
-        h('div', { class: 'kv' }, h('span', {}, 'Add-ons'), h('span', {}, owned.length ? owned.join(', ') : 'None')),
-        h('div', { class: 'kv' }, h('span', {}, 'Status'), h('span', {}, company && company.subscription ? String(company.subscription).replace(/^./, (x) => x.toUpperCase()) : '–')));
+        ...addonRows,
+        h('div', { class: 'kv' }, h('span', {}, 'Status'), h('span', {}, company && company.subscription ? String(company.subscription).replace(/^./, (x) => x.toUpperCase()) : '–')),
+        ...addLinks);
       const repeating = tasks.filter((t) => t.status === 'pending' && t.repeat_months).length;
       const custom = h('div', { class: 'card' }, h('h2', {}, 'Customised Tasks'),
         h('p', { class: 'muted' }, 'Your own repeating tasks. You are using ' + repeating + ' of 10.'),

@@ -884,7 +884,7 @@ const USERS = {
     // the app-style screens: Home, Tasks, Emergency Information, Settings and the paid add-ons
     const appExtra = (cfg) => {
       window.__mock.users['site@t'].profile.role_name = (cfg && cfg.role) || 'client_super';
-      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: cfg.owned === true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: cfg.owned === 'staff' }];
+      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: cfg.owned === true || cfg.owned === 'both' }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: cfg.owned === 'staff' || cfg.owned === 'both' }];
       const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       window.__mock.tables.companies = [{ id: 'c1', name: 'Test Co', contact_phone: '01634 000000', address: '1 High St', level: (cfg && cfg.level) || 1, billing_interval: 'monthly', subscription: 'active' }];
       window.__mock.tables.properties[0].address = '1 High St'; window.__mock.tables.properties[0].clock_token = 'a'.repeat(32); window.__mock.tables.properties[1].clock_token = 'c'.repeat(32);
@@ -953,6 +953,7 @@ const USERS = {
     await t.page.click('[data-back]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#b-save');
     check('settings: business info, premises, subscription, customised tasks, help and account are all there', (await t.page.locator('.appbody h2').allInnerTexts()).join('|').replace(/\s+/g, ' ') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
     check('settings: subscription shows the plan, two sites and the price including the extra site', (await t.page.locator('.appbody').innerText()).includes('Self-Managed') && (await t.page.locator('.appbody').innerText()).includes('£22.98 + VAT per month'));
+    check('settings: add-ons not yet taken are offered from the subscription box, with their price', (await t.page.locator('[data-add-addon=toolbox_talks]').innerText()).includes('£3.99') && (await t.page.locator('[data-add-addon=staff_signin]').innerText()).includes('per site'));
     check('settings: customised tasks shows how many of the 10 repeating tasks are used', (await t.page.locator('.appbody').innerText()).includes('2 of 10'));
     await t.page.fill('#b-phone', '1634 99'); await t.page.click('#b-save');
     check('formats: a short phone number is refused with a clear message', (await t.page.locator('.msg.err').innerText()).includes('11 digits') && (await calls(t.page, 'rpc:update_business')).length === 0);
@@ -1036,6 +1037,18 @@ const USERS = {
     check('add-on: a user who is not head office has no pay button and is told to ask head office', (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Ask your head-office user'));
     await t.ctx.close();
     // coming back from Stripe: waits for the confirmation, then opens the add-on
+    // add-ons the business has are listed in Subscription Details with what each costs
+    t = await newPage(appSeed, { owned: 'both' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('[data-addon]');
+    check('settings: each add-on is listed with its monthly cost (Toolbox £3.99; Clock In 2 sites x £6.99 = £13.98) and a total of £17.97', (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £6.99 = £13.98') && (await t.page.locator('#addons-total').innerText()).includes('£17.97') && (await t.page.locator('[data-add-addon]').count()) === 0);
+    await t.ctx.close();
+    // business insurance missed at set-up can be added later
+    const insSeed = new Function('cfg', '(' + appSeed.toString() + ')(cfg); window.__mock.tables.core_checks = [{ code: "ins_el", label: "Employers\' Liability Insurance", grp: "Insurance", basis: "legal", frequency_months: 12, sort: 11 }, { code: "ins_pl", label: "Public Liability Insurance", grp: "Insurance", basis: "best_practice", frequency_months: 12, sort: 12 }, { code: "ins_bld", label: "Business Insurance (buildings and contents)", grp: "Insurance", basis: "best_practice", frequency_months: 12, sort: 13 }];');
+    t = await newPage(insSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('#ins-prompt');
+    check('insurance: a business with no insurance checks is offered them on the Compliance page', (await t.page.locator('#ins-prompt').innerText()).includes('Public Liability'));
+    await t.page.click('#ins-add'); await t.page.waitForSelector('text=Insurance checks added');
+    const insIns = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'insert').pop();
+    check('insurance: one tap adds the three insurance checks to both sites (6), with no dates so they show as missing, and the prompt goes', insIns.payload.length === 6 && insIns.payload.every((x) => x.grp === 'Insurance') && (await t.page.locator('#ins-prompt').count()) === 0 && (await t.page.locator('.item:has-text("Public Liability Insurance")').count()) === 2);
+    await t.ctx.close();
     t = await newPage(appSeed, {}); await t.page.goto(base + '/app/?extra=toolbox_talks&paid=1'); await login(t.page, 'site@t'); await t.page.waitForSelector('#extra-confirming');
     check('back from Stripe: the person sees that the payment is being confirmed, with no pay button', (await t.page.locator('#extra-add').count()) === 0);
     await t.page.evaluate(() => { window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'site', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }]; });
