@@ -1,4 +1,4 @@
-:root{--bg:#050505;--card:#121212;--line:#2b2b2b;--text:#f5f2ea;--muted:#a9a69d;--gold:#e9c46a;--gold-fill:#e0b552;--gold-dark:#c4972f;--gold-grad:linear-gradient(180deg,#fff3c0 0%,#f6d97c 14%,#e9bc4f 38%,#b8861f 50%,#d9a63c 62%,#f1cf75 86%,#c9972d 100%);--gold-grad-hi:linear-gradient(180deg,#fffadc 0%,#fbe597 14%,#f1c860 38%,#c4922a 50%,#e4b248 62%,#f7da8a 86%,#d4a237 100%);--gold-shine:inset 0 1px 0 #fffbe0,inset 0 -2px 0 rgba(110,72,10,.55),0 0 0 1px rgba(120,84,18,.9),0 4px 16px rgba(226,178,60,.35);--metal-edge:linear-gradient(135deg,#f6d97c 0%,rgba(150,110,30,.35) 30%,rgba(120,88,22,.2) 55%,#e9bc4f 100%);--ink:#1a1305;--red:#ff8a80;--green:#6ff0a8}
+:root{--bg:#050505;--card:#121212;--line:#2b2b2b;--text:#f5f2ea;--muted:#a9a69d;--gold:#d4af55;--gold-fill:#e0b552;--gold-dark:#c4972f;--gold-grad:linear-gradient(180deg,#ecd596 0%,#dcb866 14%,#cba54f 38%,#957020 50%,#b88f36 62%,#d5b162 86%,#a8832c 100%);--gold-grad-hi:linear-gradient(180deg,#f3e0aa 0%,#e4c577 14%,#d4b05c 38%,#a07a28 50%,#c29a40 62%,#deba6e 86%,#b28d33 100%);--gold-shine:inset 0 1px 0 rgba(255,244,205,.6),inset 0 -2px 0 rgba(80,54,8,.55),0 0 0 1px rgba(100,70,14,.9),0 4px 14px rgba(190,150,50,.22);--metal-edge:linear-gradient(135deg,#d9b863 0%,rgba(130,96,26,.35) 30%,rgba(110,80,20,.2) 55%,#c9a24a 100%);--ink:#1a1305;--red:#ff8a80;--green:#6ff0a8}
 *{box-sizing:border-box}
 html,body{margin:0;background:radial-gradient(900px 480px at 100% -5%,rgba(226,182,78,.16),transparent 62%),radial-gradient(700px 420px at -10% 105%,rgba(226,182,78,.09),transparent 60%),var(--bg) fixed;color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
 body{min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:max(24px,env(safe-area-inset-top)) 16px 40px}
@@ -340,17 +340,17 @@ body.passport{padding-bottom:84px}
 
 /* Metallic Tremcore gold: outline buttons, tiles, add-ons */
 #view-full{background:transparent;color:var(--gold);box-shadow:none;border:2px solid var(--gold)}
-#view-full:hover{background:rgba(233,196,106,.1)}
+#view-full:hover{background:rgba(212,175,85,.1)}
 .card h2{letter-spacing:.01em}
 .qtile{background:linear-gradient(180deg,#1a1a1a,#0d0d0d) padding-box,var(--metal-edge) border-box;border:1px solid transparent}
-.qtile:hover{border-color:var(--gold);box-shadow:0 0 0 1px rgba(233,196,106,.35)}
-.qtile.locked{background:radial-gradient(120px 70px at 100% 0%,rgba(233,196,106,.25),transparent 70%) padding-box,linear-gradient(180deg,#1a1a1a,#0d0d0d) padding-box,var(--gold-grad) border-box;border:1.5px solid transparent}
+.qtile:hover{border-color:var(--gold);box-shadow:0 0 0 1px rgba(212,175,85,.35)}
+.qtile.locked{background:radial-gradient(120px 70px at 100% 0%,rgba(212,175,85,.25),transparent 70%) padding-box,linear-gradient(180deg,#1a1a1a,#0d0d0d) padding-box,var(--gold-grad) border-box;border:1.5px solid transparent}
 .homelogo{display:block;width:130px;height:auto;margin:0 auto 6px}
 .welcome{text-align:center}
 /* Add-ons (Toolbox Talks, Staff Clock In / Out): metallic gold edge on black, with a gold glow */
 .card.addons>h2{color:var(--gold)}
 .promos{display:grid;grid-template-columns:1fr;gap:14px;margin-top:12px}
-.promo{position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;font:inherit;color:var(--text);cursor:pointer;border:2px solid transparent;border-radius:16px;padding:20px;background:radial-gradient(260px 160px at 100% 0%,rgba(233,196,106,.22),transparent 70%) padding-box,linear-gradient(180deg,#1b1b1b,#0c0c0c) padding-box,var(--gold-grad) border-box;box-shadow:0 8px 28px rgba(222,178,70,.14)}
+.promo{position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;font:inherit;color:var(--text);cursor:pointer;border:2px solid transparent;border-radius:16px;padding:20px;background:radial-gradient(260px 160px at 100% 0%,rgba(212,175,85,.22),transparent 70%) padding-box,linear-gradient(180deg,#1b1b1b,#0c0c0c) padding-box,var(--gold-grad) border-box;box-shadow:0 8px 28px rgba(222,178,70,.14)}
 .promo:hover{box-shadow:0 10px 34px rgba(222,178,70,.3)}
 .promo:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 .promo-name{font-size:1.25rem;letter-spacing:.01em;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;width:fit-content}
@@ -363,10 +363,10 @@ body.passport{padding-bottom:84px}
 
 /* Gold-metal lettering */
 .card h2,.card.addons>h2,.tile .tv,.promo-name{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;width:fit-content}
-.welcome h1{background:linear-gradient(180deg,#fffbe6,#f3d27a 55%,#d4a23a);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.welcome h1{background:linear-gradient(180deg,#f1dfae,#dcb866 55%,#b8923a);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
 /* Brushed-metal sheen across gold buttons */
 .btn,.promo-cta,.callbar a,.hubnav a.on,.chip.on,.chip[aria-pressed=true]{position:relative;overflow:hidden}
-.btn::after,.promo-cta::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.38) 48%,transparent 64%);pointer-events:none}
+.btn::after,.promo-cta::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,244,210,.22) 48%,transparent 64%);pointer-events:none}
 #view-full::after{display:none}
 .btn.ghost{background:#141414;color:var(--text);box-shadow:none;border:1px solid #3a3a3a}
 .btn.ghost::after{display:none}
