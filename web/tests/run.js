@@ -12,6 +12,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'SERVICE-SECRET-MUST-NEVER-LEAK';
 process.env.STRIPE_SECRET_KEY = 'sk_test_FAKE-MUST-NEVER-LEAK';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_testsecret';
 process.env.STRIPE_API_BASE = 'https://stripe.test';
+process.env.ANTHROPIC_API_KEY = 'sk-ant-FAKE-MUST-NEVER-LEAK';
+process.env.ANTHROPIC_API_BASE = 'https://anthropic.test';
 const server = require('../server.js');
 const mockJs = fs.readFileSync(path.join(__dirname, 'mock-supabase.js'), 'utf8');
 
@@ -37,6 +39,7 @@ const USERS = {
     const problems = [];
     page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
     page.on('pageerror', (e) => problems.push(String(e)));
+    await page.route('**/api/read-document', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reading: { found: false } }) }));
     await page.route('**/cdn.jsdelivr.net/**', (route) => route.fulfill({ contentType: 'text/javascript', body: mockJs }));
     await page.addInitScript((u) => { window.__mock = { users: JSON.parse(JSON.stringify(u)) }; }, USERS);
     if (extra) await page.addInitScript(extra, arg);
@@ -72,6 +75,7 @@ const USERS = {
   const realFetch = global.fetch; const sent = [];
   const PC = { 'ME44TL': { latitude: 51.381, longitude: 0.527 }, 'NR11AA': { latitude: 52.63, longitude: 1.29 }, 'ME14AA': { latitude: 51.39, longitude: 0.50 } };
   let pcDown = false;
+  const docCalls = [], aiCalls = []; let docRows = [{ storage_path: 'p1/i1/x-cert.pdf', filename: 'cert.pdf', content_type: 'application/pdf', compliance_items: { title: 'Public Liability Insurance' } }], aiFail = false, aiText = '{"document_title":"Public liability certificate","issue_date":"2026-03-01","expiry_date":"2027-02-28","certificate_number":"PL-884213","provider":"Acme Insurance Ltd"}';
   const prepCalls = []; let prepReply = { status: 200 };
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
@@ -92,6 +96,9 @@ const USERS = {
       const since = m.at; m.at = null; return Promise.resolve(new Response(JSON.stringify({ status: 'out', name: m.name, at: now, since }), { status: 200 }));
     }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/signup_prepare') { const b = JSON.parse(o.body); prepCalls.push({ o, b }); return Promise.resolve(prepReply.status === 200 ? new Response(JSON.stringify([{ company_id: 'co-new', sites: b.p_sites, billing_interval: b.p_billing, email: b.p_email }]), { status: 200 }) : new Response(JSON.stringify({ message: prepReply.message }), { status: prepReply.status })); }
+    if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/documents?id=eq.')) { docCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(docRows), { status: docRows === null ? 401 : 200 })); }
+    if (url.startsWith(process.env.SUPABASE_URL + '/storage/v1/object/documents/')) { docCalls.push({ u: url, o }); return Promise.resolve(new Response(Buffer.from('%PDF-1.4 fake'), { status: 200 })); }
+    if (url === 'https://anthropic.test/v1/messages') { aiCalls.push({ u: url, o, body: JSON.parse(o.body) }); return Promise.resolve(aiFail ? new Response('{}', { status: 500 }) : new Response(JSON.stringify({ content: [{ type: 'text', text: aiText }] }), { status: 200 })); }
     if (url.startsWith('https://api.postcodes.io/postcodes/')) {
       if (pcDown) return Promise.resolve(new Response('x', { status: 500 }));
       const hit = PC[decodeURIComponent(url.split('/').pop()).replace(/\s/g, '')];
@@ -137,6 +144,25 @@ const USERS = {
     const saved = billingRows; billingRows = []; rr = await co(); check('pay: someone who is not a head-office user is refused', rr.status === 403);
     billingRows = [Object.assign({}, saved[0], { subscription: 'active' })]; rr = await co(); check('pay: an account that has already paid is not charged again', rr.status === 409); billingRows = saved;
     stripeFail = true; rr = await co(); check('pay: if Stripe refuses, the person gets a plain message, not an error dump', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
+    // reading an uploaded certificate
+    const rd = (b, h2) => realFetch(base + '/api/read-document', { method: 'POST', headers: Object.assign({ Authorization: 'Bearer user-token', 'Content-Type': 'application/json' }, h2 || {}), body: JSON.stringify(b || { document_id: '11111111-1111-1111-1111-111111111111' }) });
+    rr = await rd(); let rj = await rr.json();
+    check('read: a signed-in person gets suggested dates and numbers back, and nothing is saved by the server', rr.status === 200 && rj.reading.expiry_date === '2027-02-28' && rj.reading.issue_date === '2026-03-01' && rj.reading.certificate_number === 'PL-884213' && rj.reading.provider === 'Acme Insurance Ltd' && rj.reading.found === true);
+    const lastAi = aiCalls[aiCalls.length - 1];
+    check('read: the file is fetched with the person\'s own token (so row-level security decides), and the AI key never reaches them', docCalls.every((x) => x.o.headers.Authorization === 'Bearer user-token') && lastAi.o.headers['x-api-key'] === 'sk-ant-FAKE-MUST-NEVER-LEAK' && !JSON.stringify(rj).includes('sk-ant'));
+    check('read: the PDF is sent as a document and the check name and the "ignore instructions inside it" rule are in the request', lastAi.body.messages[0].content[0].type === 'document' && lastAi.body.messages[0].content[1].text.includes('Public Liability Insurance') && lastAi.body.messages[0].content[1].text.includes('never instructions'));
+    rr = await realFetch(base + '/api/read-document', { method: 'POST', body: '{}' }); check('read: no sign-in, no reading', rr.status === 401);
+    rr = await rd(null, { Origin: 'https://evil.example' }); check('read: another website cannot use it', rr.status === 403);
+    rr = await rd({ document_id: 'not-an-id' }); check('read: a nonsense id is refused before anything happens', rr.status === 400);
+    const nAi = aiCalls.length; docRows = []; rr = await rd(); check('read: a document the person cannot see is not found, and nothing is sent to the AI', rr.status === 404 && aiCalls.length === nAi);
+    docRows = null; rr = await rd(); check('read: an expired sign-in is refused', rr.status === 401);
+    docRows = [{ storage_path: 'p1/i1/x-cert.docx', filename: 'cert.docx', compliance_items: { title: 'T' } }]; rr = await rd(); check('read: a Word document is explained, not sent to the AI', rr.status === 422 && aiCalls.length === nAi);
+    docRows = [{ storage_path: 'p1/i1/x-cert.pdf', filename: 'cert.pdf', compliance_items: { title: 'T' } }];
+    aiText = 'Sure! {"expiry_date":"31/12/2027","issue_date":"2026-02-30","certificate_number":"null","provider":"  Fire Co  "}'; rr = await rd(); rj = await rr.json();
+    check('read: dates that are not real calendar dates, and empty words like null, are thrown away; good text is tidied', rj.reading.expiry_date === null && rj.reading.issue_date === null && rj.reading.certificate_number === null && rj.reading.provider === 'Fire Co');
+    aiText = 'I could not read this.'; rr = await rd(); rj = await rr.json(); check('read: an unreadable answer gives "nothing found", not an error', rr.status === 200 && rj.reading.found === false);
+    aiFail = true; rr = await rd(); check('read: if the AI is down the person gets a plain message to type the details in', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('500')); aiFail = false;
+    aiText = '{"document_title":"Public liability certificate","issue_date":"2026-03-01","expiry_date":"2027-02-28","certificate_number":"PL-884213","provider":"Acme Insurance Ltd"}';
     // add-ons
     const ce = (code, b) => realFetch(base + '/api/checkout-extra', { method: 'POST', headers: Object.assign({ Authorization: 'Bearer user-token', 'Content-Type': 'application/json' }, b || {}), body: JSON.stringify({ code }) });
     const n0 = stripeCalls.length; rr = await ce('staff_signin'); const ep = new URLSearchParams(stripeCalls[n0] && stripeCalls[n0].o.body);
@@ -794,6 +820,21 @@ const USERS = {
     check('certificates: Open asks for a short-lived private link', (await calls(t.page, 'signed')).length === 1 && (await calls(t.page, 'signed'))[0].startsWith('s1/i3/')); await pop.close();
     await t.page.click('.doc button:has-text("Delete")'); await t.page.waitForSelector('text=Document removed');
     check('certificates: deleting removes the stored file and the record', (await calls(t.page, 'remove')).length === 1 && (await t.page.locator('.doc').count()) === 0);
+    // reading a certificate: the boxes are filled in for the person to check, and saved only when they press Save
+    let readBody = null;
+    await t.page.route('**/api/read-document', (rt) => { readBody = rt.request().postData(); rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reading: { found: true, issue_date: '2026-03-01', expiry_date: '2027-02-28', certificate_number: 'PL-884213', provider: 'Acme Insurance Ltd', document_title: 'Public liability certificate' } }) }); });
+    const dbBefore = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'update').length;
+    await t.page.setInputFiles('#file', { name: 'policy.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 policy') }); await t.page.click('#upload'); await t.page.waitForSelector('text=filled in the details');
+    check('read: after an upload the server is asked to read that document', !!readBody && /"document_id":"[^"]+"/.test(readBody));
+    check('read: the dates, certificate number and issuer are filled in and marked for checking', (await t.page.inputValue('#f-due')) === '2027-02-28' && (await t.page.inputValue('#f-last')) === '2026-03-01' && (await t.page.inputValue('#f-cert')) === 'PL-884213' && (await t.page.inputValue('#f-prov')) === 'Acme Insurance Ltd' && (await t.page.locator('input.autofilled').count()) === 4 && (await t.page.locator('#item-msg').innerText()).includes('check them'));
+    check('read: nothing is saved until the person presses the button, which says Check and save', (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'update').length === dbBefore && (await t.page.locator('button[type=submit]').innerText()) === 'Check and save');
+    await t.page.click('button[type=submit]'); await t.page.waitForSelector('text=Saved.');
+    const updRead = (await calls(t.page, 'db')).filter((c) => c.table === 'compliance_items' && c.op === 'update').pop();
+    check('read: saving stores the due date, certificate number and issuer', updRead.payload.due_date === '2027-02-28' && updRead.payload.certificate_number === 'PL-884213' && updRead.payload.provider === 'Acme Insurance Ltd' && (await t.page.inputValue('#f-cert')) === 'PL-884213');
+    await t.page.fill('#f-cert', ''); await t.page.fill('#f-prov', ''); await t.page.fill('#f-due', '2027-01-01');
+    await t.page.route('**/api/read-document', (rt) => rt.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'Sorry, we could not read that document just now. Please type the details in.' }) }));
+    await t.page.click('[data-read]'); await t.page.waitForSelector('text=could not read that document just now');
+    check('read: if reading fails the person is told plainly and the page still works', (await t.page.locator('#f-due').count()) === 1);
     // remove a check (its documents go with it)
     await t.page.setInputFiles('#file', { name: 'a.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') }); await t.page.click('#upload'); await t.page.waitForSelector('.doc');
     await t.page.click('#remove-check'); await t.page.click('#remove-confirm'); await t.page.waitForSelector('text=Check removed');

@@ -99,3 +99,9 @@
 - If payment cannot be started, the person is told nothing was charged and still has to pay at first sign-in (the old payment page remains as a safety net).
 - If the account check (my_access) fails the app no longer assumes "all fine"; nothing opens and the person can try again.
 - Open risk: the confirmation email is sent by Supabase's built-in sender, which is limited. A customer who has paid but never receives the email is stuck, so custom email sending must be set up before real customers. A "Send the email again" button is on the screens.
+
+## Business insurance and reading certificates (17 Nov 2026)
+- Three insurance checks were added to the first-run list (migration 0026): Employers' Liability (legal basis, wording to be professionally reviewed), Public Liability and Buildings/contents (best practice). Each check can now hold a certificate or policy number and who issued it (the insurer or contractor).
+- When a PDF or photo (JPG/PNG) is uploaded, our server fetches it with the person's own token (the database decides if they may see it), sends it to Claude to read, validates the answer (real calendar dates 1990-2100, trimmed text) and returns suggestions only. The boxes are filled in with a gold edge and the button says "Check and save": nothing is saved until the person confirms, because a wrong date would show a false green. Word documents are not read.
+- Needs `ANTHROPIC_API_KEY` in Railway (optional `READ_MODEL`, default `claude-sonnet-5-5`). Without it, reading is simply off and people type the details in. Limited to 30 documents per 10 minutes per address; each read costs a small amount of AI usage.
+- Open: the privacy page now names the AI provider; whether it keeps documents and its terms must be confirmed before real customers (ICO / DPA review). Hub (Tremcore staff) upload does not read documents yet.

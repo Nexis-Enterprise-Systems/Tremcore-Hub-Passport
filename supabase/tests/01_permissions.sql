@@ -529,8 +529,8 @@ rollback;
 
 -- First-run set-up: tick the core checks (migration 0012) -----------------------------
 begin;
-select 'setup: the core list has the ten checks the owner chose' as test, (select count(*)=10 from core_checks) as ok;
-select * from chk('setup: a signed-in client can read the list', :'superA', 'aal2', $$select count(*)=10 from core_checks$$);
+select 'setup: the core list has the thirteen checks, including the three insurance ones' as test, (select count(*)=13 from core_checks) as ok;
+select * from chk('setup: a signed-in client can read the list', :'superA', 'aal2', $$select count(*)=13 from core_checks$$);
 select * from chk('setup: a client cannot change the list', :'superA', 'aal2', $$with u as (update core_checks set label='x' returning 1) select count(*)=0 from u$$);
 do $$ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true);
@@ -974,4 +974,20 @@ do $$ declare e text; begin set local role service_role;
   begin perform signup_prepare('new@pay.test', 'Zed Trading Ltd', 'Zed Jones', 2, 'monthly'); e := 'allowed'; exception when others then e := sqlstate; end;
   reset role; if e <> '23505' then raise exception 'paid account could be re-prepared: %', e; end if; end $$;
 select 'pay first: once paid, the sign-up cannot be re-prepared or re-priced' as test, true as ok;
+rollback;
+
+-- Certificate number and issuer on a check, and insurance in the core list (migration 0026) -----------
+begin;
+select * from chk('details: a client can save a certificate number and issuer on their own check', :'superA', 'aal2',
+  $$with u as (update compliance_items set certificate_number='CERT-123', provider='Acme Fire Ltd' where property_id='20000000-0000-0000-0000-0000000000a1' returning 1) select count(*)>=1 from u$$);
+select 'details: the status view carries the new columns' as test, (select count(*) = 2 from information_schema.columns where table_name='compliance_status' and column_name in ('certificate_number','provider')) as ok;
+select 'details: the three insurance checks are in the core list' as test, (select count(*)=3 from core_checks where grp='Insurance') as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true);
+  perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin update compliance_items set certificate_number = repeat('x', 200) where property_id='20000000-0000-0000-0000-0000000000a1'; raise exception 'a 200-character certificate number was accepted'; exception when check_violation then null; end;
+  reset role;
+end $$;
+select 'details: an over-long certificate number is refused' as test, true as ok;
 rollback;

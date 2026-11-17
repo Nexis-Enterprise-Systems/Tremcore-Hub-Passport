@@ -373,3 +373,6 @@ body.passport{padding-bottom:84px}
 
 /* Add-on button: centred in the card, with the words centred inside it */
 .promo-cta{align-self:center;display:flex;align-items:center;justify-content:center;width:72%;min-width:160px;max-width:100%;text-align:center;line-height:1}
+
+/* Details read from a certificate: a gold edge so the person checks them */
+input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}

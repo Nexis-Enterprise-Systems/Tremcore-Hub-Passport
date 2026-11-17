@@ -79,7 +79,7 @@
       try {
         const [p, i, r, cc, tk, ex, co] = await Promise.all([
           sb.from('properties').select('id,name,address,postcode').order('name'),
-          sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,status,days_left').order('title'),
+          sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,certificate_number,provider,status,days_left').order('title'),
           sb.rpc('passport_rights'),
           sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
           sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
@@ -522,7 +522,7 @@
     }
 
     // ---------- one check ----------
-    async function viewItem(id, note) {
+    async function viewItem(id, note, reading) {
       page('form', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
       const r = await sb.from('compliance_status').select('*').eq('id', id).maybeSingle();
       const item = r.data;
@@ -538,17 +538,28 @@
         const freq = h('input', { id: 'f-freq', type: 'number', min: '1', max: '120', inputmode: 'numeric', value: item.frequency_months || '' });
         const due = h('input', { id: 'f-due', type: 'date', value: item.due_date || '' });
         const notes = h('textarea', { id: 'f-notes', maxlength: '2000', rows: '4' }, item.notes || '');
+        const certNo = h('input', { id: 'f-cert', maxlength: '100', autocomplete: 'off', value: item.certificate_number || '' });
+        const prov = h('input', { id: 'f-prov', maxlength: '160', autocomplete: 'off', value: item.provider || '' });
         // When the last date and the repeat period are both known, suggest the next due date. It can still be changed.
         const suggest = () => { const n = parseInt(freq.value, 10); const d = addMonths(last.value, n); if (d) due.value = d; };
         last.addEventListener('input', suggest); freq.addEventListener('input', suggest);
-        const save = h('button', { class: 'btn', type: 'submit' }, 'Save');
+        // Details read from an uploaded certificate fill the boxes for the person to check. Nothing is saved until they press Save.
+        let filled = false;
+        if (reading && reading.found) {
+          if (reading.issue_date) { last.value = reading.issue_date; filled = true; }
+          if (reading.expiry_date) { due.value = reading.expiry_date; filled = true; }
+          if (reading.certificate_number) { certNo.value = reading.certificate_number; filled = true; }
+          if (reading.provider) { prov.value = reading.provider; filled = true; }
+          [[last, reading.issue_date], [due, reading.expiry_date], [certNo, reading.certificate_number], [prov, reading.provider]].forEach(([el, v]) => { if (v) el.classList.add('autofilled'); });
+        }
+        const save = h('button', { class: 'btn', type: 'submit' }, filled ? 'Check and save' : 'Save');
         form = h('form', { novalidate: true, onsubmit: async (e) => {
           e.preventDefault();
           const f = freq.value.trim() === '' ? null : Number(freq.value);
           if (!validDate(last.value) || !validDate(due.value)) return message(msg, 'err', 'Please check the dates.');
           if (f !== null && (!Number.isInteger(f) || f < 1 || f > 120)) return message(msg, 'err', 'Repeat every: please enter a whole number of months between 1 and 120, or leave it empty.');
           await busy(save, async () => {
-            const u = await sb.from('compliance_items').update({ last_done: last.value || null, frequency_months: f, due_date: due.value || null, notes: notes.value.trim() }).eq('id', id);
+            const u = await sb.from('compliance_items').update({ last_done: last.value || null, frequency_months: f, due_date: due.value || null, notes: notes.value.trim(), certificate_number: certNo.value.trim() || null, provider: prov.value.trim() || null }).eq('id', id);
             if (u.error) return message(msg, 'err', 'Sorry, that could not be saved. You may not have permission to change this check.');
             await reload(); viewItem(id, 'Saved.');
           });
@@ -556,6 +567,8 @@
           h('label', { for: 'f-last' }, 'Last done'), last,
           h('label', { for: 'f-freq' }, 'Repeat every (months)'), freq,
           h('label', { for: 'f-due' }, 'Next due date'), due,
+          h('label', { for: 'f-cert' }, 'Certificate or policy number'), certNo,
+          h('label', { for: 'f-prov' }, 'Issued by (insurer or company)'), prov,
           h('p', { class: 'muted small' }, 'Leave the due date empty if you do not know it yet. It will show as "No date", never as in date.'),
           h('label', { for: 'f-notes' }, 'Notes'), notes, save);
       } else {
@@ -563,6 +576,8 @@
           h('div', { class: 'kv' }, h('span', {}, 'Last done'), h('span', {}, item.last_done ? fmtDate(item.last_done) : 'Not entered')),
           h('div', { class: 'kv' }, h('span', {}, 'Repeat every'), h('span', {}, item.frequency_months ? item.frequency_months + ' months' : 'Not set')),
           h('div', { class: 'kv' }, h('span', {}, 'Next due date'), h('span', {}, item.due_date ? fmtDate(item.due_date) : 'Not entered')),
+          item.certificate_number ? h('div', { class: 'kv' }, h('span', {}, 'Certificate or policy number'), h('span', {}, item.certificate_number)) : null,
+          item.provider ? h('div', { class: 'kv' }, h('span', {}, 'Issued by'), h('span', {}, item.provider)) : null,
           item.notes ? h('p', {}, item.notes) : h('p', { class: 'muted' }, 'No notes.'));
       }
 
@@ -580,6 +595,21 @@
         if (y.error) return message(msg, 'err', 'Sorry, that document could not be removed.');
         viewItem(id, 'Document removed.');
       };
+      // Ask the server to read a stored document and suggest the dates and numbers. It only suggests; the person checks and saves.
+      const READABLE = /\.(pdf|jpe?g|png)$/i;
+      const readDoc = async (docId, intro) => {
+        message(msg, 'ok', 'Reading your document…');
+        let reply = null, status = 0;
+        try {
+          const tok = (await sb.auth.getSession()).data.session.access_token;
+          const r = await fetch('/api/read-document', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: docId }) });
+          status = r.status; reply = await r.json().catch(() => ({}));
+        } catch (e) { reply = null; }
+        const lead = intro ? intro + ' ' : '';
+        if (reply && reply.reading && reply.reading.found) return viewItem(id, lead + 'We read your document and filled in the details below. Please check them, then press "Check and save".', reply.reading);
+        if (reply && reply.reading) return viewItem(id, lead + 'We could not find dates or numbers in that document, so please type them in.');
+        return viewItem(id, lead + ((reply && reply.error) || 'We could not read it just now, so please type the details in.'));
+      };
       const fileIn = h('input', { id: 'file', type: 'file', accept: '.pdf,.jpg,.jpeg,.png,.doc,.docx' });
       const upBtn = h('button', { class: 'btn ghost', type: 'button', id: 'upload' }, 'Upload');
       upBtn.addEventListener('click', async () => {
@@ -593,17 +623,19 @@
           const up = await sb.storage.from('documents').upload(path, f, { contentType: f.type || undefined });
           if (up.error) return message(msg, 'err', 'Sorry, the upload did not work. Please try again.');
           let uid = null; try { uid = (await sb.auth.getSession()).data.session.user.id; } catch { uid = null; }
-          const ins = await sb.from('documents').insert({ item_id: item.id, property_id: item.property_id, storage_path: path, filename: f.name, content_type: f.type || null, size_bytes: f.size, uploaded_by: uid });
+          const ins = await sb.from('documents').insert({ item_id: item.id, property_id: item.property_id, storage_path: path, filename: f.name, content_type: f.type || null, size_bytes: f.size, uploaded_by: uid }).select('id').maybeSingle();
           if (ins.error) { await sb.storage.from('documents').remove([path]); return message(msg, 'err', 'Sorry, the document could not be saved. Please try again.'); }
+          if (READABLE.test(f.name) && ins.data && ins.data.id) return readDoc(ins.data.id, 'Document added.');
           viewItem(id, 'Document added.');
         });
       });
       const docsBox = h('div', { class: 'docs' }, h('h3', {}, 'Certificates and documents'),
         ...(docs.length ? docs.map((d) => h('div', { class: 'doc' }, h('span', { class: 'fname' }, d.filename),
           h('button', { class: 'linkbtn', type: 'button', onclick: () => openDoc(d) }, 'Open'),
+          rights.can_edit && READABLE.test(d.filename || '') ? h('button', { class: 'linkbtn', type: 'button', 'data-read': d.id, onclick: () => readDoc(d.id) }, 'Read details') : null,
           rights.can_manage ? h('button', { class: 'linkbtn', type: 'button', onclick: () => delDoc(d) }, 'Delete') : null))
           : [h('p', { class: 'muted' }, 'No documents yet.')]),
-        rights.can_edit ? h('div', {}, h('label', { for: 'file' }, 'Add a certificate or document'), fileIn, upBtn) : null);
+        rights.can_edit ? h('div', {}, h('label', { for: 'file' }, 'Add a certificate or document'), fileIn, upBtn, h('p', { class: 'muted small' }, 'For a PDF or a photo, we read it and fill in the dates and number for you to check. Nothing is saved until you press Save.')) : null);
 
       // Removing a check also removes its documents from storage, so nothing is left behind.
       let remove = null;
