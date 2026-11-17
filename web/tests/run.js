@@ -612,6 +612,10 @@ const USERS = {
     await t.ctx.close();
 
     // trial, payment failure, stop and cancellation screens
+    t = await newPage(() => { window.__mock.accessError = 'permission denied for function my_access'; });
+    await login(t.page, 'site@t'); await t.page.waitForSelector('#access-retry');
+    check('unpaid: if the account check fails, nothing opens; the person is told and can try again (never an empty passport)', (await t.page.locator('h1').innerText()).includes('could not check') && (await t.page.locator('#access-why').innerText()).includes('permission denied') && (await t.page.locator('.appnav').count()) === 0);
+    await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
     await login(t.page, 'site@t'); await t.page.waitForSelector('text=One step left');
     check('unpaid: a new customer sees only the payment step, with a working Pay now button', (await t.page.locator('.kv').count()) === 0 && !(await t.page.locator('#pay-now').isDisabled()) && (await t.page.locator('.card').innerText()).includes('opens as soon as your payment is confirmed'));

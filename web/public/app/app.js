@@ -213,8 +213,10 @@
     if ((req.role_name === 'tremcore_admin' || req.role_name === 'tremcore_staff') && window.TCHub) {
       return window.TCHub.mount({ sb, root, req, hasFactor, signOut });
     }
-    let a = { state: 'ok' };
-    try { const r = await sb.rpc('my_access'); if (r.data && r.data[0]) a = r.data[0]; } catch { /* treated as ok; the database still decides what is visible */ }
+    // If the account check fails we must not guess "all fine": an unpaid account would walk into an empty passport and never see the payment step.
+    let a = null, why = '';
+    try { const r = await sb.rpc('my_access'); if (r.error) why = r.error.message || 'error'; else if (r.data && r.data[0]) a = r.data[0]; else why = 'no account row'; } catch (e) { why = String((e && e.message) || e); }
+    if (!a) return viewAccessProblem(why);
     if (a.state === 'awaiting_payment') return viewAwaitingPayment(a);
     if (a.state === 'stopped') return viewStopped(a);
     if (a.is_head) {
@@ -267,6 +269,14 @@
         : h('p', {}, a.is_head ? 'Your account has been created. It opens as soon as your payment is confirmed.' : 'This account is waiting for its first payment. Please ask your head-office user.'),
       q === '0' && h('div', { class: 'msg err', role: 'status' }, 'The payment was not completed. You have not been charged. You can try again when you are ready.'),
       a.is_head && !confirming && btn, box,
+      h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
+  }
+
+  function viewAccessProblem(why) {
+    showIn(h('div', { class: 'card' }, h('h1', {}, 'We could not check your account'),
+      h('p', {}, 'Something went wrong while checking your account, so we have not opened it. Please try again. If it keeps happening, contact Tremcore and quote the note below.'),
+      h('p', { class: 'muted small', id: 'access-why' }, 'Note: ' + String(why).slice(0, 200)),
+      h('button', { class: 'btn', id: 'access-retry', onclick: () => route() }, 'Try again'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }
 

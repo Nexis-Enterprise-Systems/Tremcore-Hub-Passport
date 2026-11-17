@@ -156,6 +156,7 @@
       if (name === 'update_site') { const p = (db().properties || []).find((x) => x.id === args.p_id); if (p) Object.assign(p, { name: args.p_name, address: args.p_address }); return { data: null }; }
       if (name === 'regen_clock_token') { if (M().regenError) return { data: null, error: { message: 'not_allowed' } }; const p = (db().properties || []).find((x) => x.id === args.p_property); if (p) p.clock_token = 'b'.repeat(32); return { data: p && p.clock_token }; }
       if (name === 'passport_rights') return { data: [M().rights || { can_edit: true, can_manage: true }] };
+      if (name === 'my_access' && M().accessError) return { data: null, error: { message: M().accessError } };
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
       if (name === 'request_cancellation') { rec('cancel', 'x'); if (M().cancelError) return { data: null, error: { message: 'x' } }; M().access = { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 }; return { data: '2026-12-08T00:00:00Z' }; }
       if (name === 'withdraw_cancellation') { M().access = { state: 'ok', is_head: true }; return { data: null }; }
