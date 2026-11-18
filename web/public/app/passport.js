@@ -173,12 +173,14 @@
         c.missing ? h('p', { class: 'muted small', id: 'att-missing' }, c.missing + (c.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (c.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
           h('button', { class: 'linkbtn', type: 'button', id: 'att-dates', onclick: () => { filter = 'missing'; ctab = 'overview'; go('compliance'); } }, 'Add the dates')) : null);
       const sideCards = [
-        promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null,
-        h('div', { class: 'card' }, h('h2', {}, 'Your tools'),
+        promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null
+      ].filter(Boolean);
+      const toolsCard =
+        h('div', { class: 'card tools' }, h('h2', {}, 'Your tools'),
           h('div', { class: 'qtiles' },
             tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
             ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
-            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency())))].filter(Boolean);
+            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency())));
       shellWith('home', sideCards, [
         h('div', { class: 'card overview' },
           h('div', { class: 'welcome' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
@@ -187,7 +189,7 @@
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
           h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
         sitePicker(viewHome),
-        attention]);
+        attention, toolsCard]);
     }
 
     // ---------- Compliance: Overview / By Category / Due Soon ----------

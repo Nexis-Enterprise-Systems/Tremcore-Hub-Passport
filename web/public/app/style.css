@@ -412,25 +412,27 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 }
 @media (min-width:1100px){.appbody.view-settings .siteedit{grid-template-columns:1fr 1fr}}
 
-/* Home: the menu column also holds the add-ons and tools underneath the menu.
-   Phones: Needs attention first, then add-ons and tools. Tablets: the same, beside the menu. Wide screens: stacked under the menu on the left. */
+/* Home: the add-ons sit in the left column under the menu; Your tools sit under Needs attention.
+   Phones and tablets keep the order: summary, sites, Needs attention, Add-ons, Your tools. */
 .appshell-home{display:flex;flex-direction:column}
 .appleft{display:contents}
-.appshell-home .appbody{order:1}
+.appshell-home .appbody{display:contents}
+.appshell-home .appbody>*{order:1}
 .appshell-home .appleft>.card{order:2;margin-bottom:12px}
+.appshell-home .appbody>.tools{order:3}
 @media (min-width:960px){
-  .appshell-home{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;align-items:start}
-  .appshell-home .appleft>.appnav{grid-column:1;grid-row:1}
-  .appshell-home .appbody{grid-column:2;grid-row:1}
-  .appshell-home .appleft>.card{grid-column:2;grid-row:auto;margin:0}
+  .appshell-home{display:grid;grid-template-columns:200px minmax(0,1fr);column-gap:20px;row-gap:12px;align-items:start}
+  .appshell-home .appleft>.appnav{grid-column:1;grid-row:1 / span 10}
+  .appshell-home .appbody>*,.appshell-home .appleft>.card{grid-column:2;margin:0}
   .appshell-home .promos{grid-template-columns:1fr 1fr}
   .appshell-home .qtiles{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 @media (min-width:1100px){
   .appshell-home{grid-template-columns:310px minmax(0,1fr)}
   .appshell-home .appleft{display:flex;flex-direction:column;gap:16px;grid-column:1;grid-row:1}
-  .appshell-home .appleft>.appnav{position:static}
-  .appshell-home .appleft>.card{grid-column:auto;order:0;margin:0}
+  .appshell-home .appleft>.appnav{grid-column:auto;grid-row:auto}
+  .appshell-home .appleft>.card{grid-column:auto;order:0}
+  .appshell-home .appbody{display:block;grid-column:2;grid-row:1}
+  .appshell-home .appbody>.card,.appshell-home .appbody>.sitepick{margin-bottom:12px}
   .appshell-home .promos{grid-template-columns:1fr}
-  .appshell-home .qtiles{grid-template-columns:1fr}
 }
