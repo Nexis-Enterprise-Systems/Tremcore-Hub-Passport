@@ -383,7 +383,6 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .card.attention .item{margin-top:8px}
 
 /* ---- Wide computer screens: use the width (phones and tablets are not affected) ---- */
-.dash-main>.card,.dash-side>.card{margin-bottom:12px}
 @media (min-width:1100px){
   body.passport main{max-width:1560px}
   body.formwide main{max-width:1280px}
@@ -413,16 +412,25 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 }
 @media (min-width:1100px){.appbody.view-settings .siteedit{grid-template-columns:1fr 1fr}}
 
-/* Home on a wide screen: the summary and Needs attention fill the width beside the menu; Add-ons and tools run across the whole page, underneath the menu too. */
+/* Home: the menu column also holds the add-ons and tools underneath the menu.
+   Phones: Needs attention first, then add-ons and tools. Tablets: the same, beside the menu. Wide screens: stacked under the menu on the left. */
+.appshell-home{display:flex;flex-direction:column}
+.appleft{display:contents}
+.appshell-home .appbody{order:1}
+.appshell-home .appleft>.card{order:2;margin-bottom:12px}
+@media (min-width:960px){
+  .appshell-home{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;align-items:start}
+  .appshell-home .appleft>.appnav{grid-column:1;grid-row:1}
+  .appshell-home .appbody{grid-column:2;grid-row:1}
+  .appshell-home .appleft>.card{grid-column:2;grid-row:auto;margin:0}
+  .appshell-home .promos{grid-template-columns:1fr 1fr}
+  .appshell-home .qtiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 @media (min-width:1100px){
-  .appshell-home{grid-template-columns:230px minmax(0,1fr);grid-auto-rows:auto;row-gap:16px}
-  .appshell-home>.appbody.view-home,.appshell-home .dash-cols,.appshell-home .dash-main,.appshell-home .dash-side{display:contents}
-  .appshell-home>.appnav{grid-column:1;grid-row:1/span 3}
-  .appshell-home .overview{grid-column:2;grid-row:1}
-  .appshell-home .sitesgrid{grid-column:2;grid-row:2;margin:0}
-  .appshell-home .attention{grid-column:2;grid-row:3;margin:0}
-  .appshell-home .card.addons{grid-column:1/-1;grid-row:4;margin:0}
-  .appshell-home .dash-side>.card:not(.addons){grid-column:1/-1;grid-row:5;margin:0}
-  .appshell-home .card.addons .promos{grid-template-columns:1fr 1fr}
-  .appshell-home .dash-side .qtiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .appshell-home{grid-template-columns:310px minmax(0,1fr)}
+  .appshell-home .appleft{display:flex;flex-direction:column;gap:16px;grid-column:1;grid-row:1}
+  .appshell-home .appleft>.appnav{position:static}
+  .appshell-home .appleft>.card{grid-column:auto;order:0;margin:0}
+  .appshell-home .promos{grid-template-columns:1fr}
+  .appshell-home .qtiles{grid-template-columns:1fr}
 }

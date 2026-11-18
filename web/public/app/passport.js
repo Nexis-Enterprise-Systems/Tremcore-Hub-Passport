@@ -109,9 +109,13 @@
     // ---------- shell: bottom menu on a phone, left-hand menu on a computer ----------
     const TABS = [['home', 'Home'], ['compliance', 'Compliance'], ['tasks', 'Tasks'], ['settings', 'Settings']];
     const go = (k) => { tab = k; if (k === 'home') viewHome(); else if (k === 'compliance') viewList(); else if (k === 'tasks') viewTasks(); else viewSettings(); };
-    const shell = (cur, ...nodes) => page('dash', h('div', { class: 'appshell appshell-' + cur },
-      h('nav', { class: 'appnav', 'aria-label': 'Main menu' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: 'navbtn' + (cur === k ? ' on' : ''), 'data-nav': k, 'aria-current': cur === k ? 'page' : null, onclick: () => go(k) }, icon(k), h('span', {}, l)))),
+    // The menu sits in a left-hand column; on the home page the add-ons and tools sit in that column too, underneath the menu.
+    const shellWith = (cur, side, nodes) => page('dash', h('div', { class: 'appshell appshell-' + cur },
+      h('div', { class: 'appleft' },
+        h('nav', { class: 'appnav', 'aria-label': 'Main menu' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: 'navbtn' + (cur === k ? ' on' : ''), 'data-nav': k, 'aria-current': cur === k ? 'page' : null, onclick: () => go(k) }, icon(k), h('span', {}, l)))),
+        ...side),
       h('div', { class: 'appbody view-' + cur }, ...nodes)));
+    const shell = (cur, ...nodes) => shellWith(cur, [], nodes);
     const backTo = (label) => backBtn(label, () => go(tab));
 
     // All sites, then each site underneath (up to 12 as cards; beyond that a plain drop-down).
@@ -168,7 +172,14 @@
         attRows.length > 8 ? h('button', { class: 'btn small ghost', id: 'att-all', type: 'button', onclick: () => { ctab = 'due'; go('compliance'); } }, 'See all ' + attRows.length) : null,
         c.missing ? h('p', { class: 'muted small', id: 'att-missing' }, c.missing + (c.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (c.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
           h('button', { class: 'linkbtn', type: 'button', id: 'att-dates', onclick: () => { filter = 'missing'; ctab = 'overview'; go('compliance'); } }, 'Add the dates')) : null);
-      shell('home',
+      const sideCards = [
+        promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null,
+        h('div', { class: 'card' }, h('h2', {}, 'Your tools'),
+          h('div', { class: 'qtiles' },
+            tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
+            ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
+            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency())))].filter(Boolean);
+      shellWith('home', sideCards, [
         h('div', { class: 'card overview' },
           h('div', { class: 'welcome' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
           ...heading(note),
@@ -176,15 +187,7 @@
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
           h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
         sitePicker(viewHome),
-        h('div', { class: 'dash-cols' },
-          h('div', { class: 'dash-main' }, attention),
-          h('div', { class: 'dash-side' },
-            promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null,
-            h('div', { class: 'card' }, h('h2', {}, 'Your tools'),
-              h('div', { class: 'qtiles' },
-                tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
-                ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
-                q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency()))))));
+        attention]);
     }
 
     // ---------- Compliance: Overview / By Category / Due Soon ----------
