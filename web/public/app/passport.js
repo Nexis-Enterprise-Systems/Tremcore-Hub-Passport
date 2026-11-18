@@ -109,7 +109,7 @@
     // ---------- shell: bottom menu on a phone, left-hand menu on a computer ----------
     const TABS = [['home', 'Home'], ['compliance', 'Compliance'], ['tasks', 'Tasks'], ['settings', 'Settings']];
     const go = (k) => { tab = k; if (k === 'home') viewHome(); else if (k === 'compliance') viewList(); else if (k === 'tasks') viewTasks(); else viewSettings(); };
-    const shell = (cur, ...nodes) => page('dash', h('div', { class: 'appshell' },
+    const shell = (cur, ...nodes) => page('dash', h('div', { class: 'appshell appshell-' + cur },
       h('nav', { class: 'appnav', 'aria-label': 'Main menu' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: 'navbtn' + (cur === k ? ' on' : ''), 'data-nav': k, 'aria-current': cur === k ? 'page' : null, onclick: () => go(k) }, icon(k), h('span', {}, l)))),
       h('div', { class: 'appbody view-' + cur }, ...nodes)));
     const backTo = (label) => backBtn(label, () => go(tab));

@@ -390,16 +390,12 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
   .appshell{grid-template-columns:230px minmax(0,1fr);gap:24px}
   .card{padding:28px 28px}
   /* Home: a dashboard. The summary runs across the top; what needs attention sits on the left, add-ons and tools on the right. */
-  .view-home .dash-cols{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;align-items:start}
-  .view-home .dash-cols .card{margin-bottom:16px}
-  .view-home .dash-cols .card:last-child{margin-bottom:0}
   .view-home .overview{display:grid;grid-template-columns:minmax(220px,.9fr) minmax(0,1.7fr) minmax(210px,.8fr);column-gap:36px;align-items:center}
   .view-home .overview>.welcome{grid-column:1;grid-row:1/span 3}
   .view-home .overview>h2{grid-column:2;grid-row:1;margin:0 0 6px}
   .view-home .overview>.summary{grid-column:2;grid-row:2}
   .view-home .overview>#view-full{grid-column:3;grid-row:1/span 3;margin:0}
   .view-home .overview>:not(.welcome):not(h2):not(.summary):not(#view-full){grid-column:1/-1;grid-row:4}
-  .view-home .promos{grid-template-columns:1fr}
   /* Settings: two columns of cards */
   .appbody.view-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
   .appbody.view-settings>*{margin-bottom:0}
@@ -416,3 +412,17 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
   .dash-side .qtiles{grid-template-columns:1fr 1fr}
 }
 @media (min-width:1100px){.appbody.view-settings .siteedit{grid-template-columns:1fr 1fr}}
+
+/* Home on a wide screen: the summary and Needs attention fill the width beside the menu; Add-ons and tools run across the whole page, underneath the menu too. */
+@media (min-width:1100px){
+  .appshell-home{grid-template-columns:230px minmax(0,1fr);grid-auto-rows:auto;row-gap:16px}
+  .appshell-home>.appbody.view-home,.appshell-home .dash-cols,.appshell-home .dash-main,.appshell-home .dash-side{display:contents}
+  .appshell-home>.appnav{grid-column:1;grid-row:1/span 3}
+  .appshell-home .overview{grid-column:2;grid-row:1}
+  .appshell-home .sitesgrid{grid-column:2;grid-row:2;margin:0}
+  .appshell-home .attention{grid-column:2;grid-row:3;margin:0}
+  .appshell-home .card.addons{grid-column:1/-1;grid-row:4;margin:0}
+  .appshell-home .dash-side>.card:not(.addons){grid-column:1/-1;grid-row:5;margin:0}
+  .appshell-home .card.addons .promos{grid-template-columns:1fr 1fr}
+  .appshell-home .dash-side .qtiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
