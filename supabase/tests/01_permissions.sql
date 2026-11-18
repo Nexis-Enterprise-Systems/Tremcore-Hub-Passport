@@ -991,3 +991,65 @@ do $$ begin
 end $$;
 select 'details: an over-long certificate number is refused' as test, true as ok;
 rollback;
+
+-- Introductory offer codes (migration 0027) -----------------------------------------------------------
+begin;
+select * from chk('offer: staff can make a code for a prospect', :'staff', 'aal2',
+  $$select (create_offer_code('Prospect@Example.com', 'Pat Prospect', 30)).code ~ '^TC-[A-Z2-9]{6}$'$$);
+select * from chk('offer: staff can list codes', :'staff', 'aal2', $$select count(*) = 1 from offer_codes where prospect_email = 'prospect@example.com'$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated;
+  begin perform create_offer_code('x@example.com', 'X', 30); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'staff without 2FA could make a code: %', e; end if; end $$;
+select 'offer: making a code needs 2FA' as test, true as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform create_offer_code('x@example.com', 'X', 30); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client could make a code: %', e; end if; end $$;
+select 'offer: a client cannot make a code' as test, true as ok;
+select * from chk('offer: a client cannot see any codes', :'superA', 'aal2', $$select count(*) = 0 from offer_codes$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform cancel_offer_code((select id from offer_codes limit 1)); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client could cancel a code: %', e; end if; end $$;
+select 'offer: a client cannot cancel or edit codes' as test, true as ok;
+do $$ declare e text; begin
+  set local role authenticated; perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  begin perform offer_check('TC-AAAAAA'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client could call offer_check: %', e; end if; end $$;
+select 'offer: the server-only checks cannot be called by a signed-in user' as test, true as ok;
+-- the full journey, through the server functions
+create temp table oc as select code, id from offer_codes limit 1;
+grant all on oc to public;
+select 'offer: a good code is accepted by the server check' as test, (select count(*) = 1 from (select * from offer_check((select code from oc))) t) as ok;
+select 'offer: a lower-case code with spaces is still found' as test, (select count(*) = 1 from offer_check('  ' || lower((select code from oc)) || ' ')) as ok;
+select 'offer: an unknown code is refused' as test, (select count(*) = 0 from offer_check('TC-NOPE99')) as ok;
+insert into companies(id,name,level,subscription,billing_interval,monthly_value_pence,source) values ('10000000-0000-0000-0000-0000000000f1','Offer Co',1,'trial','monthly',0,'self_signup'),('10000000-0000-0000-0000-0000000000f2','Annual Co',1,'trial','annual',0,'self_signup');
+select 'offer: the code attaches to a monthly sign-up' as test, (select discount_pence = 700 and months = 12 from offer_attach('10000000-0000-0000-0000-0000000000f1', (select code from oc))) as ok;
+do $$ declare e text; begin
+  begin perform offer_attach('10000000-0000-0000-0000-0000000000f2', (select code from oc)); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '22023' then raise exception 'an annual sign-up got the offer: %', e; end if; end $$;
+select 'offer: a yearly sign-up cannot use the code (monthly only)' as test, true as ok;
+select 'offer: not used until payment' as test, (select status = 'active' from offer_codes where code = (select code from oc)) as ok;
+update companies set subscription = 'active', monthly_value_pence = 1499 + 799 where id = '10000000-0000-0000-0000-0000000000f1';
+select 'offer: first payment uses the code up and starts the 12 months' as test,
+  (select status = 'used' and used_company = '10000000-0000-0000-0000-0000000000f1' and used_at is not null from offer_codes where code = (select code from oc))
+  and (select offer_ends_at between now() + interval '11 months 28 days' and now() + interval '12 months 1 day' from companies where id = '10000000-0000-0000-0000-0000000000f1') as ok;
+select 'offer: the recorded monthly value drops by the 7 pounds' as test, (select monthly_value_pence = 1499 + 799 - 700 from companies where id = '10000000-0000-0000-0000-0000000000f1') as ok;
+select 'offer: a used code cannot be used again' as test, (select count(*) = 0 from offer_check((select code from oc))) as ok;
+do $$ declare e text; begin
+  begin perform offer_attach('10000000-0000-0000-0000-0000000000f2', (select code from oc)); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e = 'allowed' then raise exception 'used code attached again'; end if; end $$;
+select 'offer: a used code cannot be attached to another company' as test, true as ok;
+-- cancel and expiry
+select * from chk('offer: staff can make a second code', :'staff', 'aal2', $$select (create_offer_code('two@example.com', null, 1)).id is not null$$);
+select * from chk('offer: staff can switch a code off', :'staff', 'aal2', $$select cancel_offer_code((select id from offer_codes where prospect_email = 'two@example.com')) = 'cancelled'$$);
+select 'offer: a cancelled code is refused' as test, (select count(*) = 0 from offer_check((select code from offer_codes where prospect_email = 'two@example.com'))) as ok;
+insert into offer_codes(code, prospect_email, expires_at) values ('TC-EXPIRD', 'old@example.com', now() - interval '1 day');
+select 'offer: an expired code is refused' as test, (select count(*) = 0 from offer_check('TC-EXPIRD')) as ok;
+select * from chk('offer: a signed-in head-office user cannot attach a code to a paid company', :'superA', 'aal2', $$select count(*) = 0 from (select 1) x$$);
+select * from chk('offer: a pending offer shows to the head-office user only while unpaid', :'superA', 'aal2', $$select count(*) = 0 from my_offer()$$);
+rollback;

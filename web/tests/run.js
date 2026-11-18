@@ -14,6 +14,9 @@ process.env.STRIPE_WEBHOOK_SECRET = 'whsec_testsecret';
 process.env.STRIPE_API_BASE = 'https://stripe.test';
 process.env.ANTHROPIC_API_KEY = 'sk-ant-FAKE-MUST-NEVER-LEAK';
 process.env.ANTHROPIC_API_BASE = 'https://anthropic.test';
+process.env.EMAIL_API_KEY = 'mail-key-MUST-NOT-LEAK';
+process.env.EMAIL_FROM = 'Tremcore <hello@tremcore.co.uk>';
+process.env.EMAIL_API_BASE = 'https://mail.test';
 const server = require('../server.js');
 const mockJs = fs.readFileSync(path.join(__dirname, 'mock-supabase.js'), 'utf8');
 
@@ -79,8 +82,18 @@ const USERS = {
   const prepCalls = []; let prepReply = { status: 200 };
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
+  const offerCalls = [], mailCalls = []; let offerGood = true, couponExists = false, mailFail = false, myOffer = [], attachOk = true, createOk = true;
+  const OFFER_ROW = { id: '99999999-9999-4999-8999-999999999999', code: 'TC-ABC234', prospect_name: 'Pat Prospect', prospect_email: 'pat@prospect.example', discount_pence: 700, months: 12, expires_at: new Date(Date.now() + 20 * 86400000).toISOString(), status: 'active', sent_at: null };
   global.fetch = (u, o) => {
     const url = String(u);
+    if (url === 'https://stripe.test/v1/coupons') { offerCalls.push({ k: 'coupon', body: new URLSearchParams(o.body) }); return Promise.resolve(couponExists ? new Response(JSON.stringify({ error: { code: 'resource_already_exists', message: 'Coupon already exists' } }), { status: 400 }) : new Response('{"id":"tc-intro-700-12m"}', { status: 200 })); }
+    if (url === 'https://mail.test/emails') { mailCalls.push({ o, body: JSON.parse(o.body) }); return Promise.resolve(mailFail ? new Response('{}', { status: 500 }) : new Response('{"id":"em_1"}', { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/offer_check') { const b = JSON.parse(o.body); offerCalls.push({ k: 'check', b }); return Promise.resolve(new Response(JSON.stringify(offerGood && b.p_code === 'TC-ABC234' ? [{ discount_pence: 700, months: 12 }] : []), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/offer_attach') { const b = JSON.parse(o.body); offerCalls.push({ k: 'attach', b, auth: o.headers.Authorization }); return Promise.resolve(attachOk ? new Response(JSON.stringify(b.p_code ? [{ discount_pence: 700, months: 12 }] : []), { status: 200 }) : new Response('{"message":"offer_invalid"}', { status: 400 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/my_offer') { offerCalls.push({ k: 'my', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify(myOffer), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/create_offer_code') { const b = JSON.parse(o.body); offerCalls.push({ k: 'create', b, auth: o.headers.Authorization }); return Promise.resolve(createOk ? new Response(JSON.stringify(Object.assign({}, OFFER_ROW, { prospect_email: String(b.p_email).toLowerCase() })), { status: 200 }) : new Response('{"message":"not_allowed"}', { status: 400 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/mark_offer_sent') { offerCalls.push({ k: 'sent', b: JSON.parse(o.body) }); return Promise.resolve(new Response('null', { status: 200 })); }
+    if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/offer_codes?id=eq.')) { offerCalls.push({ k: 'get', u: url }); return Promise.resolve(new Response(JSON.stringify([OFFER_ROW]), { status: 200 })); }
     if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info') { sent.push({ u: url, o }); return Promise.resolve(extraReply.status === 200 ? new Response(JSON.stringify(extraReply.rows), { status: 200 }) : new Response(JSON.stringify({ message: extraReply.message || 'not_allowed' }), { status: extraReply.status })); }
@@ -221,6 +234,48 @@ const USERS = {
       prepReply = { status: 400, message: 'already_paid' }; rr = await sp(good); check('pay first: an already-paid sign-up is told so and not charged twice', rr.status === 409);
       prepReply = { status: 400, message: 'signup_closed' }; rr = await sp(good); check('pay first: closed sign-up is refused', rr.status === 403 && (await rr.json()).error.includes('not open'));
       prepReply = { status: 200 }; stripeFail = true; rr = await sp(good); check('pay first: if Stripe refuses, a plain message only', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
+    }
+    // ---- introductory offer codes
+    {
+      const sp = (b) => realFetch(base + '/api/signup-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+      const good = { email: 'pat@acme.example', company: 'Acme Cafes Ltd', name: 'Pat Jones', sites: 3, billing: 'annual', code: 'tc-abc234' };
+      offerCalls.length = 0; const ns = stripeCalls.length;
+      rr = await sp(good); const sess = new URLSearchParams(stripeCalls[stripeCalls.length - 1].o.body);
+      check('offer: a good code at sign-up still goes to Stripe', rr.status === 200 && stripeCalls.length === ns + 1);
+      check('offer: Stripe is given a coupon of 7 pounds off for 12 months, made once', offerCalls.some((c) => c.k === 'coupon' && c.body.get('amount_off') === '700' && c.body.get('duration') === 'repeating' && c.body.get('duration_in_months') === '12' && c.body.get('currency') === 'gbp' && c.body.get('id') === 'tc-intro-700-12m'));
+      check('offer: the payment page uses that coupon and the normal monthly prices (the discount, not a different price, does the work)', sess.get('discounts[0][coupon]') === 'tc-intro-700-12m' && sess.get('line_items[0][price_data][unit_amount]') === '1499' && sess.get('line_items[1][price_data][unit_amount]') === '799' && sess.get('line_items[1][quantity]') === '2');
+      check('offer: a code forces monthly billing, even if yearly was chosen', sess.get('line_items[0][price_data][recurring][interval]') === 'month' && prepCalls[prepCalls.length - 1].b.p_billing === 'monthly');
+      check('offer: the code is checked and tied to the new company with the service key, in upper case', offerCalls.some((c) => c.k === 'check' && c.b.p_code === 'TC-ABC234') && offerCalls.some((c) => c.k === 'attach' && c.b.p_company === 'co-new' && c.b.p_code === 'TC-ABC234' && c.auth === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK'));
+      couponExists = true; rr = await sp(good); check('offer: a coupon that already exists in Stripe is fine', rr.status === 200); couponExists = false;
+      const np = prepCalls.length, ns2 = stripeCalls.length;
+      rr = await sp(Object.assign({}, good, { code: 'TC-WRONG1' })); check('offer: a wrong, used or expired code is refused before anything is made or charged', rr.status === 422 && (await rr.json()).error.includes('discount code') && prepCalls.length === np && stripeCalls.length === ns2);
+      offerCalls.length = 0; rr = await sp(Object.assign({}, good, { code: '', billing: 'annual' })); const plain = new URLSearchParams(stripeCalls[stripeCalls.length - 1].o.body);
+      check('offer: no code means no discount, the normal price, and any old code on the company is cleared', rr.status === 200 && !plain.get('discounts[0][coupon]') && plain.get('line_items[0][price_data][recurring][interval]') === 'year' && offerCalls.some((c) => c.k === 'attach' && c.b.p_code === null) && !offerCalls.some((c) => c.k === 'coupon'));
+      // Pay now (already signed in): picks up the code that was attached
+      myOffer = [{ discount_pence: 700, months: 12 }]; billingRows = [{ company_id: 'co-1', sites: 2, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }];
+      rr = await realFetch(base + '/api/checkout', { method: 'POST', headers: { Authorization: 'Bearer user-token' } }); const pn = new URLSearchParams(stripeCalls[stripeCalls.length - 1].o.body);
+      check('offer: Pay now uses the code already attached to the company, looked up with the person\'s own token', rr.status === 200 && pn.get('discounts[0][coupon]') === 'tc-intro-700-12m' && offerCalls.some((c) => c.k === 'my' && c.auth === 'Bearer user-token'));
+      myOffer = []; rr = await realFetch(base + '/api/checkout', { method: 'POST', headers: { Authorization: 'Bearer user-token' } }); check('offer: Pay now with no offer is the normal price', !new URLSearchParams(stripeCalls[stripeCalls.length - 1].o.body).get('discounts[0][coupon]'));
+      billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }];
+      // Staff sending the offer
+      const so = (b, auth, hdr) => realFetch(base + '/api/send-offer', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, auth === null ? {} : { Authorization: auth || 'Bearer staff-token' }, hdr || {}), body: JSON.stringify(b) });
+      offerCalls.length = 0; mailCalls.length = 0;
+      rr = await so({ email: 'Pat@Prospect.example', name: 'pat prospect', days: 30 }); let jo = await rr.json();
+      check('offer email: staff make a code with their own token, so the database decides who is allowed', rr.status === 200 && offerCalls.some((c) => c.k === 'create' && c.auth === 'Bearer staff-token' && c.b.p_days === 30));
+      check('offer email: the email is sent to the prospect from Tremcore with the link and code', jo.sent === true && mailCalls.length === 1 && mailCalls[0].body.to[0] === 'pat@prospect.example');
+      const mb = mailCalls[0].body;
+      check('offer email: it states the prices (7.99 for 12 months, normally 14.99, extra sites 7.99) and the code link', mb.text.includes('£7.99 a month + VAT for your first 12 months') && mb.text.includes('£14.99') && mb.text.includes('Each additional site: £7.99') && mb.text.includes('/app/?signup=1&code=TC-ABC234') && mb.html.includes('Sign up with your code') && mb.from === 'Tremcore <hello@tremcore.co.uk>' && mailCalls[0].o.headers.Authorization === 'Bearer mail-key-MUST-NOT-LEAK');
+      check('offer email: the secret keys never appear in the answer', !JSON.stringify(jo).includes('MUST-NOT-LEAK') && !JSON.stringify(jo).includes('SERVICE-SECRET') && jo.code === 'TC-ABC234' && jo.link.includes('code=TC-ABC234'));
+      check('offer email: it is marked as emailed afterwards', offerCalls.some((c) => c.k === 'sent' && c.b.p_id === OFFER_ROW.id));
+      mailFail = true; offerCalls.length = 0; rr = await so({ email: 'pat@prospect.example', days: 30 }); jo = await rr.json();
+      check('offer email: if the email service fails, the code is still made and the link is given to send by hand (not marked as emailed)', rr.status === 200 && jo.sent === false && jo.note.includes('send it yourself') && !offerCalls.some((c) => c.k === 'sent')); mailFail = false;
+      createOk = false; rr = await so({ email: 'pat@prospect.example', days: 30 }); check('offer email: someone who is not signed-in staff cannot make a code', rr.status === 403 && mailCalls.length === 2); createOk = true;
+      const nm = mailCalls.length;
+      rr = await so({ email: 'nope', days: 30 }); check('offer email: a bad email address is refused before anything happens', rr.status === 422);
+      rr = await so({ email: 'a@b.example', days: 0 }); check('offer email: a silly number of days is refused', rr.status === 422);
+      rr = await so({ email: 'a@b.example', days: 30 }, null); check('offer email: it needs a sign-in', rr.status === 401 && mailCalls.length === nm);
+      rr = await so({ email: 'a@b.example', days: 30 }, undefined, { Origin: 'https://evil.example' }); check('offer email: another website cannot use it', rr.status === 403);
+      offerCalls.length = 0; rr = await so({ id: OFFER_ROW.id }); jo = await rr.json(); check('offer email: sending again for an existing code re-uses it and does not make a new one', rr.status === 200 && jo.sent === true && offerCalls.some((c) => c.k === 'get') && !offerCalls.some((c) => c.k === 'create') && mailCalls.length === nm + 1);
     }
     // ---- Staff Clock In / Out: the public page and its two routes
     {
@@ -427,7 +482,7 @@ const USERS = {
     check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Revenue,Enquiries,Activity,Settings');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Offers,Revenue,Enquiries,Activity,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
@@ -528,9 +583,30 @@ const USERS = {
     const eu = (await dbCalls(p, "x.table==='enquiries'&&x.op==='update'"))[0];
     check('enquiry status and notes are saved', eu.payload.status === 'demo_booked' && eu.payload.notes === 'Demo Friday');
 
+    // offers
+    await p.evaluate(() => { const iso = (d) => new Date(Date.now() + d * 86400000).toISOString(); window.__mock.tables.offer_codes = [
+      { id: 'o1', code: 'TC-WAIT22', prospect_name: 'Wendy Waits', prospect_email: 'wendy@w.example', status: 'active', sent_at: iso(-2), expires_at: iso(20), created_at: iso(-2), used_company: null },
+      { id: 'o2', code: 'TC-USED22', prospect_name: 'Una Used', prospect_email: 'una@u.example', status: 'used', sent_at: iso(-30), expires_at: iso(-5), created_at: iso(-30), used_company: window.__mock.tables.companies[0].id },
+      { id: 'o3', code: 'TC-OLD222', prospect_name: '', prospect_email: 'old@o.example', status: 'active', sent_at: null, expires_at: iso(-3), created_at: iso(-40), used_company: null }]; window.__mock.tables.companies[0].offer_ends_at = iso(300); });
+    await p.click('.hubnav >> text=Offers'); await p.waitForSelector('#offer-table tr[data-code]');
+    const orow = (c) => p.locator('tr[data-code=' + c + ']');
+    check('offers: the codes are listed with their state: waiting, used (with the client and when the offer price ends) and expired', (await orow('TC-WAIT22').innerText()).includes('Waiting') && (await orow('TC-USED22').innerText()).includes('Used') && (await orow('TC-USED22').innerText()).includes('Harbour Cafe Group') && (await orow('TC-USED22').innerText()).includes('Offer price until') && (await orow('TC-OLD222').innerText()).includes('Expired') && (await orow('TC-OLD222').innerText()).includes('Not emailed'));
+    check('offers: only a waiting code can be sent again or switched off', (await orow('TC-WAIT22').locator('button').allInnerTexts()).join() === 'Resend,Switch off' && (await orow('TC-USED22').locator('button').count()) === 0 && (await orow('TC-OLD222').locator('button').count()) === 0);
+    let sendBody = null, sendAuth = null; await p.route('**/api/send-offer', (rt) => { sendBody = JSON.parse(rt.request().postData()); sendAuth = rt.request().headers().authorization; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'o9', code: 'TC-NEW999', link: base + '/app/?signup=1&code=TC-NEW999', sent: true }) }); });
+    await p.fill('#of-name', 'pat prospect'); await p.fill('#of-email', 'pat@prospect.example'); await p.selectOption('#offer-create >> xpath=../..//select', '60').catch(() => {});
+    await p.click('#offer-create'); await p.waitForSelector('#offer-link');
+    check('offers: creating sends the prospect’s details, with the staff member’s own sign-in, and shows the code and a copyable link', sendBody.email === 'pat@prospect.example' && sendBody.name === 'Pat Prospect' && sendBody.days >= 14 && /^Bearer tok-/.test(sendAuth) && (await p.inputValue('#offer-link')).includes('code=TC-NEW999') && (await p.locator('#offer-out').innerText()).includes('Email sent'));
+    await p.route('**/api/send-offer', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'o9', code: 'TC-NEW999', link: base + '/app/?signup=1&code=TC-NEW999', sent: false, note: 'The email service is not set up yet, so nothing was sent. Copy the link and send it yourself.' }) }));
+    await p.fill('#of-email', 'x@y.example'); await p.click('#offer-create'); await p.waitForSelector('#offer-out >> text=not set up yet');
+    check('offers: if the email could not be sent the page says so plainly and still gives the link to send by hand', (await p.locator('#offer-link').count()) === 1);
+    await p.fill('#of-email', 'nope'); await p.click('#offer-create'); await p.waitForSelector('#offer-out .msg.err');
+    check('offers: a bad email address is stopped before anything is sent', (await p.locator('#offer-out').innerText()).includes('email address'));
+    await orow('TC-WAIT22').locator('button:has-text("Switch off")').click(); await p.waitForSelector('tr[data-code=TC-WAIT22] >> text=Switched off');
+    check('offers: switching a code off marks it switched off and removes its buttons', (await orow('TC-WAIT22').locator('button').count()) === 0);
+
     // phone layout + errors
     await p.setViewportSize({ width: 390, height: 800 });
-    for (const u of ['#/dashboard', '#/clients', '#/clients/' + C1, '#/sites/' + P1, '#/subscriptions', '#/enquiries']) {
+    for (const u of ['#/dashboard', '#/clients', '#/clients/' + C1, '#/sites/' + P1, '#/subscriptions', '#/offers', '#/enquiries']) {
       await p.goto(base + '/app/' + u); await p.waitForSelector('.hubmain h1');
       if (!(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))) check('hub fits a phone: ' + u, false);
     }
@@ -657,6 +733,27 @@ const USERS = {
     await t.page.click('button[type=submit]'); await t.page.waitForURL('**/healthz');
     check('pay first: after sign-up the person goes straight to the payment page, not to a "check your email" screen', t.page.url().endsWith('/healthz'));
     check('pay first: the server is given the business, name, number of sites, yearly choice and email, and never the password', spReq && spReq.company === 'Acme Cafes Ltd' && spReq.name === 'Pat Jones' && spReq.sites === 3 && spReq.billing === 'annual' && spReq.email === 'pat@acme.example' && !JSON.stringify(spReq).includes('a-long-enough'));
+    await t.ctx.close();
+    // discount code on the sign-up page
+    t = await newPage(() => { window.__mock.signupOpen = true; });
+    await t.page.goto(base + '/app/?signup=1&code=tc-abc234'); await t.page.waitForSelector('#su-email');
+    check('offer: the code from the email link is already filled in on the sign-up page, in capitals', (await t.page.inputValue('#su-code')) === 'TC-ABC234' && (await t.page.locator('#su-code-note').innerText()).includes('monthly'));
+    let ocReq = null; await t.page.route('**/api/signup-checkout', (rt) => { ocReq = JSON.parse(rt.request().postData()); rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
+    await t.page.fill('#su-name', 'pat jones'); await t.page.fill('#su-company', 'acme cafes Ltd'); await t.page.fill('#su-sites', '2'); await t.page.fill('#su-email', 'pat@acme.example'); await t.page.fill('#su-pass', 'a-long-enough-password'); await t.page.check('input[value=annual]'); await t.page.check('#su-terms');
+    await t.page.click('button[type=submit]'); await t.page.waitForURL('**/healthz');
+    check('offer: the code is sent with the sign-up, and yearly billing is switched to monthly because the offer is monthly only', ocReq.code === 'TC-ABC234' && ocReq.billing === 'monthly');
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.signupOpen = true; });
+    await t.page.goto(base + '/app/?signup=1'); await t.page.waitForSelector('#su-email');
+    check('offer: with no code in the link the box is empty and there is no offer note', (await t.page.inputValue('#su-code')) === '' && (await t.page.locator('#su-code-note').innerText()) === '');
+    await t.ctx.close();
+    // email confirmation off + a code that no longer works: the person is told before paying, and is not sent to Stripe automatically
+    t = await newPage(() => { window.__mock.signupOpen = true; window.__mock.signupSession = true; window.__mock.attachFail = true; window.__mock.access = { state: 'awaiting_payment', is_head: true }; });
+    await t.page.goto(base + '/app/?signup=1&code=TC-USED99'); await t.page.waitForSelector('#su-email');
+    let badPay = 0; await t.page.route('**/api/checkout', (rt) => { badPay++; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
+    await t.page.fill('#su-name', 'Pat'); await t.page.fill('#su-company', 'Co'); await t.page.fill('#su-sites', '2'); await t.page.fill('#su-email', 'bad@co.example'); await t.page.fill('#su-pass', 'a-long-enough-password'); await t.page.check('#su-terms'); await t.page.click('button[type=submit]');
+    await t.page.waitForSelector('#offer-bad');
+    check('offer: a code that cannot be applied is flagged on the payment step and nobody is sent to pay automatically', badPay === 0 && (await t.page.locator('#offer-bad').innerText()).includes('has not been applied'));
     await t.ctx.close();
     t = await newPage(null); await t.page.goto(base + '/app/?welcome=1'); await t.page.waitForSelector('#welcome');
     check('pay first: coming back from Stripe says the payment is received and the email still needs confirming', (await t.page.locator('#welcome').innerText()).includes('Payment received') && (await t.page.locator('#welcome').innerText()).includes('confirm your address'));
@@ -1053,6 +1150,14 @@ const USERS = {
     t = await newPage(appSeed, { owned: 'both' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('[data-addon]');
     check('settings: each add-on is listed with its monthly cost (Toolbox £3.99; Clock In 2 sites x £6.99 = £13.98) and a total of £17.97', (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £6.99 = £13.98') && (await t.page.locator('#addons-total').innerText()).includes('£17.97') && (await t.page.locator('[data-add-addon]').count()) === 0);
     await t.ctx.close();
+    // the introductory offer shows in Subscription Details while it lasts
+    const offerSeed = new Function('cfg', '(' + appSeed.toString() + ')(cfg); window.__mock.tables.companies[0].offer_code = "TC-ABC234"; window.__mock.tables.companies[0].offer_ends_at = new Date(Date.now() + 200 * 86400000).toISOString();');
+    t = await newPage(offerSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#offer-line');
+    check('offer: Subscription Details says the first site is £7.99 until the end date, then £14.99', (await t.page.locator('#offer-line').innerText()).replace(/\s+/g, ' ').includes('£7.99 + VAT per month until') && (await t.page.locator('#offer-line').innerText()).includes('then £14.99'));
+    await t.ctx.close();
+    t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('text=Subscription Details');
+    check('offer: no offer line for a business without one', (await t.page.locator('#offer-line').count()) === 0);
+    await t.ctx.close();
     // business insurance missed at set-up can be added later
     const insSeed = new Function('cfg', '(' + appSeed.toString() + ')(cfg); window.__mock.tables.core_checks = [{ code: "ins_el", label: "Employers\' Liability Insurance", grp: "Insurance", basis: "legal", frequency_months: 12, sort: 11 }, { code: "ins_pl", label: "Public Liability Insurance", grp: "Insurance", basis: "best_practice", frequency_months: 12, sort: 12 }, { code: "ins_bld", label: "Business Insurance (buildings and contents)", grp: "Insurance", basis: "best_practice", frequency_months: 12, sort: 13 }];');
     t = await newPage(insSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('#ins-prompt');
@@ -1179,7 +1284,7 @@ const USERS = {
     await t.ctx.close();
 
     t = await hubPage(null, 'staffonly@t'); pg = t.page;
-    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Revenue,Enquiries,Activity');
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Offers,Revenue,Enquiries,Activity');
     await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
     check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
     await t.ctx.close();

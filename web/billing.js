@@ -6,7 +6,17 @@ const crypto = require('crypto');
 const PRICES = { monthly: [1499, 799], annual: [15290, 8150] };   // [first site, each extra site]
 
 // The form fields Stripe wants for a subscription Checkout page. The prices are written into the request itself, so nothing needs setting up in the Stripe dashboard.
-function checkoutParams({ companyId, sites, interval, email, origin, methods, welcome }) {
+// The introductory offer is a Stripe coupon: a fixed amount off every monthly invoice for a set number of months. When the months run out the
+// discount just stops and the normal price carries on, so nothing has to be changed by hand after 12 months.
+const offerCouponId = (o) => 'tc-intro-' + o.pence + '-' + o.months + 'm';
+function couponParams(o) {
+  const q = new URLSearchParams();
+  q.set('id', offerCouponId(o)); q.set('name', 'Tremcore introductory offer');
+  q.set('amount_off', String(o.pence)); q.set('currency', 'gbp'); q.set('duration', 'repeating'); q.set('duration_in_months', String(o.months));
+  return q;
+}
+
+function checkoutParams({ companyId, sites, interval, email, origin, methods, welcome, offer }) {
   const p = PRICES[interval];
   if (!p || !companyId || !(sites >= 1 && sites <= 100)) throw new Error('bad checkout details');
   const per = interval === 'annual' ? 'year' : 'month';
@@ -25,6 +35,7 @@ function checkoutParams({ companyId, sites, interval, email, origin, methods, we
     q.set(`line_items[${i}][price_data][recurring][interval]`, per);
     q.set(`line_items[${i}][price_data][product_data][name]`, name);
   });
+  if (offer && interval === 'monthly' && offer.pence > 0 && offer.months > 0) q.set('discounts[0][coupon]', offerCouponId(offer));
   // Stripe now picks payment methods from the Dashboard settings; only send a list if one was set on purpose.
   (methods || []).forEach((m, i) => q.set(`payment_method_types[${i}]`, m));
   // A brand-new sign-up pays before confirming their email, so they come back signed out: "welcome" pages explain the next step.
@@ -96,4 +107,4 @@ function eventToAction(ev) {
   }
 }
 
-module.exports = { PRICES, checkoutParams, extraCheckoutParams, verifySignature, eventToAction };
+module.exports = { PRICES, offerCouponId, couponParams, checkoutParams, extraCheckoutParams, verifySignature, eventToAction };

@@ -114,3 +114,10 @@
 ## Home page: Needs attention instead of Quick Access (18 Nov 2026)
 - The Quick Access section is removed. The home page now shows, under Overall Compliance, a "Needs attention" list: overdue checks and tasks first, then those due in the next 30 days (up to 8, with "See all"), counts of each, and a note when checks have no date. Tapping a row opens it.
 - Add-ons not yet bought are promoted in the gold Add-ons card; bought ones, and Emergency Information, sit in a small "Your tools" card so they stay reachable. My Tasks is reached from the bottom menu.
+
+## Introductory offer codes (18 Nov 2026, migration 0027)
+- Self-Managed introductory offer: first site £7.99 + VAT a month for 12 months (normal £14.99), extra sites the normal £7.99. After 12 months the first site goes back to £14.99 by itself. **Monthly billing only** (a code forces monthly). Assumed "£7.99 per year" meant per month; Aaron confirmed.
+- Done as a Stripe coupon (£7.00 off every monthly invoice for 12 months, created automatically as `tc-intro-700-12m`), not a different price, so the reversion needs no manual step.
+- One code per prospect (`TC-XXXXXX`), single use, expiry date (14/30/60/90 days), can be switched off. Made in the hub (Offers page) by Tremcore staff with 2FA; clients cannot see or create codes. A code is used up when the first payment is confirmed (not when sign-up starts), and the company's recorded monthly value is reduced by £7 for the offer period.
+- The email goes out automatically through Resend (`EMAIL_API_KEY`, `EMAIL_FROM`; the sending address must be on a domain verified in Resend). If it is not set up or fails, the code is still made and the hub shows the link to send by hand.
+- Not built: the recorded monthly value is not raised back after 12 months (MRR will read £7 low for that client until set by hand); no reminder before the offer ends.

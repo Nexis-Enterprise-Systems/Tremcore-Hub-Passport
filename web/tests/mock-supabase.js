@@ -158,6 +158,8 @@
       if (name === 'update_business') { const c = (db().companies || [])[0]; if (c) Object.assign(c, { contact_phone: args.p_phone, address: args.p_address }); return { data: null }; }
       if (name === 'update_site') { const p = (db().properties || []).find((x) => x.id === args.p_id); if (p) Object.assign(p, { name: args.p_name, address: args.p_address }); return { data: null }; }
       if (name === 'regen_clock_token') { if (M().regenError) return { data: null, error: { message: 'not_allowed' } }; const p = (db().properties || []).find((x) => x.id === args.p_property); if (p) p.clock_token = 'b'.repeat(32); return { data: p && p.clock_token }; }
+      if (name === 'cancel_offer_code') { const r = (db().offer_codes || []).find((x) => x.id === args.p_id); if (r) r.status = 'cancelled'; return { data: 'cancelled' }; }
+      if (name === 'attach_my_offer') { if (M().attachFail) return { data: null, error: { message: 'offer_invalid' } }; return { data: [{ discount_pence: 700, months: 12 }] }; }
       if (name === 'passport_rights') return { data: [M().rights || { can_edit: true, can_manage: true }] };
       if (name === 'my_access' && M().accessError) return { data: null, error: { message: M().accessError } };
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };

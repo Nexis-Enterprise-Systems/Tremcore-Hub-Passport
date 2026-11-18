@@ -253,7 +253,10 @@
     const box = h('div', { id: 'pay-msg' });
     let auto = false; try { auto = sessionStorage.getItem('tc_autopay') === '1'; sessionStorage.removeItem('tc_autopay'); } catch (e) { auto = false; }   // just signed up: go straight to Stripe
     const confirming = q === '1' && payChecks < 20;
+    let offerBad = false; try { offerBad = sessionStorage.getItem('tc_offer_bad') === '1'; } catch (e) { offerBad = false; }
+    if (offerBad) auto = false;   // never charge the normal price without the person seeing that their code did not work
     auto = auto && a.is_head && !confirming && q !== '0';
+    if (offerBad && !box.textContent) box.append(h('div', { class: 'msg err', role: 'alert', id: 'offer-bad' }, 'Your discount code was not valid, has already been used, or has expired, so it has not been applied. The normal price will be charged. If you think this is wrong, contact Tremcore before you pay.'));
     if (confirming) { payChecks += 1; setTimeout(route, 3000); }
     const btn = h('button', { class: 'btn', id: 'pay-now', onclick: async (e) => {
       await busy(e.target, async () => {
@@ -456,6 +459,7 @@
         h('a', { class: 'btn', href: '/contact/' }, 'Ask a question'),
         h('button', { class: 'btn ghost', onclick: () => viewLogin() }, 'Back to sign in')));
     }
+    try { sessionStorage.removeItem('tc_offer_bad'); } catch (e) { /* ignore */ }
     const box = h('div');
     const name = tidy(h('input', { id: 'su-name', autocomplete: 'name', required: true, maxlength: '120' }));
     const company = tidy(h('input', { id: 'su-company', autocomplete: 'organization', required: true, maxlength: '160' }));
@@ -463,6 +467,13 @@
     const email = h('input', { id: 'su-email', type: 'email', autocomplete: 'username', required: true, inputmode: 'email' });
     const pass = h('input', { id: 'su-pass', type: 'password', autocomplete: 'new-password', required: true, minlength: String(MIN_PASSWORD) });
     const terms = h('input', { id: 'su-terms', type: 'checkbox' });
+    // An introductory-offer code, usually already filled in from the link in the email Tremcore sent.
+    let linkCode = ''; try { linkCode = (new URLSearchParams(location.search).get('code') || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 30); } catch (e) { /* ignore */ }
+    const offerBox = h('input', { id: 'su-code', autocomplete: 'off', maxlength: '30', value: linkCode, placeholder: 'For example TC-AB12CD' });
+    const offerNote = h('p', { class: 'muted small', id: 'su-code-note' });
+    const codeValue = () => offerBox.value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    const showOfferNote = () => { offerNote.textContent = codeValue() ? 'The introductory offer is for monthly billing, so you will be charged monthly. We check your code when you press the button.' : ''; };
+    offerBox.addEventListener('input', showOfferNote); showOfferNote();
     const count = () => { const n = Math.floor(Number(sites.value)); return n >= 1 && n <= 100 ? n : 0; };
     const monthlyTxt = h('span', { id: 'su-monthly' }), annualTxt = h('span', { id: 'su-annual' });
     const refresh = () => { const n = count();
@@ -486,7 +497,7 @@
       await busy(btn, async () => {
         const { data, error } = await sb.auth.signUp({ email: v.email, password: pass.value, options: {
           emailRedirectTo: location.origin + '/app/',
-          data: { signup_company: v.company, signup_full_name: v.name, signup_sites: v.sites, terms_accepted_at: new Date().toISOString(), signup_billing: (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly' } } });
+          data: { signup_company: v.company, signup_full_name: v.name, signup_sites: v.sites, terms_accepted_at: new Date().toISOString(), signup_billing: (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' && !codeValue() ? 'annual' : 'monthly', signup_offer_code: codeValue() || undefined } } });
         if (error) {
           const m = error.message || '';
           return message(box, 'err', error.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
@@ -499,10 +510,10 @@
         pass.value = '';
         if (data && data.session) { try { sessionStorage.setItem('tc_autopay', '1'); } catch (e) { /* ignore */ } return route(); }     // email confirmation is off: carry straight on, and on to Stripe
         // Money first: go straight to Stripe. The login exists but nothing opens until the payment is confirmed.
-        const billingChoice = (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' ? 'annual' : 'monthly';
+        const billingChoice = (form.querySelector('input[name=su-billing]:checked') || {}).value === 'annual' && !codeValue() ? 'annual' : 'monthly';
         let pay = null, why = '';
         try {
-          const r = await fetch('/api/signup-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: v.email, company: v.company, name: v.name, sites: v.sites, billing: billingChoice }) });
+          const r = await fetch('/api/signup-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: v.email, company: v.company, name: v.name, sites: v.sites, billing: billingChoice, code: codeValue() }) });
           const j = await r.json().catch(() => ({})); if (r.ok && j.url) pay = j.url; else why = j.error || '';
         } catch { why = ''; }
         if (pay) { try { sessionStorage.setItem('tc_signup_email', v.email); } catch (e) { /* ignore */ } location.href = pay; return; }
@@ -516,6 +527,7 @@
       h('label', { for: 'su-email' }, 'Email address'), email,
       h('label', { for: 'su-pass' }, 'Password'), pass,
       billing,
+      h('label', { for: 'su-code' }, 'Discount code (if you have one)'), offerBox, offerNote,
       h('label', { class: 'check' }, terms, h('span', {}, 'I am signing up for a business and agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms and conditions'), '. I have read the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy notice'), '. (Both open in a new tab.)')),
       btn, box,
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewLogin() }, 'I already have an account')));
@@ -585,6 +597,10 @@
       try {
         const made = await sb.rpc('signup_company', { p_company: meta.signup_company, p_full_name: meta.signup_full_name, p_sites: Number(meta.signup_sites) || 1, p_billing: meta.signup_billing === 'annual' ? 'annual' : 'monthly' });
         if (made.error) return viewSignupProblem(made.error);
+        if (meta.signup_offer_code) {
+          let bad = true; try { const att = await sb.rpc('attach_my_offer', { p_code: meta.signup_offer_code }); bad = !!att.error; } catch (e) { bad = true; }
+          if (bad) { try { sessionStorage.setItem('tc_offer_bad', '1'); sessionStorage.removeItem('tc_autopay'); } catch (e) { /* ignore */ } }
+        }
         ({ data: rows, error } = await sb.rpc('auth_requirements'));
         req = rows && rows[0];
       } finally { finishingSignup = false; }

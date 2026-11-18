@@ -19,6 +19,9 @@ const ANTHROPIC_API = (process.env.ANTHROPIC_API_BASE || 'https://api.anthropic.
 const READ_MODEL = process.env.READ_MODEL || 'claude-sonnet-5-5';
 const STRIPE_API = (process.env.STRIPE_API_BASE || 'https://api.stripe.com').replace(/\/+$/, '');
 const STRIPE_METHODS = (process.env.STRIPE_PAYMENT_METHODS || '').split(',').map((x) => x.trim()).filter(Boolean);   // normally empty: Stripe uses the methods switched on in its Dashboard
+const EMAIL_API_KEY = process.env.EMAIL_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || '';
+const EMAIL_API = (process.env.EMAIL_API_BASE || 'https://api.resend.com').replace(/\/+$/, '');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const TYPES = {
@@ -151,6 +154,17 @@ async function handleLookup(req, res, pathname, query) {
 const checkoutHits = new Map();
 function checkoutLimited(ip) { const now = Date.now(), a = (checkoutHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); checkoutHits.set(ip, a); return a.length > 40; }
 
+// Make sure the introductory-offer coupon exists in Stripe (created the first time it is needed; "already exists" is fine).
+async function ensureOfferCoupon(offer) {
+  const r = await fetch(STRIPE_API + '/v1/coupons', { method: 'POST',
+    headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: billing.couponParams(offer).toString(), signal: AbortSignal.timeout(10000) });
+  if (r.ok) return;
+  const j = await r.json().catch(() => ({}));
+  if (j && j.error && (j.error.code === 'resource_already_exists' || /already exists/i.test(j.error.message || ''))) return;
+  throw new Error('coupon: ' + (j && j.error && j.error.message));
+}
+const offerFrom = (row) => (row && row.discount_pence > 0 ? { pence: row.discount_pence, months: row.months } : null);
+
 // The signed-in head-office user presses "Pay now". We look up THEIR company with THEIR OWN token (so they can only ever pay for their own company),
 // then ask Stripe for a payment page.
 async function handleCheckout(req, res) {
@@ -170,7 +184,13 @@ async function handleCheckout(req, res) {
     if (!info) return out(403, { error: 'Only the head-office user can pay.' });
     if (info.subscription !== 'trial') return out(409, { error: 'This account is already set up for payment.' });
     const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
-    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS });
+    let offer = null;
+    try {
+      const orr = await fetch(SUPABASE_URL + '/rest/v1/rpc/my_offer', { method: 'POST', headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
+      if (orr.ok) offer = offerFrom((await orr.json())[0]);
+    } catch (e) { /* no offer: the normal price */ }
+    if (offer) await ensureOfferCoupon(offer);
+    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, offer });
     const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
     const sj = await sr.json().catch(() => ({}));
@@ -190,9 +210,16 @@ async function handleSignupCheckout(req, res) {
   const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
   if (checkoutLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
   let d; try { d = JSON.parse(await readBody(req, 4000)); } catch { return out(400, { error: 'Sorry, that could not be read.' }); }
-  const email = clip(d && d.email, 200), company = clip(d && d.company, 160), name = clip(d && d.name, 120), sites = Math.floor(Number(d && d.sites)), billingInterval = d && d.billing === 'annual' ? 'annual' : 'monthly';
+  const email = clip(d && d.email, 200), company = clip(d && d.company, 160), name = clip(d && d.name, 120), sites = Math.floor(Number(d && d.sites)), code = clip(d && d.code, 30).toUpperCase().replace(/[^A-Z0-9-]/g, ''), billingInterval = d && d.billing === 'annual' && !code ? 'annual' : 'monthly';   // the offer is for monthly billing only
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !company || !name || !(sites >= 1 && sites <= 100)) return out(422, { error: 'Some of the details were not accepted.' });
+  const svc = { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' };
   try {
+    if (code) {
+      const cr = await fetch(SUPABASE_URL + '/rest/v1/rpc/offer_check', { method: 'POST', headers: svc, body: JSON.stringify({ p_code: code }), signal: AbortSignal.timeout(8000) });
+      const row = cr.ok ? (await cr.json())[0] : null;
+      if (!cr.ok && cr.status === 404) return out(503, { error: 'Discount codes have not been fully installed yet (database update 0027 is missing). Please contact Tremcore.' });
+      if (!row) return out(422, { error: 'That discount code is not valid, has been used, or has expired. Please check it, or leave it blank to sign up at the normal price.' });
+    }
     const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/signup_prepare', { method: 'POST',
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ p_email: email, p_company: company, p_full_name: name, p_sites: sites, p_billing: billingInterval }), signal: AbortSignal.timeout(8000) });
@@ -208,7 +235,11 @@ async function handleSignupCheckout(req, res) {
     const info = (await r.json())[0];
     if (!info) return out(403, { error: 'We could not start your payment. Please contact Tremcore and we will help.' });
     const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
-    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, welcome: true });
+    const ar = await fetch(SUPABASE_URL + '/rest/v1/rpc/offer_attach', { method: 'POST', headers: svc, body: JSON.stringify({ p_company: info.company_id, p_code: code || null }), signal: AbortSignal.timeout(8000) });
+    if (!ar.ok) return out(422, { error: 'That discount code is not valid, has been used, or has expired. Please check it, or leave it blank to sign up at the normal price.' });
+    const offer = code ? offerFrom((await ar.json())[0]) : null;
+    if (offer) await ensureOfferCoupon(offer);
+    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, welcome: true, offer });
     const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
     const sj = await sr.json().catch(() => ({}));
@@ -329,6 +360,83 @@ async function handleCheckoutExtra(req, res) {
   } catch (e) { console.error('extra checkout error', e.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
 }
 
+// ---------- Introductory offer emails (Tremcore staff, from the hub) ----------
+// A staff member types a prospect's name and email in the hub. We make a one-use code with THEIR OWN token (the database refuses anyone who is not
+// signed-in Tremcore staff with 2FA), then email the prospect a link with the code already filled in. If the email service is not set up yet, the
+// code is still made and the hub shows the link to send by hand.
+const offerHits = new Map();
+function offerLimited(ip) { const now = Date.now(), a = (offerHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); offerHits.set(ip, a); return a.length > 30; }
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const gbp = (pence) => '£' + (pence / 100).toFixed(2);
+function offerEmail(row, link) {
+  const first = String(row.prospect_name || '').split(/\s+/)[0];
+  const until = new Date(row.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const now = gbp(1499 - row.discount_pence), full = gbp(1499), extra = gbp(799), mo = row.months;
+  const subject = 'Your Tremcore Compliance Passport introductory offer';
+  const lines = [
+    'Hello' + (first ? ' ' + first : '') + ',',
+    '',
+    'Thank you for your interest in the Tremcore Compliance Passport. As promised, here is your introductory offer for the Self-Managed plan:',
+    '',
+    '- First site: ' + now + ' a month + VAT for your first ' + mo + ' months (normally ' + full + ' a month + VAT).',
+    '- Each additional site: ' + extra + ' a month + VAT, the normal price.',
+    '- After ' + mo + ' months the first site moves to the normal ' + full + ' a month + VAT. Additional sites stay at ' + extra + '.',
+    '',
+    'To take the offer, sign up using this link. Your code is already filled in: ' + link,
+    'Your code: ' + row.code + ' (use it by ' + until + '; it can be used once).',
+    '',
+    'The offer is for monthly billing. If you have any questions, just reply to this email.',
+    '',
+    'Kind regards,',
+    'Tremcore Ltd'
+  ];
+  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">' + lines.map((l) => l === '' ? '<br>' : l.startsWith('- ') ? '<div>&bull; ' + esc(l.slice(2)) + '</div>' : esc(l).replace(esc(link), '<a href="' + esc(link) + '">Sign up with your code</a>')).join('') + '</div>';
+  return { subject, text: lines.join('\n'), html };
+}
+async function handleSendOffer(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const origin = req.headers.origin;
+  if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return out(503, { error: 'Not switched on yet.' });
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (offerLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!m) return out(401, { error: 'Please sign in again.' });
+  let d; try { d = JSON.parse(await readBody(req, 2000)); } catch { return out(400, { error: 'Sorry, that could not be read.' }); }
+  const mine = { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' };
+  try {
+    let row;
+    if (d && d.id) {   // send the email again for a code that already exists
+      const r = await fetch(SUPABASE_URL + '/rest/v1/offer_codes?id=eq.' + encodeURIComponent(String(d.id).replace(/[^0-9a-f-]/gi, '')) + '&select=*', { headers: mine, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return out(401, { error: 'Please sign in again.' });
+      row = (await r.json())[0];
+      if (!row) return out(404, { error: 'That code was not found.' });
+      if (row.status !== 'active' || new Date(row.expires_at) <= new Date()) return out(409, { error: 'That code can no longer be used, so it was not sent. Make a new one instead.' });
+    } else {
+      const email = clip(d && d.email, 200), name = clip(d && d.name, 120), days = d && d.days != null ? Math.floor(Number(d.days)) : 30;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !(days >= 1 && days <= 365)) return out(422, { error: 'Please enter a valid email address and number of days.' });
+      const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/create_offer_code', { method: 'POST', headers: mine, body: JSON.stringify({ p_email: email, p_name: name, p_days: days }), signal: AbortSignal.timeout(8000) });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({})), msg = String(e.message || '');
+        if (r.status === 404 && /function/i.test(msg)) return out(503, { error: 'Discount codes have not been installed yet (database update 0027 is missing).' });
+        return out(r.status === 401 || /not_allowed/.test(msg) ? 403 : 422, { error: 'Only signed-in Tremcore staff can make offer codes.' });
+      }
+      row = await r.json();
+    }
+    const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+    const link = proto + '://' + req.headers.host + '/app/?signup=1&code=' + encodeURIComponent(row.code);
+    const result = { ok: true, id: row.id, code: row.code, link, sent: false };
+    if (!EMAIL_API_KEY || !EMAIL_FROM) { result.note = 'The email service is not set up yet, so nothing was sent. Copy the link and send it yourself.'; return out(200, result); }
+    const mail = offerEmail(row, link);
+    const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: EMAIL_FROM, to: [row.prospect_email], subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
+    if (!er.ok) { console.error('offer email failed', er.status); result.note = 'The code was made but the email could not be sent (' + er.status + '). Copy the link and send it yourself.'; return out(200, result); }
+    result.sent = true;
+    await fetch(SUPABASE_URL + '/rest/v1/rpc/mark_offer_sent', { method: 'POST', headers: mine, body: JSON.stringify({ p_id: row.id }), signal: AbortSignal.timeout(8000) }).catch(() => {});
+    return out(200, result);
+  } catch (e) { console.error('send offer error', e.message); return out(502, { error: 'Sorry, that did not work. Please try again.' }); }
+}
+
 // Stripe tells us a payment happened. We only believe a message that carries Stripe's signature.
 async function handleWebhook(req, res) {
   const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
@@ -400,6 +508,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/signup-checkout') return handleSignupCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout-extra') return handleCheckoutExtra(req, res);
+  if (req.method === 'POST' && pathname === '/api/send-offer') return handleSendOffer(req, res);
   if (req.method === 'POST' && pathname === '/api/read-document') return handleReadDocument(req, res);
   if (req.method === 'POST' && pathname === '/api/stripe-webhook') return handleWebhook(req, res);
   if (pathname === '/api/clock' && (req.method === 'GET' || req.method === 'POST')) return handleClock(req, res, new URL(req.url, 'http://x').searchParams);

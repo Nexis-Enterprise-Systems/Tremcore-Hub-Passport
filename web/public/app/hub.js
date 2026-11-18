@@ -15,7 +15,7 @@
   const ROLE = { client_super: 'Head office', client_site: 'Site user', tremcore_admin: 'Tremcore administrator', tremcore_staff: 'Tremcore staff' };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
+  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['offers', 'Offers'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
   const navFor = () => NAV.filter((n) => n[0] !== 'settings' || (ctx && ctx.req.role_name === 'tremcore_admin'));
 
   let ctx = null, token = 0;
@@ -416,6 +416,63 @@
         }) : [h('tr', {}, h('td', { colspan: '6', class: 'muted' }, 'No clients yet.'))]))));
   }
 
+  // ---------- Offers (introductory discount codes) ----------
+  // One code per prospect. The first site is £7.00 a month cheaper for 12 months (so £7.99 instead of £14.99); extra sites stay at the normal price.
+  async function pageOffers(my, flash) {
+    chrome('offers', h('h1', {}, 'Offers'), loading());
+    const codes = await q(ctx.sb.from('offer_codes').select('*').order('created_at', { ascending: false }));
+    if (my !== token) return;
+    const usedIds = [...new Set(codes.map((c) => c.used_company).filter(Boolean))];
+    const used = usedIds.length ? await q(ctx.sb.from('companies').select('id,name,offer_ends_at').in('id', usedIds)) : [];
+    if (my !== token) return;
+    const co = Object.fromEntries(used.map((c) => [c.id, c]));
+    const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+    const stateOf = (c) => c.status === 'used' ? ['green', 'Used'] : c.status === 'cancelled' ? ['missing', 'Switched off'] : new Date(c.expires_at) <= new Date() ? ['red', 'Expired'] : ['amber', 'Waiting'];
+    const out = h('div', { id: 'offer-out' });
+    const name = text('', { id: 'of-name', autocomplete: 'off', maxlength: '120' }), email = text('', { id: 'of-email', type: 'email', inputmode: 'email', autocomplete: 'off' });
+    const days = select({ '14': '14 days', '30': '30 days', '60': '60 days', '90': '90 days' }, '30');
+    const showResult = (j) => {
+      const link = h('input', { type: 'text', readonly: true, value: j.link, 'aria-label': 'Sign-up link', id: 'offer-link' });
+      const copy = h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(j.link); copy.textContent = 'Copied'; } catch (e) { link.select(); } } }, 'Copy link');
+      out.replaceChildren(h('div', { class: 'msg ' + (j.sent ? 'ok' : 'err'), role: 'status' }, (j.sent ? 'Email sent. ' : (j.note || '') + ' '), 'Code ', h('strong', {}, j.code)), link, ' ', copy);
+    };
+    const call = async (body) => {
+      const { data } = await ctx.sb.auth.getSession();
+      const r = await fetch('/api/send-offer', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((data && data.session && data.session.access_token) || '') }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'That did not work.');
+      return j;
+    };
+    const create = h('button', { class: 'btn', type: 'button', id: 'offer-create', onclick: async () => {
+      const em = email.value.trim();
+      if (!EMAIL.test(em)) return note(out, 'err', 'Please enter the prospect’s email address.');
+      await busy(create, async () => {
+        try { const j = await call({ email: em, name: titleCase(name.value.trim()), days: Number(days.value) }); await pageOffers(++token, j); }
+        catch (err) { note(out, 'err', err.message); }
+      });
+    } }, 'Create code and email it');
+    chrome('offers', h('h1', {}, 'Offers'),
+      h('section', { class: 'card' }, h('h2', {}, 'Introductory offer for Self-Managed'),
+        h('p', { class: 'hint' }, 'First site £7.99 a month + VAT for the first 12 months (normally £14.99), then it goes back to £14.99 by itself. Extra sites are the normal £7.99. Monthly billing only. Each code works once, for one prospect.'),
+        h('div', { class: 'grid2' }, field('of-name', 'Prospect’s name (optional)', name), field('of-email', 'Prospect’s email', email)),
+        h('div', { class: 'f' }, h('label', {}, 'Code is valid for'), days),
+        h('div', { class: 'actions' }, create), out),
+      h('h2', {}, 'Codes'),
+      h('div', { class: 'tablewrap' }, h('table', { id: 'offer-table' },
+        h('thead', {}, h('tr', {}, ['Code', 'Prospect', 'Status', 'Emailed', 'Valid until', 'Used by', ''].map((x) => h('th', {}, x)))),
+        h('tbody', {}, codes.length ? codes.map((c) => {
+          const [kind, label] = stateOf(c), rowOut = h('span', { class: 'muted', role: 'status' }), live = kind === 'amber';
+          const resend = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(resend, async () => { try { const j = await call({ id: c.id }); rowOut.replaceChildren(j.sent ? 'Sent again' : (j.note || 'Not sent')); } catch (err) { rowOut.replaceChildren(err.message); } }); } }, c.sent_at ? 'Resend' : 'Send') : null;
+          const off = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(off, async () => { try { await q(ctx.sb.rpc('cancel_offer_code', { p_id: c.id })); await pageOffers(++token); } catch (err) { rowOut.replaceChildren('Not switched off: ' + err.message); } }); } }, 'Switch off') : null;
+          const cc = c.used_company && co[c.used_company];
+          return h('tr', { 'data-code': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, [c.prospect_name, c.prospect_email].filter(Boolean).join(' · ')), h('td', {}, badge(kind, label)),
+            h('td', {}, c.sent_at ? day(c.sent_at) : 'Not emailed'), h('td', {}, day(c.expires_at)),
+            h('td', {}, cc ? [h('a', { href: '#/clients/' + cc.id }, cc.name), cc.offer_ends_at ? h('div', { class: 'muted small' }, 'Offer price until ' + day(cc.offer_ends_at)) : null] : ''),
+            h('td', {}, resend, ' ', off, ' ', rowOut));
+        }) : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'No codes yet.'))]))));
+    if (flash) showResult(flash);
+  }
+
   // ---------- Revenue & growth ----------
   async function pageRevenue(my) {
     chrome('revenue', h('h1', {}, 'Revenue & growth'), loading());
@@ -655,6 +712,7 @@
       else if (a === 'sites' && id && UUID.test(id)) await pageSite(my, id);
       else if (a === 'clients') await pageClients(my);
       else if (a === 'subscriptions') await pageSubscriptions(my);
+      else if (a === 'offers') await pageOffers(my);
       else if (a === 'revenue') await pageRevenue(my);
       else if (a === 'renewals') await pageRenewals(my);
       else if (a === 'activity') await pageActivity(my);

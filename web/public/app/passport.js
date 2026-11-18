@@ -84,7 +84,7 @@
           sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
           sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
           sb.rpc('my_extras'),
-          sb.from('companies').select('id,name,contact_phone,address,postcode,level,billing_interval,subscription').limit(1)
+          sb.from('companies').select('id,name,contact_phone,address,postcode,level,billing_interval,subscription,offer_code,offer_ends_at').limit(1)
         ]);
         if (p.error || i.error) throw new Error('load');
         props = p.data || []; items = i.data || []; core = (cc && cc.data) || [];
@@ -556,6 +556,9 @@
         h('div', { class: 'kv' }, h('span', {}, 'Plan'), h('span', {}, lvl === 1 ? 'Self-Managed' : lvl === 2 ? 'Managed Compliance' : 'Property & Compliance Managed')),
         h('div', { class: 'kv' }, h('span', {}, 'Sites'), h('span', {}, String(n))),
         lvl === 1 ? h('div', { class: 'kv' }, h('span', {}, 'Price'), h('span', {}, yearly ? money(15290 + 8150 * Math.max(n - 1, 0)) + ' + VAT per year' : money(1499 + 799 * Math.max(n - 1, 0)) + ' + VAT per month')) : null,
+        // The introductory offer, while it lasts: the first site is cheaper until the end date, then the normal price carries on by itself.
+        lvl === 1 && !yearly && company && company.offer_ends_at && new Date(company.offer_ends_at) > new Date()
+          ? h('div', { class: 'kv', id: 'offer-line' }, h('span', {}, 'Introductory offer'), h('span', {}, 'First site ' + money(799) + ' + VAT per month until ' + fmtDate(company.offer_ends_at.slice(0, 10)) + ', then ' + money(1499) + ' + VAT per month')) : null,
         ...addonRows,
         h('div', { class: 'kv' }, h('span', {}, 'Status'), h('span', {}, company && company.subscription ? String(company.subscription).replace(/^./, (x) => x.toUpperCase()) : '–')),
         ...addLinks);
