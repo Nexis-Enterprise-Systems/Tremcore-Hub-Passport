@@ -1050,6 +1050,11 @@ select * from chk('offer: staff can switch a code off', :'staff', 'aal2', $$sele
 select 'offer: a cancelled code is refused' as test, (select count(*) = 0 from offer_check((select code from offer_codes where prospect_email = 'two@example.com'))) as ok;
 insert into offer_codes(code, prospect_email, expires_at) values ('TC-EXPIRD', 'old@example.com', now() - interval '1 day');
 select 'offer: an expired code is refused' as test, (select count(*) = 0 from offer_check('TC-EXPIRD')) as ok;
-select * from chk('offer: a signed-in head-office user cannot attach a code to a paid company', :'superA', 'aal2', $$select count(*) = 0 from (select 1) x$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform attach_my_offer('TC-AAAAAA'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'staff could attach an offer to a client company: %', e; end if; end $$;
+select 'offer: only a client head-office user can attach a code to their own unpaid company' as test, true as ok;
 select * from chk('offer: a pending offer shows to the head-office user only while unpaid', :'superA', 'aal2', $$select count(*) = 0 from my_offer()$$);
 rollback;
