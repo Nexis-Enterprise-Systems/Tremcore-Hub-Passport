@@ -152,6 +152,22 @@
       const promos = isL1 ? [
         !tt.owned ? promo('toolbox_talks', 'Toolbox Talks', '30 ready-made safety talks plus 10 of your own, signed off by your team on a phone, with PDF records saved for audits.', money(tt.price_pence) + ' / month + VAT', 'Add now') : null,
         !ss.owned ? promo('staff_signin', 'Staff Clock In / Out', 'A unique QR code for each site. Staff scan to clock in and out, and you see who is on site and download attendance records.', money(ss.price_pence) + ' / site / month + VAT', 'Add now') : null].filter(Boolean) : [];
+      // What needs attention now: overdue first, then due in the next 30 days (checks and tasks), so it is the first thing seen.
+      const multiH = props.length > 1 && site === 'all';
+      const lateItems = rows.filter((r) => r.status === 'red').sort(byUrgency), soonItems = rows.filter((r) => r.status === 'amber').sort(byUrgency);
+      const myTasks = tasks.filter((t) => t.status === 'pending' && (site === 'all' || t.property_id === site));
+      const lateTasks = myTasks.filter((t) => taskState(t) === 'red'), soonTasks = myTasks.filter((t) => taskState(t) === 'amber');
+      const taskRow = (t) => h('button', { class: 'item nosite', type: 'button', 'data-task-row': t.id, onclick: () => go('tasks') },
+        h('i', { class: 'dot ' + taskState(t) }), h('span', { class: 'title' }, t.title + ' (task)'), h('span', { class: 'meta muted' }, h('span', { class: 'due' }, taskText(t))), h('span', { class: 'tag ' + taskState(t) }, ST[taskState(t)].label));
+      const attRows = [...lateItems.map((r) => itemRow(r, multiH)), ...lateTasks.map(taskRow), ...soonItems.map((r) => itemRow(r, multiH)), ...soonTasks.map(taskRow)];
+      const nLate = lateItems.length + lateTasks.length, nSoon = soonItems.length + soonTasks.length;
+      const attention = h('div', { class: 'card attention', id: 'attention' },
+        h('div', { class: 'titlerow' }, h('h2', {}, 'Needs attention'),
+          h('span', { class: 'attcounts' }, nLate ? h('span', { class: 'tag red' }, nLate + ' overdue') : null, nSoon ? h('span', { class: 'tag amber' }, nSoon + ' due soon') : null)),
+        ...(attRows.length ? attRows.slice(0, 8) : [h('p', { class: 'muted', id: 'att-none' }, rows.length || myTasks.length ? 'Nothing is overdue or due in the next 30 days. Well done.' : 'Add your checks in Compliance and enter the date each one is next due. Anything overdue or coming up will be listed here.')]),
+        attRows.length > 8 ? h('button', { class: 'btn small ghost', id: 'att-all', type: 'button', onclick: () => { ctab = 'due'; go('compliance'); } }, 'See all ' + attRows.length) : null,
+        c.missing ? h('p', { class: 'muted small', id: 'att-missing' }, c.missing + (c.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (c.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
+          h('button', { class: 'linkbtn', type: 'button', id: 'att-dates', onclick: () => { filter = 'missing'; ctab = 'overview'; go('compliance'); } }, 'Add the dates')) : null);
       shell('home',
         h('div', { class: 'card overview' },
           h('div', { class: 'welcome' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
@@ -160,12 +176,12 @@
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
           h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
         sitePicker(viewHome),
+        attention,
         promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null,
-        h('div', { class: 'card' }, h('h2', {}, 'Quick Access'),
+        h('div', { class: 'card' }, h('h2', {}, 'Your tools'),
           h('div', { class: 'qtiles' },
-            q('toolbox_talks', 'Toolbox Talks', tt.owned ? '30+ available' : 'Add-on · ' + money(tt.price_pence) + '/month', () => viewExtra('toolbox_talks'), !tt.owned),
-            q('staff_signin', 'Staff Clock In / Out', ss.owned ? 'QR code per site' : 'Add-on · ' + money(ss.price_pence) + '/site/month', () => viewExtra('staff_signin'), !ss.owned),
-            q('tasks', 'My Tasks', pend + ' pending', () => go('tasks')),
+            tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
+            ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
             q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency()))));
     }
 

@@ -110,3 +110,7 @@
 - On the Compliance page, a head-office user whose sites lack the three insurance checks sees an "Add insurance checks" card; one tap adds the missing ones (no dates, so they show as missing). "We do not need this" hides it on that device only. The same checks can also be ticked in "Checks by site" / "Choose checks".
 - Settings > Subscription Details now lists every add-on the business has with its monthly cost (per-site add-ons as sites x price) and an add-ons total; add-ons not yet taken are offered with their price.
 - Known gap: the price shown for a per-site add-on uses the number of sites today. Adding a site later does not yet raise the Stripe quantity, so the bill and this figure can differ until that is built.
+
+## Home page: Needs attention instead of Quick Access (18 Nov 2026)
+- The Quick Access section is removed. The home page now shows, under Overall Compliance, a "Needs attention" list: overdue checks and tasks first, then those due in the next 30 days (up to 8, with "See all"), counts of each, and a note when checks have no date. Tapping a row opens it.
+- Add-ons not yet bought are promoted in the gold Add-ons card; bought ones, and Emergency Information, sit in a small "Your tools" card so they stay reachable. My Tasks is reached from the bottom menu.

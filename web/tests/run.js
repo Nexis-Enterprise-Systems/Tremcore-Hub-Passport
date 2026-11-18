@@ -919,16 +919,18 @@ const USERS = {
     t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     check('home: a bottom/side menu with Home, Compliance, Tasks and Settings', (await t.page.locator('.appnav [data-nav]').allInnerTexts()).join() === 'Home,Compliance,Tasks,Settings' && (await t.page.locator('.appnav [data-nav=home]').getAttribute('aria-current')) === 'page');
     check('home: overall compliance shows on-track, due soon, overdue and no-date counts (missing is never on track)', (await t.page.locator('.lglist').innerText()).replace(/\s+/g, ' ').includes('On track · 2') && (await t.page.locator('.lglist').innerText()).includes('1 item due soon') && (await t.page.locator('.lglist').innerText()).includes('1 overdue') && (await t.page.locator('.lglist').innerText()).includes('1 with no date'));
-    check('home: Quick Access has the four tiles; the paid add-ons show an Add button and their price', (await t.page.locator('.qtile').count()) === 4 && (await t.page.locator('.qtile.locked .tag.add').count()) === 2 && (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('£3.99') && (await t.page.locator('[data-q=staff_signin]').innerText()).includes('£6.99'));
+    check('home: there is no Quick Access section; only Emergency Information is left as a tool (no add-ons owned) and nothing is shown as locked', (await t.page.locator('text=Quick Access').count()) === 0 && (await t.page.locator('.qtile').count()) === 1 && (await t.page.locator('[data-q=emergency]').count()) === 1 && (await t.page.locator('.qtile.locked').count()) === 0);
     check('home: both paid add-ons are shown as bold gold promo cards with their price and an Add now button', (await t.page.locator('.promo').count()) === 2 && (await t.page.locator('[data-promo=toolbox_talks]').innerText()).includes('Add now') && (await t.page.locator('[data-promo=staff_signin]').innerText()).includes('/ site / month') && (await t.page.locator('.card.addons').innerText()).includes('Add-ons'));
     await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
     check('home: tapping a promo card opens that add-on page, whose price is in a gold box', (await t.page.locator('.goldbox').count()) === 1);
-    await t.page.click('[data-back]'); await t.page.waitForSelector('[data-q=tasks]');
-    check('home: My Tasks tile counts pending tasks', (await t.page.locator('[data-q=tasks]').innerText()).includes('2 pending'));
-    await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
+    await t.page.click('[data-back]'); await t.page.waitForSelector('#attention');
+    check('home: a "Needs attention" list shows overdue and due-soon checks first, with counts, and a note about checks with no date', (await t.page.locator('#attention .item').count()) >= 1 && (await t.page.locator('#attention .tag.red, #attention .tag.amber').count()) >= 1 && (await t.page.locator('#attention').innerText()).includes('Needs attention'));
+    await t.page.click('#attention .item >> nth=0'); await t.page.waitForSelector('#f-due, .kv');
+    await t.page.click('[data-back]'); await t.page.click('[data-nav=home]'); await t.page.waitForSelector('#attention');
+    await t.page.click('[data-promo=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
     check('add-on not bought: explains the price and offers a pay-now button (not an email)', (await t.page.locator('.card').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('button#extra-add').count()) === 1 && (await t.page.locator('[data-extra] a[href^=mailto]').count()) === 0);
     await t.page.click('[data-back]'); await t.page.waitForSelector('#view-full');
-    await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
+    await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
     check('Staff Clock In / Out is charged per site', (await t.page.locator('.card').innerText()).includes('per site'));
     await t.page.click('[data-back]'); await t.page.click('#view-full'); await t.page.waitForSelector('[data-ctab]');
     check('compliance: three tabs, Overview / By Category / Due Soon', (await t.page.locator('[data-ctab]').allInnerTexts()).join() === 'Overview,By Category,Due Soon');
@@ -988,7 +990,7 @@ const USERS = {
     await t.ctx.close();
     // an add-on that has been bought is shown as active, not offered again
     t = await newPage(appSeed, { owned: true }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
-    check('a bought add-on is not shown as locked; one not bought still is', (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('30+ available') && (await t.page.locator('[data-q=toolbox_talks].locked').count()) === 0 && (await t.page.locator('.qtile.locked').count()) === 1);
+    check('a bought add-on is a normal tool tile and no longer promoted; the one not bought is still promoted', (await t.page.locator('[data-q=toolbox_talks]').innerText()).includes('30+ available') && (await t.page.locator('[data-q=toolbox_talks].locked').count()) === 0 && (await t.page.locator('.qtile.locked').count()) === 0 && (await t.page.locator('[data-promo=staff_signin]').count()) === 1 && (await t.page.locator('[data-promo=toolbox_talks]').count()) === 0);
     await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('.talkrow');
     check('toolbox talks: the library lists the core talks and the company\'s own, with category counts', (await t.page.locator('.talkrow').count()) === 3 && (await t.page.locator('[data-cat=all]').innerText()) === 'All (3)' && (await t.page.locator('[data-cat="Fire Safety"]').innerText()) === 'Fire Safety (1)' && (await t.page.locator('.talkrow:has-text("Our Forklift Rules") .tag').innerText()) === 'Your own');
     check('toolbox talks: the guidance note says it needs professional review', (await t.page.locator('.card').innerText()).includes('needs professional review'));
@@ -1031,17 +1033,17 @@ const USERS = {
     // buying an add-on: straight to Stripe, no email to Tremcore; the add-on appears when Stripe has confirmed
     t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     let extraReq = null; await t.page.route('**/api/checkout-extra', (rt) => { extraReq = { auth: rt.request().headers().authorization, body: rt.request().postData() }; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
-    await t.page.click('[data-q=staff_signin]'); await t.page.waitForSelector('#extra-add');
+    await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('#extra-add');
     check('add-on: the page shows the per-site total (2 sites x £6.99 = £13.98 + VAT per month)', (await t.page.locator('.card').innerText()).includes('2 × £6.99 = £13.98 + VAT per month'));
     await t.page.click('#extra-add'); await t.page.waitForURL('**/healthz');
     check('add-on: Add sends the sign-in token and the add-on code to our server, then goes to the payment page', extraReq && extraReq.auth === 'Bearer tok-site@t' && JSON.parse(extraReq.body).code === 'staff_signin');
     await t.ctx.close();
     t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     await t.page.route('**/api/checkout-extra', (rt) => rt.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'You already have this add-on.' }) }));
-    await t.page.click('[data-q=toolbox_talks]'); await t.page.click('#extra-add'); await t.page.waitForSelector('.msg.err');
+    await t.page.click('[data-promo=toolbox_talks]'); await t.page.click('#extra-add'); await t.page.waitForSelector('.msg.err');
     check('add-on: if the server refuses, the person sees its plain message and stays on the page', (await t.page.locator('.msg.err').innerText()).includes('already have') && (await t.page.locator('#extra-add').count()) === 1);
     await t.ctx.close();
-    t = await newPage(appSeed, { role: 'client_site', rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-q=toolbox_talks]'); await t.page.waitForSelector('[data-extra]');
+    t = await newPage(appSeed, { role: 'client_site', rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-promo=toolbox_talks]'); await t.page.waitForSelector('[data-extra]');
     check('add-on: a user who is not head office has no pay button and is told to ask head office', (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.card').innerText()).includes('Ask your head-office user'));
     await t.ctx.close();
     // coming back from Stripe: waits for the confirmation, then opens the add-on

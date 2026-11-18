@@ -376,3 +376,8 @@ body.passport{padding-bottom:84px}
 
 /* Details read from a certificate: a gold edge so the person checks them */
 input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+
+/* Needs attention (home) */
+.card.attention{border:1px solid transparent}
+.attcounts{display:flex;gap:6px;flex-wrap:wrap}
+.card.attention .item{margin-top:8px}
