@@ -37,14 +37,14 @@ def page(path, title, desc, body, current, noindex=False):
 <header class="top"><div class="wrap">
   <a class="brand" href="/" aria-label="Tremcore Ltd home"><img class="mark" src="/img/logo-mark.png" alt="" width="75" height="52"><img class="word" src="/img/logo-word.png" alt="Tremcore" width="158" height="18"></a>
   <nav class="main" id="nav" aria-label="Main">{nav}</nav>
-  <div class="hdr-actions"><a class="btn ghost" href="/app/">Login</a><a class="btn solid" data-signup href="/app/?signup=1">Sign up</a><button class="btn ghost menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button></div>
+  <div class="hdr-actions"><a class="btn ghost" href="/app/?login=1">Login</a><a class="btn solid" data-signup href="/app/?signup=1">Sign up</a><button class="btn ghost menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button></div>
 </div></header>
 <main id="main">
 {body}
 </main>
 <footer><div class="wrap">
   <div><img src="/img/logo-full.png" alt="Tremcore Ltd" width="150" height="115"><p>Compliance passports for commercial premises.</p></div>
-  <nav aria-label="Footer">{foot}<a href="/app/">Login</a></nav>
+  <nav aria-label="Footer">{foot}<a href="/app/?login=1">Login</a></nav>
   <div>{PHONE_P}<p>{EMAIL}</p><p>{ADDR}</p></div>
   <div class="legal"><span>&copy; 2026 Tremcore Ltd. Company number {CO}.</span></div>
 </div></footer>

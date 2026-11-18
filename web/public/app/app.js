@@ -352,7 +352,7 @@
       ...siteRows.map((x, i) => h('div', { class: 'member', 'data-site-row': x.id }, h('label', {}, 'Site ' + (i + 1) + ' name'), x.name, h('label', {}, 'Address'), x.address, h('label', {}, 'Postcode'), x.postcode)),
       h('h3', {}, 'Which compliance checks apply to your premises?'),
       h('p', { class: 'muted small' }, 'Tick the ones you want to track. They are added to all of your sites with no dates yet, so they show as missing until you add a date or certificate. You can add your own checks and change these later. Which checks apply to your premises depends on your own circumstances and risk assessment.'),
-      h('div', { class: 'checklist' }, ...boxes), all, btn, box);
+      h('div', { class: 'checklist' }, ...boxes), all, btn, box, h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', id: 'st-signout', onclick: signOut }, 'Sign out')));
     showForm(h('div', { class: 'card wide' }, h('h1', {}, 'Welcome to your passport' + (co && co.name ? ', ' + co.name : '')), h('p', { class: 'muted' }, 'Two quick things to set up.'), form));
   }
 
@@ -623,6 +623,12 @@
       if (event === 'PASSWORD_RECOVERY') { recovering = true; setTimeout(route, 0); }
       else if (event === 'SIGNED_OUT' && !suppressSignedOut) { setTimeout(viewLogin, 0); }
     });
+    // The website's Login button always shows the login page: if someone is still signed in on this device, they are signed out first.
+    if (new URLSearchParams(location.search).has('login')) {
+      history.replaceState(null, '', '/app/');
+      suppressSignedOut = true;
+      try { await sb.auth.signOut(); } catch (e) { /* ignore */ } finally { suppressSignedOut = false; }
+    }
     await route();
   }
 

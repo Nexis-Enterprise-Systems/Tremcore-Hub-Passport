@@ -745,6 +745,14 @@ const USERS = {
     await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
     check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
     await t.ctx.close();
+    // the website's Login button always shows the login page, even if someone is still signed in on this device
+    t = await newPage(() => { window.__mock.startAs = 'site@t'; }); 
+    await t.page.goto(base + '/app/?login=1'); await t.page.waitForSelector('#email');
+    check('login link: a person still signed in on this device is shown the login page, and the address is tidied', (await t.page.locator('#password').count()) === 1 && new URL(t.page.url()).search === '');
+    await t.ctx.close();
+    t = await newPage(() => { window.__mock.startAs = 'site@t'; });
+    check('login link: opening the app without the login link still carries on where they were (signed in, not the login page)', (await t.page.locator('#password').count()) === 0);
+    await t.ctx.close();
     // first-run set-up: contact details and tick the core checks
     const setupSeed = () => { window.__mock.tables = { companies: [{ id: 'c1', name: 'Acme Cafes Ltd', setup_completed_at: null }], properties: [{ id: 's1', name: 'Site 1', address: null }, { id: 's2', name: 'Site 2', address: null }],
       core_checks: ['Fire Risk Assessment', 'Fire Alarm Testing & Maintenance', 'Fire Extinguisher Maintenance', 'Emergency Light Testing', 'Electrical Installation Condition Reporting (EICR)', 'PAT Testing', 'Asbestos Management Survey / Register', 'Legionella (water) Risk Management', 'Gas Safety Inspection & Maintenance', 'F-Gas'].map((label, i) => ({ code: 'c' + i, label, sort: i })) }; };
@@ -1183,14 +1191,14 @@ const USERS = {
       await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
     }
     await pg.goto(base + '/');
-    check('website shows no passport sign-in', (await pg.locator('text=Sign in').count()) === 0 && (await pg.locator('a[href="/app/"]').count()) >= 1);
+    check('website shows no passport sign-in', (await pg.locator('text=Sign in').count()) === 0 && (await pg.locator('a[href="/app/?login=1"]').count()) >= 1);
     check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/what-you-get/');
     check('website does not offer the Managed Service for now (no card, no postcode box)', (await pg.locator('#managed').count()) === 0 && (await pg.locator('#area-check').count()) === 0 && !/Managed Service/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/contact/'); check('contact form offers only Self-Managed as a package', (await pg.locator('#f-pkg option').allInnerTexts()).join('|') === 'Not sure yet|Self-Managed');
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
     check('website has Sign up buttons everywhere and no "Book a demo" anywhere', (await pg.locator('[data-signup]:visible').count()) >= 2 && !/book (a|my) demo/i.test(await pg.locator('body').innerText()) && (await pg.locator('.hdr-actions [data-signup]').innerText()) === 'Sign up');
-    check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
+    check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/?login=1"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/?login=1"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
     await pg.goto(base + '/what-you-get/');
     check('website Sign up buttons lead to the sign-up page', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
     signupOpen = false;

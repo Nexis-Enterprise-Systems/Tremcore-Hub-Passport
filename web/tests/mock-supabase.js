@@ -3,7 +3,7 @@
 (function () {
   const M = () => window.__mock;
   const calls = (window.__calls = []);
-  let cb = null, current = null, aal = 'aal1', unverified = null, nextId = 1;
+  let cb = null, current = (window.__mock && window.__mock.startAs) || null, aal = 'aal1', unverified = null, nextId = 1;
   const rec = (n, a) => calls.push([n, a]);
   const userRow = () => (current ? M().users[current] : null);
   const verifiedFactors = () => (userRow() && userRow().factor ? [{ id: 'f-' + current, factor_type: 'totp', status: 'verified' }] : []);
