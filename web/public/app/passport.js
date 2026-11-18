@@ -111,7 +111,7 @@
     const go = (k) => { tab = k; if (k === 'home') viewHome(); else if (k === 'compliance') viewList(); else if (k === 'tasks') viewTasks(); else viewSettings(); };
     const shell = (cur, ...nodes) => page('dash', h('div', { class: 'appshell' },
       h('nav', { class: 'appnav', 'aria-label': 'Main menu' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: 'navbtn' + (cur === k ? ' on' : ''), 'data-nav': k, 'aria-current': cur === k ? 'page' : null, onclick: () => go(k) }, icon(k), h('span', {}, l)))),
-      h('div', { class: 'appbody' }, ...nodes)));
+      h('div', { class: 'appbody view-' + cur }, ...nodes)));
     const backTo = (label) => backBtn(label, () => go(tab));
 
     // All sites, then each site underneath (up to 12 as cards; beyond that a plain drop-down).
@@ -157,8 +157,8 @@
       const lateItems = rows.filter((r) => r.status === 'red').sort(byUrgency), soonItems = rows.filter((r) => r.status === 'amber').sort(byUrgency);
       const myTasks = tasks.filter((t) => t.status === 'pending' && (site === 'all' || t.property_id === site));
       const lateTasks = myTasks.filter((t) => taskState(t) === 'red'), soonTasks = myTasks.filter((t) => taskState(t) === 'amber');
-      const taskRow = (t) => h('button', { class: 'item nosite', type: 'button', 'data-task-row': t.id, onclick: () => go('tasks') },
-        h('i', { class: 'dot ' + taskState(t) }), h('span', { class: 'title' }, t.title + ' (task)'), h('span', { class: 'meta muted' }, h('span', { class: 'due' }, taskText(t))), h('span', { class: 'tag ' + taskState(t) }, ST[taskState(t)].label));
+      const taskRow = (t) => h('button', { class: 'item' + (multiH ? '' : ' nosite'), type: 'button', 'data-task-row': t.id, onclick: () => go('tasks') },
+        h('i', { class: 'dot ' + taskState(t) }), h('span', { class: 'title' }, t.title + ' (task)'), h('span', { class: 'meta muted' }, multiH ? h('span', { class: 'site' }, '') : null, h('span', { class: 'due' }, taskText(t))), h('span', { class: 'tag ' + taskState(t) }, ST[taskState(t)].label));
       const attRows = [...lateItems.map((r) => itemRow(r, multiH)), ...lateTasks.map(taskRow), ...soonItems.map((r) => itemRow(r, multiH)), ...soonTasks.map(taskRow)];
       const nLate = lateItems.length + lateTasks.length, nSoon = soonItems.length + soonTasks.length;
       const attention = h('div', { class: 'card attention', id: 'attention' },
@@ -176,13 +176,15 @@
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
           h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
         sitePicker(viewHome),
-        attention,
-        promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null,
-        h('div', { class: 'card' }, h('h2', {}, 'Your tools'),
-          h('div', { class: 'qtiles' },
-            tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
-            ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
-            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency()))));
+        h('div', { class: 'dash-cols' },
+          h('div', { class: 'dash-main' }, attention),
+          h('div', { class: 'dash-side' },
+            promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null,
+            h('div', { class: 'card' }, h('h2', {}, 'Your tools'),
+              h('div', { class: 'qtiles' },
+                tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
+                ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
+                q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency()))))));
     }
 
     // ---------- Compliance: Overview / By Category / Due Soon ----------

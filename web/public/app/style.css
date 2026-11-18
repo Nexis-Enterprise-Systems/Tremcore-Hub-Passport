@@ -381,3 +381,38 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .card.attention{border:1px solid transparent}
 .attcounts{display:flex;gap:6px;flex-wrap:wrap}
 .card.attention .item{margin-top:8px}
+
+/* ---- Wide computer screens: use the width (phones and tablets are not affected) ---- */
+.dash-main>.card,.dash-side>.card{margin-bottom:12px}
+@media (min-width:1100px){
+  body.passport main{max-width:1560px}
+  body.formwide main{max-width:1280px}
+  .appshell{grid-template-columns:230px minmax(0,1fr);gap:24px}
+  .card{padding:28px 28px}
+  /* Home: a dashboard. The summary runs across the top; what needs attention sits on the left, add-ons and tools on the right. */
+  .view-home .dash-cols{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;align-items:start}
+  .view-home .dash-cols .card{margin-bottom:16px}
+  .view-home .dash-cols .card:last-child{margin-bottom:0}
+  .view-home .overview{display:grid;grid-template-columns:minmax(220px,.9fr) minmax(0,1.7fr) minmax(210px,.8fr);column-gap:36px;align-items:center}
+  .view-home .overview>.welcome{grid-column:1;grid-row:1/span 3}
+  .view-home .overview>h2{grid-column:2;grid-row:1;margin:0 0 6px}
+  .view-home .overview>.summary{grid-column:2;grid-row:2}
+  .view-home .overview>#view-full{grid-column:3;grid-row:1/span 3;margin:0}
+  .view-home .overview>:not(.welcome):not(h2):not(.summary):not(#view-full){grid-column:1/-1;grid-row:4}
+  .view-home .promos{grid-template-columns:1fr}
+  /* Settings: two columns of cards */
+  .appbody.view-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+  .appbody.view-settings>*{margin-bottom:0}
+  .appbody.view-settings>:first-child{grid-column:1/-1}
+  /* Compliance and tasks: the list uses the whole width */
+  .item{padding:14px 16px}
+  .thead,.item{grid-template-columns:18px minmax(220px,1fr) 160px minmax(230px,280px) 110px}
+  .thead.nosite,.item.nosite{grid-template-columns:18px minmax(220px,1fr) minmax(230px,280px) 110px}
+}
+@media (min-width:960px){
+  /* the Needs attention list sits in a narrower column, so its rows get their own column sizes */
+  .attention .item{grid-template-columns:16px minmax(0,1fr) minmax(60px,auto) minmax(150px,auto) auto}
+  .attention .item.nosite{grid-template-columns:16px minmax(0,1fr) minmax(150px,auto) auto}
+  .dash-side .qtiles{grid-template-columns:1fr 1fr}
+}
+@media (min-width:1100px){.appbody.view-settings .siteedit{grid-template-columns:1fr 1fr}}
