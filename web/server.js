@@ -16,6 +16,7 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ANTHROPIC_API = (process.env.ANTHROPIC_API_BASE || 'https://api.anthropic.com').replace(/\/+$/, '');
+const ANTHROPIC_WORKSPACE_ID = process.env.ANTHROPIC_WORKSPACE_ID || '';   // only needed when the key is not tied to one workspace
 const READ_MODEL = process.env.READ_MODEL || 'claude-sonnet-5-5';
 const STRIPE_API = (process.env.STRIPE_API_BASE || 'https://api.stripe.com').replace(/\/+$/, '');
 const STRIPE_METHODS = (process.env.STRIPE_PAYMENT_METHODS || '').split(',').map((x) => x.trim()).filter(Boolean);   // normally empty: Stripe uses the methods switched on in its Dashboard
@@ -309,7 +310,7 @@ async function handleReadDocument(req, res) {
     const block = { type: kind === 'pdf' ? 'document' : 'image', source: { type: 'base64', media_type: mediaType, data: buf.toString('base64') } };
     const title = clip(doc.compliance_items && doc.compliance_items.title, 160) || 'compliance check';
     const ar = await fetch(ANTHROPIC_API + '/v1/messages', { method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: Object.assign({ 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': ANTHROPIC_WORKSPACE_ID } : {}),
       body: JSON.stringify({ model: READ_MODEL, max_tokens: 600, messages: [{ role: 'user', content: [block, { type: 'text', text: READ_PROMPT(title.replace(/"/g, "'"), new Date().toISOString().slice(0, 10)) }] }] }), signal: AbortSignal.timeout(45000) });
     if (!ar.ok) { const ej = await ar.json().catch(() => ({})); console.error('read-document: Anthropic refused', ar.status, (ej && ej.error && (ej.error.type + ': ' + ej.error.message) || '').slice(0, 200), 'model=' + READ_MODEL); return out(502, { error: 'Sorry, we could not read that document just now. Please type the details in.' }); }
     const aj = await ar.json().catch(() => ({}));
