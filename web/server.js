@@ -311,7 +311,7 @@ async function handleReadDocument(req, res) {
     const ar = await fetch(ANTHROPIC_API + '/v1/messages', { method: 'POST',
       headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: READ_MODEL, max_tokens: 600, messages: [{ role: 'user', content: [block, { type: 'text', text: READ_PROMPT(title.replace(/"/g, "'"), new Date().toISOString().slice(0, 10)) }] }] }), signal: AbortSignal.timeout(45000) });
-    if (!ar.ok) { console.error('read-document: model refused', ar.status); return out(502, { error: 'Sorry, we could not read that document just now. Please type the details in.' }); }
+    if (!ar.ok) { const ej = await ar.json().catch(() => ({})); console.error('read-document: Anthropic refused', ar.status, (ej && ej.error && (ej.error.type + ': ' + ej.error.message) || '').slice(0, 200), 'model=' + READ_MODEL); return out(502, { error: 'Sorry, we could not read that document just now. Please type the details in.' }); }
     const aj = await ar.json().catch(() => ({}));
     const text = (aj.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
     const jm = /\{[\s\S]*\}/.exec(text); let parsed = null; try { parsed = jm ? JSON.parse(jm[0]) : null; } catch { parsed = null; }
