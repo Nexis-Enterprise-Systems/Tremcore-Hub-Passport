@@ -105,6 +105,86 @@ async function handleEnquiry(req, res) {
   return reply(200, { ok: true });
 }
 
+const interestHits = new Map();
+function limitedInterest(ip) { const now = Date.now(), a = (interestHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); interestHits.set(ip, a); if (interestHits.size > 5000) for (const [k, v] of interestHits) if (!v.some((t) => now - t < 600000)) interestHits.delete(k); return a.length > 5; }
+// ---- "Register your interest" (public website form). Stored through the public key; the database only lets anyone ADD a row.
+async function handleInterest(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const origin = req.headers.origin;
+  if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (limited(ip)) return out(429, { error: 'Too many requests. Please try again in a few minutes.' });
+  let raw; try { raw = await readBody(req, 20000); } catch { return out(413, { error: 'That was too long.' }); }
+  let d; try { d = (req.headers['content-type'] || '').includes('json') ? JSON.parse(raw) : Object.fromEntries(new URLSearchParams(raw)); } catch { return out(400, { error: 'Sorry, that could not be read.' }); }
+  if (!d || typeof d !== 'object') return out(400, { error: 'Sorry, that could not be read.' });
+  if (clip(d.website, 50)) return out(200, { ok: true });   // hidden field filled in: a bot. Pretend all is well.
+  const sites = Math.floor(Number(d.sites));
+  const row = { name: clip(d.name, 120), email: clip(d.email, 200).toLowerCase(), business_name: clip(d.business_name, 160), business_address: clip(d.business_address, 400), sites };
+  if (!row.name || !row.business_name) return out(422, { error: 'Please fill in your name and your business name.' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) return out(422, { error: 'Please check your email address.' });
+  if (!row.business_address) return out(422, { error: 'Please give your business address.' });
+  if (!(sites >= 1 && sites <= 100)) return out(422, { error: 'Please say how many sites you have, from 1 to 100.' });
+  if (!(d.consent === true || d.consent === 'on' || d.consent === 'true' || d.consent === '1')) return out(422, { error: 'Please tick the box so we can email you when the passport opens.' });
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return out(503, { error: 'Sorry, registering is not switched on yet. Please email us.' });
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/interest_list', { method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(row), signal: AbortSignal.timeout(8000) });
+    if (r.status === 409) return out(200, { ok: true });   // already on the list: the same friendly answer, and it does not reveal who is registered
+    if (!r.ok) { console.error('interest insert failed', r.status); return out(502, { error: 'Sorry, that did not send. Please try again, or email us.' }); }
+  } catch (e) { console.error('interest insert error', e.message); return out(502, { error: 'Sorry, that did not send. Please try again, or email us.' }); }
+  return out(200, { ok: true });
+}
+
+// ---- Launch email (Tremcore staff, from the hub). Sends the sign-up link to people on the interest list, with the staff member's OWN token,
+// so the database decides who may read the list. Only people marked as sent are changed, and only after the email service accepted them.
+function launchEmail(person, link) {
+  const first = String(person.name || '').split(/\s+/)[0];
+  const lines = ['Hello' + (first ? ' ' + first : '') + ',', '',
+    'Thank you for registering your interest in the Tremcore Compliance Passport' + (person.business_name ? ' for ' + person.business_name : '') + '. It is now open.',
+    '', 'Sign up here: ' + link, '',
+    'The Self-Managed plan is ' + gbp(1499) + ' a month + VAT for your first site and ' + gbp(799) + ' a month + VAT for each extra site (or pay yearly and save 15%). Your account opens as soon as your payment is confirmed.',
+    '', 'If you have any questions, just reply to this email. If you would rather not hear from us again, reply with the word STOP and we will take you off the list.', '',
+    'Kind regards,', 'Tremcore Ltd'];
+  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">' + lines.map((l) => l === '' ? '<br>' : esc(l).replace(esc(link), '<a href="' + esc(link) + '">Sign up to the Compliance Passport</a>')).join('') + '</div>';
+  return { subject: 'The Tremcore Compliance Passport is now open', text: lines.join('\n'), html };
+}
+async function handleSendLaunch(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const origin = req.headers.origin;
+  if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return out(503, { error: 'Not switched on yet.' });
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (offerLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!m) return out(401, { error: 'Please sign in again.' });
+  if (!EMAIL_API_KEY || !EMAIL_FROM) return out(503, { error: 'The email service is not set up yet, so nothing was sent. (Add EMAIL_API_KEY and EMAIL_FROM in Railway.)' });
+  let d; try { d = JSON.parse(await readBody(req, 8000)); } catch { return out(400, { error: 'Sorry, that could not be read.' }); }
+  const ids = Array.isArray(d && d.ids) ? d.ids.map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500) : null;
+  const mine = { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' };
+  try {
+    const so = await fetch(SUPABASE_URL + '/rest/v1/rpc/signup_open', { method: 'POST', headers: mine, body: '{}', signal: AbortSignal.timeout(8000) });
+    if (so.status === 401) return out(401, { error: 'Please sign in again.' });
+    if (!so.ok || (await so.json().catch(() => false)) !== true) return out(409, { error: 'Sign-up is still closed, so the link would not work. Open sign-up under Settings first, then send.' });
+    const filter = ids ? 'id=in.(' + ids.join(',') + ')&status=in.(registered,invited)' : 'status=eq.registered';
+    const lr = await fetch(SUPABASE_URL + '/rest/v1/interest_list?' + filter + '&select=id,name,email,business_name&order=created_at.asc&limit=500', { headers: mine, signal: AbortSignal.timeout(8000) });
+    if (!lr.ok) return out(401, { error: 'Please sign in again.' });
+    const people = await lr.json();
+    if (!people.length) return out(200, { ok: true, sent: 0, failed: 0, note: 'There is nobody waiting to be sent the link.' });
+    const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+    const link = proto + '://' + req.headers.host + '/app/?signup=1';
+    let sent = 0, failed = 0;
+    for (let i = 0; i < people.length; i += 50) {
+      const chunk = people.slice(i, i + 50);
+      const er = await fetch(EMAIL_API + '/emails/batch', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk.map((p) => { const mail = launchEmail(p, link); return { from: EMAIL_FROM, to: [p.email], subject: mail.subject, text: mail.text, html: mail.html }; })), signal: AbortSignal.timeout(20000) }).catch(() => null);
+      if (!er || !er.ok) { failed += chunk.length; console.error('launch email batch failed', er && er.status); continue; }
+      sent += chunk.length;
+      await fetch(SUPABASE_URL + '/rest/v1/rpc/mark_interest_invited', { method: 'POST', headers: mine, body: JSON.stringify({ p_ids: chunk.map((p) => p.id) }), signal: AbortSignal.timeout(8000) }).catch(() => {});
+    }
+    return out(200, { ok: true, sent, failed });
+  } catch (e) { console.error('send launch error', e.message); return out(502, { error: 'Sorry, that did not work. Please try again.' }); }
+}
+
 // ---- Managed Service postcode check. Two small lookups that return only what the page needs; nothing is stored.
 // The postcode service (postcodes.io) is free and public. The area itself (base point and miles) is read from the database's public managed_area().
 const lookups = new Map();
@@ -509,6 +589,8 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/signup-checkout') return handleSignupCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout-extra') return handleCheckoutExtra(req, res);
+  if (req.method === 'POST' && pathname === '/api/interest') return handleInterest(req, res);
+  if (req.method === 'POST' && pathname === '/api/send-launch') return handleSendLaunch(req, res);
   if (req.method === 'POST' && pathname === '/api/send-offer') return handleSendOffer(req, res);
   if (req.method === 'POST' && pathname === '/api/read-document') return handleReadDocument(req, res);
   if (req.method === 'POST' && pathname === '/api/stripe-webhook') return handleWebhook(req, res);

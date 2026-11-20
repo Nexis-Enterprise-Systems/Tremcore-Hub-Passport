@@ -130,4 +130,23 @@
         .then(function () { go.disabled = false; go.textContent = 'Send my question'; });
     });
   }
+
+  // ---------- register your interest ----------
+  var reg = $('#interest');
+  if (reg) {
+    var rout = $('#r-out'), rgo = $('#r-go');
+    reg.addEventListener('submit', function (e) {
+      e.preventDefault(); rout.className = ''; rout.textContent = '';
+      var data = {}; new FormData(reg).forEach(function (v, k) { data[k] = String(v); }); data.consent = !!$('#r-consent').checked;
+      rgo.disabled = true; rgo.textContent = 'Sending…';
+      fetch('/api/interest', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(data) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (r) {
+          if (r.ok) { reg.reset(); rout.className = 'msg ok'; rout.textContent = 'Thank you, you are on the list. We will email you as soon as the passport opens.'; }
+          else { rout.className = 'msg err'; rout.textContent = (r.j && r.j.error) || 'Sorry, that did not send. Please try again.'; }
+        })
+        .catch(function () { rout.className = 'msg err'; rout.textContent = 'Sorry, that did not send. Please check your connection and try again.'; })
+        .then(function () { rgo.disabled = false; rgo.textContent = 'Register my interest'; });
+    });
+  }
 })();

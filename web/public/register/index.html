@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Register your interest | Tremcore</title>
+<meta name="description" content="Be first to know when the Tremcore Compliance Passport opens.">
+<meta name="theme-color" content="#0c0b09">
+<meta property="og:title" content="Register your interest | Tremcore"><meta property="og:description" content="Be first to know when the Tremcore Compliance Passport opens."><meta property="og:type" content="website">
+<link rel="icon" href="/img/favicon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/" aria-label="Tremcore Ltd home"><img class="mark" src="/img/logo-mark.png" alt="" width="75" height="52"><img class="word" src="/img/logo-word.png" alt="Tremcore" width="158" height="18"></a>
+  <nav class="main" id="nav" aria-label="Main"><a href="/">Home</a><a href="/passport/">The passport</a><a href="/what-you-get/">What you get</a><a href="/how-it-works/">How it works</a><a href="/contact/">Contact</a></nav>
+  <div class="hdr-actions"><a class="btn ghost" href="/app/?login=1">Login</a><a class="btn solid" href="/register/">Register your interest</a><button class="btn ghost menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button></div>
+</div></header>
+<main id="main">
+<section class="sec"><div class="wrap contact"><div><div class="eyebrow">Coming soon</div><h1 class="h2">Register your interest</h1><p class="lead">The Self-Managed Compliance Passport is opening soon. Tell us about your business and we will email you the moment you can sign up. There is no payment now and no obligation.</p>
+<dl class="cd"><div><dt>Email</dt><dd>hello@tremcore.co.uk</dd></div></dl></div>
+<form class="f card" id="interest" method="post" action="/api/interest"><div class="two"><div><label class="lbl" for="r-name">Your name</label><input class="fld" id="r-name" name="name" type="text" autocomplete="name" required maxlength="120"></div><div><label class="lbl" for="r-email">Email address</label><input class="fld" id="r-email" name="email" type="email" autocomplete="email" required maxlength="200"></div></div>
+<div><label class="lbl" for="r-biz">Business name</label><input class="fld" id="r-biz" name="business_name" type="text" autocomplete="organization" required maxlength="160"></div>
+<div><label class="lbl" for="r-addr">Business address</label><textarea class="fld" id="r-addr" name="business_address" rows="3" autocomplete="street-address" required maxlength="400"></textarea></div>
+<div><label class="lbl" for="r-sites">Number of sites</label><input class="fld" id="r-sites" name="sites" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" required></div>
+<div class="hp" aria-hidden="true"><label>Leave this empty <input name="website" type="text" tabindex="-1" autocomplete="off"></label></div>
+<label class="chk"><input id="r-consent" name="consent" type="checkbox" required> <span>Yes, email me when the Compliance Passport opens. I can ask to be taken off the list at any time. <a href="/privacy/">Privacy notice</a>.</span></label>
+<button class="btn solid" id="r-go" type="submit">Register my interest</button><div id="r-out" role="status"></div>
+<p class="small" style="margin:0">We only use these details to tell you when the passport opens and to answer your questions.</p></form></div></section>
+</main>
+<footer><div class="wrap">
+  <div><img src="/img/logo-full.png" alt="Tremcore Ltd" width="150" height="115"><p>Compliance passports for commercial premises.</p></div>
+  <nav aria-label="Footer"><a href="/">Home</a><a href="/passport/">The passport</a><a href="/what-you-get/">What you get</a><a href="/how-it-works/">How it works</a><a href="/contact/">Contact</a><a href="/app/?login=1">Login</a></nav>
+  <div><p>hello@tremcore.co.uk</p><p>Goldfinch Grove, Rochester, Kent, ME3 8FX</p></div>
+  <div class="legal"><span>&copy; 2026 Tremcore Ltd. Company number 17507064.</span></div>
+</div></footer>
+<script src="/site.js"></script>
+</body>
+</html>

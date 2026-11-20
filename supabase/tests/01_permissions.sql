@@ -1109,3 +1109,48 @@ do $$ declare e text; begin
   reset role; if e <> '42501' then raise exception 'a signed-in user could read account_overview: %', e; end if; end $$;
 select 'overview: signed-in users (even Hub staff) cannot read it through the app, so email addresses stay private' as test, true as ok;
 rollback;
+
+-- The interest list (migration 0031) ---------------------------------------------------------------------
+begin;
+do $$ begin
+  set local role anon;
+  insert into interest_list(name, email, business_name, business_address, sites) values ('Pat Prospect', 'Pat@Shop.example', 'Pat Shop Ltd', '1 High St, Rochester ME1 1AA', 3);
+  reset role;
+end $$;
+select 'interest: anyone can add themselves to the list' as test, (select count(*) = 1 from interest_list where business_name = 'Pat Shop Ltd' and status = 'registered' and consent_at is not null) as ok;
+do $$ declare e text; begin
+  set local role anon;
+  begin insert into interest_list(name, email, business_name, business_address, sites) values ('Dup', 'pat@shop.example', 'Dup Ltd', 'x', 1); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '23505' then raise exception 'the same email was added twice: %', e; end if; end $$;
+select 'interest: the same email cannot be on the list twice, whatever the capitals' as test, true as ok;
+do $$ declare e text; begin
+  set local role anon;
+  begin insert into interest_list(name, email, business_name, business_address, sites, status) values ('Sneaky', 's@s.example', 'S Ltd', 'x', 1, 'signed_up'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a visitor set their own status: %', e; end if; end $$;
+select 'interest: a visitor cannot give themselves a status such as signed up' as test, true as ok;
+do $$ declare e text; begin
+  set local role anon;
+  begin insert into interest_list(name, email, business_name, business_address, sites) values ('Big', 'big@s.example', 'Big Ltd', 'x', 500); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '23514' then raise exception '500 sites accepted: %', e; end if; end $$;
+select 'interest: a silly number of sites is refused' as test, true as ok;
+select * from chk('interest: a visitor cannot read the list', :'superA', 'aal2', $$select count(*) = 0 from interest_list$$);
+do $$ declare e text; begin
+  set local role anon;
+  begin perform count(*) from interest_list; e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'anon could read the list: %', e; end if; end $$;
+select 'interest: the public cannot read the list either' as test, true as ok;
+select * from chk('interest: staff can read the list', :'staff', 'aal2', $$select count(*) = 1 from interest_list$$);
+select * from chk('interest: staff can mark people as invited', :'staff', 'aal2', $$select mark_interest_invited(array(select id from interest_list)) = 1$$);
+select 'interest: marked invited with a date' as test, (select status = 'invited' and invited_at is not null from interest_list where lower(email) = 'pat@shop.example') as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform mark_interest_invited(array[gen_random_uuid()]); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a customer could mark people invited: %', e; end if; end $$;
+select 'interest: a customer cannot use the staff functions' as test, true as ok;
+insert into companies(id,name,level,subscription,contact_email,source) values ('10000000-0000-0000-0000-0000000000e5','Pat Shop Ltd',1,'trial','pat@shop.example','self_signup');
+select 'interest: an unpaid sign-up does not count yet' as test, (select status = 'invited' from interest_list where lower(email) = 'pat@shop.example') as ok;
+update companies set subscription = 'active' where id = '10000000-0000-0000-0000-0000000000e5';
+select 'interest: once they pay, the person moves to signed up and is linked to their company' as test,
+  (select status = 'signed_up' and company_id = '10000000-0000-0000-0000-0000000000e5' and signed_up_at is not null from interest_list where lower(email) = 'pat@shop.example') as ok;
+rollback;

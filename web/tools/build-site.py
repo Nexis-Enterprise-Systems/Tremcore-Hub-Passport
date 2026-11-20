@@ -15,7 +15,12 @@ PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path
 LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="#d4af55" stroke-width="1.4"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="#d4af55" stroke-width="1.4"/></svg>'
 NAV = [('/', 'Home'), ('/passport/', 'The passport'), ('/what-you-get/', 'What you get'), ('/how-it-works/', 'How it works'), ('/contact/', 'Contact')]
 
-SIGNUP = '<a class="btn solid" data-signup href="/app/?signup=1">Sign up</a>'   # shown by site.js only while Tremcore has sign-up switched on
+# The passport is not open to the public yet (Nov 2026): every "Sign up" button becomes "Register your interest", which opens the interest-list form.
+# When the passport goes live, set PASSPORT_OPEN = True and rebuild: the buttons go back to the real sign-up.
+PASSPORT_OPEN = False
+SIGNUP_HREF = '/app/?signup=1' if PASSPORT_OPEN else '/register/'
+SIGNUP_LABEL = 'Sign up' if PASSPORT_OPEN else 'Register your interest'
+SIGNUP = f'<a class="btn solid" href="{SIGNUP_HREF}">{SIGNUP_LABEL}</a>'
 
 def page(path, title, desc, body, current, noindex=False):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)
@@ -37,7 +42,7 @@ def page(path, title, desc, body, current, noindex=False):
 <header class="top"><div class="wrap">
   <a class="brand" href="/" aria-label="Tremcore Ltd home"><img class="mark" src="/img/logo-mark.png" alt="" width="75" height="52"><img class="word" src="/img/logo-word.png" alt="Tremcore" width="158" height="18"></a>
   <nav class="main" id="nav" aria-label="Main">{nav}</nav>
-  <div class="hdr-actions"><a class="btn ghost" href="/app/?login=1">Login</a><a class="btn solid" data-signup href="/app/?signup=1">Sign up</a><button class="btn ghost menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button></div>
+  <div class="hdr-actions"><a class="btn ghost" href="/app/?login=1">Login</a><a class="btn solid" href="{SIGNUP_HREF}">{SIGNUP_LABEL}</a><button class="btn ghost menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button></div>
 </div></header>
 <main id="main">
 {body}
@@ -146,13 +151,24 @@ contact = f'''<section class="sec"><div class="wrap contact"><div><div class="ey
 <p class="small" style="margin:0">We only use your details to reply to this enquiry.</p></form></div></section>'''
 
 
+register = f'''<section class="sec"><div class="wrap contact"><div><div class="eyebrow">Coming soon</div><h1 class="h2">Register your interest</h1><p class="lead">The Self-Managed Compliance Passport is opening soon. Tell us about your business and we will email you the moment you can sign up. There is no payment now and no obligation.</p>
+<dl class="cd"><div><dt>Email</dt><dd>{EMAIL}</dd></div></dl></div>
+<form class="f card" id="interest" method="post" action="/api/interest"><div class="two"><div><label class="lbl" for="r-name">Your name</label><input class="fld" id="r-name" name="name" type="text" autocomplete="name" required maxlength="120"></div><div><label class="lbl" for="r-email">Email address</label><input class="fld" id="r-email" name="email" type="email" autocomplete="email" required maxlength="200"></div></div>
+<div><label class="lbl" for="r-biz">Business name</label><input class="fld" id="r-biz" name="business_name" type="text" autocomplete="organization" required maxlength="160"></div>
+<div><label class="lbl" for="r-addr">Business address</label><textarea class="fld" id="r-addr" name="business_address" rows="3" autocomplete="street-address" required maxlength="400"></textarea></div>
+<div><label class="lbl" for="r-sites">Number of sites</label><input class="fld" id="r-sites" name="sites" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" required></div>
+<div class="hp" aria-hidden="true"><label>Leave this empty <input name="website" type="text" tabindex="-1" autocomplete="off"></label></div>
+<label class="chk"><input id="r-consent" name="consent" type="checkbox" required> <span>Yes, email me when the Compliance Passport opens. I can ask to be taken off the list at any time. <a href="/privacy/">Privacy notice</a>.</span></label>
+<button class="btn solid" id="r-go" type="submit">Register my interest</button><div id="r-out" role="status"></div>
+<p class="small" style="margin:0">We only use these details to tell you when the passport opens and to answer your questions.</p></form></div></section>'''
+
 DRAFT = '<div class="quote" role="note"><b>Draft for review.</b> This page is a working draft and has not been checked by a solicitor. It is not in force until Tremcore Ltd has reviewed and finalised it. Items in [SQUARE BRACKETS] are still to be completed.</div>'
 privacy = f'''<section class="sec"><div class="wrap narrow"><div class="eyebrow">Privacy notice</div><h1 class="h2">How Tremcore uses your information</h1>{DRAFT}
 <h3>Who we are</h3><p>Tremcore Ltd, company number {CO}, {ADDR}. Questions about your information: {EMAIL}. [ICO REGISTRATION NUMBER TO BE ADDED.]</p>
 <h3>Two roles: your data and our own</h3>
 <p><b>Your records are yours.</b> The compliance records, dates, notes, certificates, photographs, site details and the names of your own colleagues that you put into the passport belong to your company. For that information your company is the <i>controller</i> and Tremcore is your <i>processor</i>: we only handle it to run the service for you, on your instructions, as set out in our <a href="/terms/">Terms</a> and the data processing terms within them.</p>
 <p>For our own account, billing and sales information (who you are, how to contact you, what you pay) Tremcore is the controller.</p>
-<h3>What we collect</h3><p>When you enquire or create an account: your name, work email, phone number (if you give one), business name and the names and addresses of your sites. When you use the passport: the records, certificates and photographs you add, a record of changes made to them, and basic security information such as sign-in times. When you pay: payment details are collected and held by our payment provider, not by us .</p>
+<h3>What we collect</h3><p>If you register your interest, we keep your name, email address, business name, business address and number of sites, and the date you agreed to be emailed, so that we can tell you when the passport opens. You can ask us to remove you at any time. When you enquire or create an account: your name, work email, phone number (if you give one), business name and the names and addresses of your sites. When you use the passport: the records, certificates and photographs you add, a record of changes made to them, and basic security information such as sign-in times. When you pay: payment details are collected and held by our payment provider, not by us .</p>
 <h3>Why we use it</h3><p>To run your account and passport (to carry out our contract with you), to send reminders and service messages, to take payment and keep financial records (to meet our legal obligations), to protect the service (our legitimate interest in keeping it secure and fair), and to answer your enquiries. [LEGAL BASES TO BE CONFIRMED BY SOLICITOR.]</p>
 <h3>We do not share or sell your data</h3><p>We do not sell your data, use it for advertising, or show it to other customers. Each company can only see its own records; this is enforced by the database itself. Tremcore staff only look at your records to support you. We only use a small number of service providers, strictly to run the service, under written contracts: hosting and database (Supabase), web hosting (Railway), email delivery ([EMAIL PROVIDER]), payments ([STRIPE]) and reading uploaded certificates (Anthropic, which makes the Claude AI model). When you upload a PDF or photo of a certificate or insurance document, a copy is sent to that provider only to read the dates and numbers on it, so we can suggest them to you; nothing is saved until you check and confirm it. [WHETHER THE AI PROVIDER KEEPS THE DOCUMENT, AND ITS TERMS, TO BE CONFIRMED.] Where a provider is outside the UK we rely on approved transfer safeguards. [PROVIDERS, LOCATIONS AND SAFEGUARDS TO BE CONFIRMED.]</p>
 <h3>How long we keep it</h3><p>While your account is open we keep your records. If you cancel, you can use the service until your notice ends; after that you can no longer sign in and your records, documents and photographs are permanently deleted shortly afterwards (within [14] days), except copies in secure backups, which expire on their normal cycle [BACKUP PERIOD TO BE CONFIRMED]. Billing records are kept for [6] years because the law requires it. Enquiries that do not become customers are deleted after [12] months.</p>
@@ -185,4 +201,5 @@ page('/how-it-works/', 'How it works | Tremcore', 'Simple to start, easy to live
 page('/contact/', 'Contact us | Tremcore', 'Ask us a question about the Compliance Passport.', contact, '/contact/')
 print('built 5 pages')
 page('/privacy/', 'Privacy notice (draft) | Tremcore', 'How Tremcore uses your information.', privacy, '/privacy/', noindex=True)
+page('/register/', 'Register your interest | Tremcore', 'Be first to know when the Tremcore Compliance Passport opens.', register, '/register/')
 page('/terms/', 'Terms of use (draft) | Tremcore', 'Terms for the Self-Managed Compliance Passport.', terms, '/terms/', noindex=True)

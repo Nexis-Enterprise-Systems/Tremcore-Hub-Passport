@@ -126,3 +126,9 @@
 - **Aaron chose to switch 2FA OFF for everyone while testing.** The rule "2FA compulsory for Tremcore staff and customer head-office users" is now a setting, `enforce_2fa` (Hub > Settings > Two-step sign-in; administrators only). The migration sets it OFF. **It must be switched back ON before real customers use the system** (go-live checklist item).
 - When off: the database (`mfa_ok()`) and the sign-in page stop asking staff and head-office users for a code, including people who already set up an authenticator. A company that asked for 2FA for its own site users (`companies.require_mfa`) still gets it.
 - When on (or the setting is missing) the strict rule applies exactly as before; the original permission tests run with it on.
+
+## Register your interest (20 Nov 2026, migration 0031)
+- The website goes live before the passport. Every "Sign up" button says "Register your interest" and opens `/register/` (switch `PASSPORT_OPEN = True` in `web/tools/build-site.py` and rebuild to put the real sign-up back at launch).
+- The form collects name, email, business name, business address, number of sites, and a consent tick. Stored in `interest_list`: the public can only ADD a row; only Tremcore staff can read or change the list.
+- Hub "Interest list" page: registered / waiting / link sent / signed up. "Send the sign-up link" emails everyone waiting a plain link (no offer) via `/api/send-launch`; it refuses while sign-up is closed and only marks people as invited after the email service accepted them. Per-person "Send offer code" reuses `/api/send-offer`. People move to "Signed up" automatically when their company becomes active.
+- Revenue page has a monthly (12 months) and yearly report. New revenue is estimated from the monthly values recorded on companies, not from Stripe payments (a payments ledger is a later job).

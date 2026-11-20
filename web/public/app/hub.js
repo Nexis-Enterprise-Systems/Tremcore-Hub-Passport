@@ -15,7 +15,7 @@
   const ROLE = { client_super: 'Head office', client_site: 'Site user', tremcore_admin: 'Tremcore administrator', tremcore_staff: 'Tremcore staff' };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['offers', 'Offers'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
+  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['interest', 'Interest list'], ['offers', 'Offers'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
   const navFor = () => NAV.filter((n) => n[0] !== 'settings' || (ctx && ctx.req.role_name === 'tremcore_admin'));
 
   let ctx = null, token = 0;
@@ -464,13 +464,68 @@
           const [kind, label] = stateOf(c), rowOut = h('span', { class: 'muted', role: 'status' }), live = kind === 'amber';
           const resend = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(resend, async () => { try { const j = await call({ id: c.id }); rowOut.replaceChildren(j.sent ? 'Sent again' : (j.note || 'Not sent')); } catch (err) { rowOut.replaceChildren(err.message); } }); } }, c.sent_at ? 'Resend' : 'Send') : null;
           const off = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(off, async () => { try { await q(ctx.sb.rpc('cancel_offer_code', { p_id: c.id })); await pageOffers(++token); } catch (err) { rowOut.replaceChildren('Not switched off: ' + err.message); } }); } }, 'Switch off') : null;
+          const copyLink = live ? h('button', { class: 'btn ghost small', onclick: async () => { const l = location.origin + '/app/?signup=1&code=' + encodeURIComponent(c.code); try { await navigator.clipboard.writeText(l); rowOut.replaceChildren('Link copied'); } catch (e) { rowOut.replaceChildren(l); } } }, 'Copy link') : null;
           const cc = c.used_company && co[c.used_company];
           return h('tr', { 'data-code': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, [c.prospect_name, c.prospect_email].filter(Boolean).join(' · ')), h('td', {}, badge(kind, label)),
             h('td', {}, c.sent_at ? day(c.sent_at) : 'Not emailed'), h('td', {}, day(c.expires_at)),
             h('td', {}, cc ? [h('a', { href: '#/clients/' + cc.id }, cc.name), cc.offer_ends_at ? h('div', { class: 'muted small' }, 'Offer price until ' + day(cc.offer_ends_at)) : null] : ''),
-            h('td', {}, resend, ' ', off, ' ', rowOut));
+            h('td', {}, copyLink, ' ', resend, ' ', off, ' ', rowOut));
         }) : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'No codes yet.'))]))));
     if (flash) showResult(flash);
+  }
+
+  // ---------- Interest list (people who registered on the website before the passport opened) ----------
+  async function pageInterest(my, flash) {
+    chrome('interest', h('h1', {}, 'Interest list'), loading());
+    const rows = await q(ctx.sb.from('interest_list').select('*').order('created_at', { ascending: false }));
+    if (my !== token) return;
+    const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+    const live = rows.filter((r) => r.status !== 'removed');
+    const n = (st) => rows.filter((r) => r.status === st).length;
+    const signed = n('signed_up'), total = live.length;
+    const conv = total ? Math.round((signed / total) * 100) + '%' : '-';
+    const out = h('div', { id: 'interest-out' });
+    const STATE = { registered: ['amber', 'Waiting'], invited: ['green', 'Link sent'], signed_up: ['green', 'Signed up'], removed: ['missing', 'Removed'] };
+    const post = async (url, body) => {
+      const { data } = await ctx.sb.auth.getSession();
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((data && data.session && data.session.access_token) || '') }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'That did not work.');
+      return j;
+    };
+    const waiting = rows.filter((r) => r.status === 'registered').length;
+    const sendAll = h('button', { class: 'btn', type: 'button', id: 'launch-send', disabled: waiting ? null : true, onclick: async () => {
+      if (!window.confirm('Send the sign-up link to ' + waiting + ' ' + (waiting === 1 ? 'person' : 'people') + ' who have not had it yet?')) return;
+      await busy(sendAll, async () => {
+        try { const j = await post('/api/send-launch', {}); await pageInterest(++token, { kind: j.failed ? 'err' : 'ok', text: j.note || ('Sent to ' + j.sent + (j.failed ? '; ' + j.failed + ' did not send, try again.' : '.')) }); }
+        catch (err) { note(out, 'err', err.message); }
+      });
+    } }, 'Send the sign-up link to everyone waiting (' + waiting + ')');
+    const csvBtn = h('button', { class: 'btn ghost', type: 'button', id: 'interest-csv', onclick: () => {
+      const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const head = ['Name', 'Email', 'Business', 'Address', 'Sites', 'Registered', 'Status', 'Link sent', 'Signed up'];
+      const lines = [head].concat(rows.map((r) => [r.name, r.email, r.business_name, r.business_address, r.sites, day(r.created_at), (STATE[r.status] || [])[1], day(r.invited_at), day(r.signed_up_at)]));
+      const a = h('a', { href: URL.createObjectURL(new Blob([lines.map((l) => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' })), download: 'interest-list.csv' }); document.body.append(a); a.click(); a.remove();
+    } }, 'Download as a spreadsheet');
+    chrome('interest', h('h1', {}, 'Interest list'),
+      h('div', { class: 'tiles' }, tile('Registered interest', String(total)), tile('Waiting for the link', String(waiting)), tile('Link sent', String(n('invited'))), tile('Signed up', String(signed)), tile('Registered to signed up', conv)),
+      h('p', { class: 'hint' }, 'People who registered on the website. When the passport opens, send them the plain sign-up link below. They move to "Signed up" by themselves once they pay. To give someone an introductory offer instead, use "Send offer code" on their row.'),
+      h('div', { class: 'actions' }, sendAll, ' ', csvBtn), out,
+      flash ? h('div', { class: 'msg ' + flash.kind, role: 'status' }, flash.text) : null,
+      h('div', { class: 'tablewrap' }, h('table', { id: 'interest-table' },
+        h('thead', {}, h('tr', {}, ['Name', 'Business', 'Address', 'Sites', 'Registered', 'Status', ''].map((x) => h('th', {}, x)))),
+        h('tbody', {}, rows.length ? rows.map((r) => {
+          const [kind, label] = STATE[r.status] || ['missing', r.status], rowOut = h('span', { class: 'muted', role: 'status' });
+          const offer = r.status === 'signed_up' || r.status === 'removed' ? null : h('button', { class: 'btn ghost small', onclick: async () => {
+            await busy(offer, async () => { try { const j = await post('/api/send-offer', { email: r.email, name: r.name, days: 30 }); rowOut.replaceChildren(j.sent ? 'Offer emailed. Code ' + j.code : (j.note || '') + ' Link: ' + j.link); } catch (err) { rowOut.replaceChildren(err.message); } });
+          } }, 'Send offer code');
+          const remove = r.status === 'removed' || r.status === 'signed_up' ? null : h('button', { class: 'btn ghost small', onclick: async () => {
+            await busy(remove, async () => { try { await q(ctx.sb.from('interest_list').update({ status: 'removed' }).eq('id', r.id).select()); await pageInterest(++token); } catch (err) { rowOut.replaceChildren(err.message); } });
+          } }, 'Remove');
+          return h('tr', { 'data-email': r.email }, h('td', {}, h('strong', {}, r.name), h('div', { class: 'muted small' }, r.email)), h('td', {}, r.business_name), h('td', {}, r.business_address),
+            h('td', { class: 'num' }, String(r.sites)), h('td', {}, day(r.created_at)), h('td', {}, badge(kind, label), r.invited_at && r.status === 'invited' ? h('div', { class: 'muted small' }, day(r.invited_at)) : null),
+            h('td', {}, offer, ' ', remove, ' ', rowOut));
+        }) : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'Nobody has registered yet.'))]))));
   }
 
   // ---------- Revenue & growth ----------
@@ -491,6 +546,25 @@
     const byLevel = [1, 2, 3].map((l) => { const rows = active.filter((c) => c.level === l); return { l, n: rows.length, v: rows.reduce((t, c) => t + (c.monthly_value_pence || 0), 0) }; }).filter((r) => r.l !== 3 || r.n);
     const top = active.slice().sort((a, b) => (b.monthly_value_pence || 0) - (a.monthly_value_pence || 0)).slice(0, 5);
     const noValue = active.filter((c) => !c.monthly_value_pence).length;
+    let interest = [];
+    try { interest = await q(ctx.sb.from('interest_list').select('created_at,status,signed_up_at')); } catch (e) { interest = []; }
+    if (my !== token) return;
+    const per = (label, from, to) => {
+      const inP = (iso) => iso && new Date(iso) >= from && new Date(iso) < to;
+      const joined = companies.filter((c) => c.subscription !== 'trial' && inP(c.created_at));
+      return { label, reg: interest.filter((r) => inP(r.created_at)).length, signed: joined.length, added: joined.filter((c) => c.subscription === 'active').reduce((t, c) => t + (c.monthly_value_pence || 0), 0) };
+    };
+    const monthRows = [], yearRows = [];
+    for (let i = 11; i >= 0; i--) { const a = new Date(now.getFullYear(), now.getMonth() - i, 1), b = new Date(now.getFullYear(), now.getMonth() - i + 1, 1); monthRows.push(per(a.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }), a, b)); }
+    for (let y = now.getFullYear() - 2; y <= now.getFullYear(); y++) yearRows.push(per(String(y), new Date(y, 0, 1), new Date(y + 1, 0, 1)));
+    const reportBody = h('tbody', {});
+    const showReport = (rowsIn) => reportBody.replaceChildren(...rowsIn.map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'num' }, String(r.reg)), h('td', { class: 'num' }, String(r.signed)), h('td', { class: 'num' }, money(r.added)), h('td', { class: 'num' }, money(r.added * 12)))));
+    showReport(monthRows);
+    const tabM = h('button', { class: 'btn small', type: 'button', id: 'rep-month', onclick: () => { showReport(monthRows); tabM.className = 'btn small'; tabY.className = 'btn ghost small'; } }, 'Monthly');
+    const tabY = h('button', { class: 'btn ghost small', type: 'button', id: 'rep-year', onclick: () => { showReport(yearRows); tabY.className = 'btn small'; tabM.className = 'btn ghost small'; } }, 'Yearly');
+    const report = h('div', { class: 'card', id: 'report-card' }, h('h2', {}, 'Sign-ups and revenue report'), h('div', { class: 'actions' }, tabM, ' ', tabY),
+      h('div', { class: 'tablewrap' }, h('table', { id: 'report-table' }, h('thead', {}, h('tr', {}, ['Period', 'Registered interest', 'Signed up', 'New monthly revenue', 'New yearly value'].map((x) => h('th', {}, x)))), reportBody)),
+      h('p', { class: 'hint' }, 'New revenue is the monthly value of clients who joined in that period, before VAT. It is worked out from the values recorded here, not from individual Stripe payments.'));
     chrome('revenue', h('h1', {}, 'Revenue & growth'),
       h('div', { class: 'tiles' },
         tile('Monthly recurring revenue', money(mrr)), tile('Yearly run rate', money(mrr * 12)),
@@ -499,6 +573,7 @@
         tile('Cancelled', String(count('cancelled'))), tile('Trial to paying', conv)),
       noValue ? h('div', { class: 'msg' }, noValue + ' active client' + (noValue === 1 ? ' has' : 's have') + ' no monthly value set, so the figures above are low. Set them on the Subscriptions page.') : null,
       h('p', { class: 'hint' }, 'Based on the subscriptions and monthly values you record by hand. When Stripe is connected these will fill in automatically. Figures exclude VAT.'),
+      report,
       h('div', { class: 'grid2' },
         h('div', { class: 'card' }, h('h2', {}, 'Revenue by package'), h('div', { class: 'tablewrap' }, h('table', {},
           h('thead', {}, h('tr', {}, ['Package', 'Paying', 'Monthly'].map((x) => h('th', {}, x)))),
@@ -729,6 +804,7 @@
       else if (a === 'sites' && id && UUID.test(id)) await pageSite(my, id);
       else if (a === 'clients') await pageClients(my);
       else if (a === 'subscriptions') await pageSubscriptions(my);
+      else if (a === 'interest') await pageInterest(my);
       else if (a === 'offers') await pageOffers(my);
       else if (a === 'revenue') await pageRevenue(my);
       else if (a === 'renewals') await pageRenewals(my);

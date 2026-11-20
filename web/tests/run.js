@@ -82,11 +82,16 @@ const USERS = {
   const prepCalls = []; let prepReply = { status: 200 };
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
+  const launchCalls = []; let launchOpen = true; let launchPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'pat prospect', email: 'pat@shop.example', business_name: 'Pat Shop Ltd' }];
   const offerCalls = [], mailCalls = []; let offerGood = true, couponExists = false, mailFail = false, myOffer = [], attachOk = true, createOk = true;
   const OFFER_ROW = { id: '99999999-9999-4999-8999-999999999999', code: 'TC-ABC234', prospect_name: 'Pat Prospect', prospect_email: 'pat@prospect.example', discount_pence: 700, months: 12, expires_at: new Date(Date.now() + 20 * 86400000).toISOString(), status: 'active', sent_at: null };
   global.fetch = (u, o) => {
     const url = String(u);
     if (url === 'https://stripe.test/v1/coupons') { offerCalls.push({ k: 'coupon', body: new URLSearchParams(o.body) }); return Promise.resolve(couponExists ? new Response(JSON.stringify({ error: { code: 'resource_already_exists', message: 'Coupon already exists' } }), { status: 400 }) : new Response('{"id":"tc-intro-700-12m"}', { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/signup_open' && o && o.headers && o.headers.Authorization === 'Bearer staff-token') return Promise.resolve(new Response(String(launchOpen), { status: 200 }));
+    if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/interest_list?')) { launchCalls.push({ k: 'list', u: url, auth: o.headers.Authorization }); return Promise.resolve(o.headers.Authorization === 'Bearer staff-token' ? new Response(JSON.stringify(launchPeople), { status: 200 }) : new Response('[]', { status: 401 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/mark_interest_invited') { launchCalls.push({ k: 'mark', b: JSON.parse(o.body) }); return Promise.resolve(new Response('1', { status: 200 })); }
+    if (url === 'https://mail.test/emails/batch') { launchCalls.push({ k: 'mail', b: JSON.parse(o.body) }); return Promise.resolve(mailFail ? new Response('{}', { status: 500 }) : new Response('{"data":[]}', { status: 200 })); }
     if (url === 'https://mail.test/emails') { mailCalls.push({ o, body: JSON.parse(o.body) }); return Promise.resolve(mailFail ? new Response('{}', { status: 500 }) : new Response('{"id":"em_1"}', { status: 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/offer_check') { const b = JSON.parse(o.body); offerCalls.push({ k: 'check', b }); return Promise.resolve(new Response(JSON.stringify(offerGood && b.p_code === 'TC-ABC234' ? [{ discount_pence: 700, months: 12 }] : []), { status: 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/offer_attach') { const b = JSON.parse(o.body); offerCalls.push({ k: 'attach', b, auth: o.headers.Authorization }); return Promise.resolve(attachOk ? new Response(JSON.stringify(b.p_code ? [{ discount_pence: 700, months: 12 }] : []), { status: 200 }) : new Response('{"message":"offer_invalid"}', { status: 400 })); }
@@ -132,6 +137,26 @@ const USERS = {
   r = await post({ name: 'Sam', email: 'nope' }); check('enquiry needs a valid email', r.status === 422);
   const before = sent.length; r = await post({ name: 'Bot', email: 'b@example.com', website: 'http://spam' });
   check('bot field is silently dropped, nothing stored', r.status === 200 && sent.length === before);
+  // ---- register your interest (public) and the launch email (staff)
+  sent.length = 0;
+  let regN = 0; const reg = (b, h) => realFetch(base + '/api/interest', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.' + (++regN) }, h || {}), body: JSON.stringify(b) });
+  const goodReg = { name: 'Pat Prospect', email: 'Pat@Shop.example', business_name: 'Pat Shop Ltd', business_address: '1 High St, Rochester', sites: '3', consent: true };
+  r = await reg(goodReg);
+  check('interest: stored through the public key only, email lower-cased, status not settable', r.status === 200 && sent.length === 1 && sent[0].u.endsWith('/rest/v1/interest_list') && sent[0].o.headers.apikey === 'anon-public-key' && JSON.parse(sent[0].o.body).email === 'pat@shop.example' && JSON.parse(sent[0].o.body).sites === 3 && !('status' in JSON.parse(sent[0].o.body)) && !JSON.stringify(sent[0]).includes('SERVICE-SECRET'));
+  for (const [what, b] of [['no name', { name: '' }], ['bad email', { email: 'nope' }], ['no business', { business_name: '' }], ['no address', { business_address: '' }], ['0 sites', { sites: 0 }], ['101 sites', { sites: 101 }], ['no consent', { consent: false }]]) {
+    const n0 = sent.length; r = await reg(Object.assign({}, goodReg, b)); check('interest: refused when ' + what, r.status === 422 && sent.length === n0);
+  }
+  const n1 = sent.length; r = await reg(Object.assign({}, goodReg, { website: 'http://spam' })); check('interest: bot field dropped silently', r.status === 200 && sent.length === n1);
+  r = await reg(goodReg, { Origin: 'https://evil.example' }); check('interest: another website cannot post to it', r.status === 403);
+  const lr = (b, auth) => realFetch(base + '/api/send-launch', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, auth === null ? {} : { Authorization: auth || 'Bearer staff-token' }), body: JSON.stringify(b || {}) });
+  r = await lr({}, null); check('launch: needs signing in', r.status === 401);
+  launchOpen = false; launchCalls.length = 0; r = await lr({}); check('launch: refuses while sign-up is still closed, nothing sent', r.status === 409 && !launchCalls.some((c) => c.k === 'mail'));
+  launchOpen = true; launchCalls.length = 0; r = await lr({}); let lj = await r.json();
+  const lm = launchCalls.find((c) => c.k === 'mail');
+  check('launch: emails the plain sign-up link (no offer code), list read with the staff member\'s own token', r.status === 200 && lj.sent === 1 && lm && lm.b[0].to[0] === 'pat@shop.example' && lm.b[0].text.includes('/app/?signup=1') && !lm.b[0].text.includes('code=') && launchCalls.find((c) => c.k === 'list').auth === 'Bearer staff-token');
+  check('launch: marks the people who were emailed as invited', JSON.stringify(launchCalls.find((c) => c.k === 'mark').b) === JSON.stringify({ p_ids: ['11111111-1111-1111-1111-111111111111'] }));
+  mailFail = true; launchCalls.length = 0; r = await lr({}); lj = await r.json(); check('launch: if the email service fails nobody is marked as invited', lj.sent === 0 && lj.failed === 1 && !launchCalls.some((c) => c.k === 'mark')); mailFail = false;
+  launchPeople = []; r = await lr({}); lj = await r.json(); check('launch: nobody waiting gives a friendly nothing', r.status === 200 && lj.sent === 0 && !!lj.note);
   r = await post({ name: 'Sam', email: 'sam@example.com' }, { Origin: 'https://evil.example' }); check('enquiry from another website is refused', r.status === 403);
   r = await realFetch(base + '/api/enquiry', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: '{"name":"' + 'x'.repeat(30000) + '"}' }).catch(() => ({ status: 413 }));
   check('huge enquiry is refused', r.status === 413 || r.status === 429);
@@ -482,7 +507,7 @@ const USERS = {
     check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Offers,Revenue,Enquiries,Activity,Settings');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
@@ -591,7 +616,7 @@ const USERS = {
     await p.click('.hubnav >> text=Offers'); await p.waitForSelector('#offer-table tr[data-code]');
     const orow = (c) => p.locator('tr[data-code=' + c + ']');
     check('offers: the codes are listed with their state: waiting, used (with the client and when the offer price ends) and expired', (await orow('TC-WAIT22').innerText()).includes('Waiting') && (await orow('TC-USED22').innerText()).includes('Used') && (await orow('TC-USED22').innerText()).includes('Harbour Cafe Group') && (await orow('TC-USED22').innerText()).includes('Offer price until') && (await orow('TC-OLD222').innerText()).includes('Expired') && (await orow('TC-OLD222').innerText()).includes('Not emailed'));
-    check('offers: only a waiting code can be sent again or switched off', (await orow('TC-WAIT22').locator('button').allInnerTexts()).join() === 'Resend,Switch off' && (await orow('TC-USED22').locator('button').count()) === 0 && (await orow('TC-OLD222').locator('button').count()) === 0);
+    check('offers: only a waiting code can be sent again or switched off', (await orow('TC-WAIT22').locator('button').allInnerTexts()).join() === 'Copy link,Resend,Switch off' && (await orow('TC-USED22').locator('button').count()) === 0 && (await orow('TC-OLD222').locator('button').count()) === 0);
     let sendBody = null, sendAuth = null; await p.route('**/api/send-offer', (rt) => { sendBody = JSON.parse(rt.request().postData()); sendAuth = rt.request().headers().authorization; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'o9', code: 'TC-NEW999', link: base + '/app/?signup=1&code=TC-NEW999', sent: true }) }); });
     await p.fill('#of-name', 'pat prospect'); await p.fill('#of-email', 'pat@prospect.example'); await p.selectOption('#offer-create >> xpath=../..//select', '60').catch(() => {});
     await p.click('#offer-create'); await p.waitForSelector('#offer-link');
@@ -603,6 +628,27 @@ const USERS = {
     check('offers: a bad email address is stopped before anything is sent', (await p.locator('#offer-out').innerText()).includes('email address'));
     await orow('TC-WAIT22').locator('button:has-text("Switch off")').click(); await p.waitForSelector('tr[data-code=TC-WAIT22] >> text=Switched off');
     check('offers: switching a code off marks it switched off and removes its buttons', (await orow('TC-WAIT22').locator('button').count()) === 0);
+
+    // interest list
+    await p.evaluate(() => { const iso = (d) => new Date(Date.now() + d * 86400000).toISOString(); window.__mock.tables.interest_list = [
+      { id: 'i1', name: 'Ivy Interested', email: 'ivy@i.example', business_name: 'Ivy Cafe Ltd', business_address: '2 Quay Rd, Chatham', sites: 2, status: 'registered', created_at: iso(-3), invited_at: null, signed_up_at: null },
+      { id: 'i2', name: 'Sid Signed', email: 'sid@s.example', business_name: 'Sid Gym', business_address: '9 Hill St, Rochester', sites: 1, status: 'signed_up', created_at: iso(-20), invited_at: iso(-10), signed_up_at: iso(-9) },
+      { id: 'i3', name: 'Rob Removed', email: 'rob@r.example', business_name: 'Rob Ltd', business_address: 'x', sites: 1, status: 'removed', created_at: iso(-30), invited_at: null, signed_up_at: null }]; });
+    await p.click('.hubnav >> text=Interest list'); await p.waitForSelector('#interest-table tr[data-email]');
+    const irow = (e) => p.locator('tr[data-email="' + e + '"]');
+    check('interest: lists name, business, address, sites and status', (await irow('ivy@i.example').innerText()).includes('Ivy Cafe Ltd') && (await irow('ivy@i.example').innerText()).includes('2 Quay Rd, Chatham') && (await irow('ivy@i.example').innerText()).includes('Waiting') && (await irow('sid@s.example').innerText()).includes('Signed up'));
+    check('interest: the tiles count registered (not removed), waiting and signed up', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('2 Registered interest') && (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('1 Signed up'));
+    check('interest: only people still waiting can be sent an offer or removed', (await irow('ivy@i.example').locator('button').allInnerTexts()).join() === 'Send offer code,Remove' && (await irow('sid@s.example').locator('button').count()) === 0);
+    let ilBody = null; await p.route('**/api/send-launch', (rt) => { ilBody = JSON.parse(rt.request().postData()); rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"sent":1,"failed":0}' }); });
+    p.once('dialog', (d) => d.accept()); await p.click('#launch-send'); await p.waitForSelector('text=Sent to 1');
+    check('interest: the launch button asks the server to send the link to those waiting', ilBody && !ilBody.ids);
+    let ioBody = null; await p.route('**/api/send-offer', (rt) => { ioBody = JSON.parse(rt.request().postData()); rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'o8', code: 'TC-IVY222', link: base + '/app/?signup=1&code=TC-IVY222', sent: true }) }); });
+    await irow('ivy@i.example').locator('button:has-text("Send offer code")').click(); await p.waitForSelector('tr[data-email="ivy@i.example"] >> text=TC-IVY222');
+    check('interest: "Send offer code" uses the person\'s name and email', ioBody.email === 'ivy@i.example' && ioBody.name === 'Ivy Interested');
+    await irow('ivy@i.example').locator('button:has-text("Remove")').click(); await p.waitForSelector('tr[data-email="ivy@i.example"] >> text=Removed');
+    check('interest: removing marks them removed (kept on record, not emailed again)', (await irow('ivy@i.example').locator('button').count()) === 0);
+    await p.click('.hubnav >> text=Revenue'); await p.waitForSelector('#report-table tbody tr');
+    check('revenue: the monthly report has 12 months and switches to years', (await p.locator('#report-table tbody tr').count()) === 12 && (await (async () => { await p.click('#rep-year'); return p.locator('#report-table tbody tr').count(); })()) === 3);
 
     // the 2FA switch in Settings
     await p.goto(base + '/app/#/settings'); await p.waitForSelector('#mfa-card');
@@ -1290,7 +1336,7 @@ const USERS = {
     await t.ctx.close();
 
     t = await hubPage(null, 'staffonly@t'); pg = t.page;
-    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Offers,Revenue,Enquiries,Activity');
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Interest list,Offers,Revenue,Enquiries,Activity');
     await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
     check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
     await t.ctx.close();
@@ -1312,10 +1358,14 @@ const USERS = {
     check('website does not offer the Managed Service for now (no card, no postcode box)', (await pg.locator('#managed').count()) === 0 && (await pg.locator('#area-check').count()) === 0 && !/Managed Service/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/contact/'); check('contact form offers only Self-Managed as a package', (await pg.locator('#f-pkg option').allInnerTexts()).join('|') === 'Not sure yet|Self-Managed');
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
-    check('website has Sign up buttons everywhere and no "Book a demo" anywhere', (await pg.locator('[data-signup]:visible').count()) >= 2 && !/book (a|my) demo/i.test(await pg.locator('body').innerText()) && (await pg.locator('.hdr-actions [data-signup]').innerText()) === 'Sign up');
+    check('website has Register your interest buttons everywhere and no "Book a demo" anywhere', (await pg.locator('a.btn.solid[href="/register/"]:visible').count()) >= 2 && !/book (a|my) demo/i.test(await pg.locator('body').innerText()) && (await pg.locator('.hdr-actions a.btn.solid').innerText()) === 'Register your interest');
     check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/?login=1"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/?login=1"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);
     await pg.goto(base + '/what-you-get/');
-    check('website Sign up buttons lead to the sign-up page', (await pg.locator('[data-signup]:visible').first().getAttribute('href')) === '/app/?signup=1');
+    check('website Register buttons lead to the interest form while the passport is not open', (await pg.locator('a.btn.solid[href="/register/"]:visible').first().innerText()) === 'Register your interest');
+    await pg.goto(base + '/register/'); let regBody = null; await pg.route('**/api/interest', (rt) => { regBody = JSON.parse(rt.request().postData()); rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+    check('register page has the five fields and a consent box', (await pg.locator('#r-name,#r-email,#r-biz,#r-addr,#r-sites,#r-consent').count()) === 6);
+    await pg.fill('#r-name', 'Pat Prospect'); await pg.fill('#r-email', 'pat@shop.example'); await pg.fill('#r-biz', 'Pat Shop Ltd'); await pg.fill('#r-addr', '1 High St'); await pg.fill('#r-sites', '3'); await pg.check('#r-consent'); await pg.click('#r-go'); await pg.waitForSelector('#r-out.ok');
+    check('register form sends all the details and thanks the person', regBody.business_name === 'Pat Shop Ltd' && regBody.sites === '3' && regBody.consent === true && (await pg.locator('#r-out').innerText()).includes('on the list'));
     signupOpen = false;
     for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
     await pg.goto(base + '/');
