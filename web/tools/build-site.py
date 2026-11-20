@@ -4,7 +4,9 @@ Run:  python3 web/tools/build-site.py     (the generated pages are committed, so
 Placeholders in [SQUARE BRACKETS] must be replaced before launch (see docs/DECISIONS.md)."""
 import os
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public')
-PHONE, EMAIL, HOURS, ADDR, CO = '', 'info@tremcore.co.uk', '', 'Goldfinch Grove, Rochester, Kent, ME3 8FX', '17507064'
+PHONE, EMAIL, HOURS, CO = '', 'info@tremcore.co.uk', '', '17507064'
+# No postal address is shown anywhere (the old one was a personal address). Add a business address here later if one is wanted.
+ADDR = ''
 # Phone and opening hours are left out of the pages until they are filled in above (no placeholder text on the live site).
 PHONE_P = f'<p>{PHONE}</p>' if PHONE else ''
 OR_CALL = f'{OR_CALL}' if PHONE else ''
@@ -50,7 +52,7 @@ def page(path, title, desc, body, current, noindex=False):
 <footer><div class="wrap">
   <div><img src="/img/logo-full.png" alt="Tremcore Ltd" width="150" height="115"><p>Compliance passports for commercial premises.</p></div>
   <nav aria-label="Footer">{foot}<a href="/app/?login=1">Login</a></nav>
-  <div>{PHONE_P}<p>{EMAIL}</p><p>{ADDR}</p></div>
+  <div>{PHONE_P}<p>{EMAIL}</p></div>
   <div class="legal"><span>&copy; 2026 Tremcore Ltd. Company number {CO}.</span></div>
 </div></footer>
 <script src="/site.js"></script>
@@ -141,7 +143,7 @@ how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it wor
 ('Can I see it before I decide?','Watch the short preview on this site. The passport is simple to use, and we are adding short training videos so you can learn it at your own pace. If you have a question first, ask us.'),
 ('How much does it cost?','&pound;14.99 a month for your first site, which includes a head-office user and one manager, and &pound;7.99 a month for each extra site, which includes one more user. Pay yearly and save 15%. Prices exclude VAT.')]) + '</div></div></section>' + cta('Have a question we haven&rsquo;t answered?','Send us a message and we will get back to you.')
 contact = f'''<section class="sec"><div class="wrap contact"><div><div class="eyebrow">Contact us</div><h2 class="h2">Ask us a question</h2><p class="lead">Tell us a little about your properties and which package interests you. We&rsquo;ll get back to you to arrange a time for a walkthrough.</p>
-<dl class="cd">{PHONE_DT}<div><dt>Email</dt><dd>{EMAIL}</dd></div><div><dt>Address</dt><dd>{ADDR}</dd></div>{HOURS_DT}</dl></div>
+<dl class="cd">{PHONE_DT}<div><dt>Email</dt><dd>{EMAIL}</dd></div>{HOURS_DT}</dl></div>
 <form class="f card" id="enquiry" method="post" action="/api/enquiry"><div class="two"><div><label class="lbl" for="f-name">Your name</label><input class="fld" id="f-name" name="name" type="text" autocomplete="name" required maxlength="120"></div><div><label class="lbl" for="f-company">Company</label><input class="fld" id="f-company" name="company" type="text" autocomplete="organization" maxlength="160"></div></div>
 <div class="two"><div><label class="lbl" for="f-email">Email</label><input class="fld" id="f-email" name="email" type="email" autocomplete="email" required maxlength="200"></div><div><label class="lbl" for="f-phone">Phone</label><input class="fld" id="f-phone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div></div>
 <div class="two"><div><label class="lbl" for="f-sites">Number of properties</label><select class="fld" id="f-sites" name="sites"><option value="1">1</option><option value="2-5">2 to 5</option><option value="6-20">6 to 20</option><option value="20+">More than 20</option></select></div><div><label class="lbl" for="f-pkg">Package</label><select class="fld" id="f-pkg" name="package"><option value="">Not sure yet</option><option value="1">Self-Managed</option>''' + ('<option value="2">Managed Service (near Medway)</option>' if SHOW_MANAGED else '') + '''</select></div></div>
@@ -164,7 +166,7 @@ register = f'''<section class="sec"><div class="wrap contact"><div><div class="e
 
 DRAFT = '<div class="quote" role="note"><b>Draft for review.</b> This page is a working draft and has not been checked by a solicitor. It is not in force until Tremcore Ltd has reviewed and finalised it. Items in [SQUARE BRACKETS] are still to be completed.</div>'
 privacy = f'''<section class="sec"><div class="wrap narrow"><div class="eyebrow">Privacy notice</div><h1 class="h2">How Tremcore uses your information</h1>{DRAFT}
-<h3>Who we are</h3><p>Tremcore Ltd, company number {CO}, {ADDR}. Questions about your information: {EMAIL}. [ICO REGISTRATION NUMBER TO BE ADDED.]</p>
+<h3>Who we are</h3><p>Tremcore Ltd, company number {CO}. Questions about your information: {EMAIL}. [ICO REGISTRATION NUMBER TO BE ADDED.]</p>
 <h3>Two roles: your data and our own</h3>
 <p><b>Your records are yours.</b> The compliance records, dates, notes, certificates, photographs, site details and the names of your own colleagues that you put into the passport belong to your company. For that information your company is the <i>controller</i> and Tremcore is your <i>processor</i>: we only handle it to run the service for you, on your instructions, as set out in our <a href="/terms/">Terms</a> and the data processing terms within them.</p>
 <p>For our own account, billing and sales information (who you are, how to contact you, what you pay) Tremcore is the controller.</p>

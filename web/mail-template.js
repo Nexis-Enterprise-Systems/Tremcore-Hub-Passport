@@ -2,7 +2,7 @@
 // Branded email wrapper and the "thank you for registering your interest" email.
 // Email programs ignore most modern styling, so this uses simple tables and inline styles, and the logo is a full web address.
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const COMPANY = { name: 'Tremcore Ltd', address: 'Goldfinch Grove, Rochester, Kent, ME3 8FX', number: '17507064', email: 'info@tremcore.co.uk' };
+const COMPANY = { name: 'Tremcore Ltd', number: '17507064', email: 'info@tremcore.co.uk' };
 const GOLD = '#c9a24a', BLACK = '#0c0b09';
 
 // siteUrl: the website's address with no trailing slash (the logo and links are built from it).
@@ -20,7 +20,7 @@ function shell({ title, bodyHtml, siteUrl, why }) {
     // footer
     + '<tr><td align="center" style="background:#17140f;padding:22px 30px 26px;' + font + 'font-size:12px;line-height:1.6;color:#b9b19a;">'
     + '<div style="color:#e7dfc8;font-weight:bold;">' + esc(COMPANY.name) + '</div>'
-    + '<div>' + esc(COMPANY.address) + '</div><div>Company number ' + esc(COMPANY.number) + '</div>'
+    + '<div>Company number ' + esc(COMPANY.number) + '</div>'
     + '<div style="margin-top:8px;"><a href="mailto:' + COMPANY.email + '" style="color:' + GOLD + ';text-decoration:none;">' + COMPANY.email + '</a> &nbsp;|&nbsp; <a href="' + esc(siteUrl) + '/" style="color:' + GOLD + ';text-decoration:none;">' + esc(siteUrl.replace(/^https?:\/\//, '')) + '</a> &nbsp;|&nbsp; <a href="' + esc(siteUrl) + '/privacy/" style="color:' + GOLD + ';text-decoration:none;">Privacy notice</a></div>'
     + (why ? '<div style="margin-top:10px;color:#8f8978;">' + esc(why) + '</div>' : '')
     + '</td></tr></table></td></tr></table></body></html>';
@@ -40,7 +40,7 @@ function interestThanks(person, siteUrl) {
   ];
   const sign = ['Kindest Regards,', 'Tremcore Passport Team'];
   const why = 'You are receiving this email because you registered your interest on our website. If you would rather not hear from us, just reply with the word STOP.';
-  const text = [hi, '', p[0], '', p[1], '', sign[0], sign[1], '', '--', COMPANY.name, COMPANY.address, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why].join('\n');
+  const text = [hi, '', p[0], '', p[1], '', sign[0], sign[1], '', '--', COMPANY.name, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why].join('\n');
   const para = (t) => '<p style="margin:0 0 18px;">' + esc(t) + '</p>';
   const bodyHtml = para(hi) + para(p[0]) + para(p[1]) + '<p style="margin:26px 0 20px;">' + esc(sign[0]) + '<br><strong>' + esc(sign[1]) + '</strong></p>';
   return { subject: 'Thank you for registering your interest', text, html: shell({ title: 'Thank you for registering your interest', bodyHtml, siteUrl, why }) };
