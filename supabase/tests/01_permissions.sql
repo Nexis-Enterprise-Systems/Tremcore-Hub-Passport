@@ -1058,3 +1058,19 @@ do $$ declare e text; begin
 select 'offer: only a client head-office user can attach a code to their own unpaid company' as test, true as ok;
 select * from chk('offer: a pending offer shows to the head-office user only while unpaid', :'superA', 'aal2', $$select count(*) = 0 from my_offer()$$);
 rollback;
+
+-- Deleting a user who created records must work (migration 0028) ---------------------------------------
+begin;
+insert into auth.users(id,email) values ('00000000-0000-0000-0000-0000000000e1','creator@t');
+insert into profiles(id,full_name,role,company_id,perm) values ('00000000-0000-0000-0000-0000000000e1','Creator','client_super','10000000-0000-0000-0000-00000000000a','full');
+update compliance_items set created_by = '00000000-0000-0000-0000-0000000000e1' where id = '30000000-0000-0000-0000-000000000001';
+insert into offer_codes(code, prospect_email, expires_at, created_by) values ('TC-DELTST', 'd@example.com', now() + interval '1 day', '00000000-0000-0000-0000-0000000000e1');
+delete from auth.users where id = '00000000-0000-0000-0000-0000000000e1';
+select 'delete user: a user who created records can be deleted, and the records stay' as test,
+  (select count(*) = 1 from compliance_items where id = '30000000-0000-0000-0000-000000000001' and created_by is null)
+  and (select count(*) = 1 from offer_codes where code = 'TC-DELTST' and created_by is null)
+  and (select count(*) = 0 from profiles where id = '00000000-0000-0000-0000-0000000000e1') as ok;
+select 'delete user: no column pointing at a person is left without a rule' as test,
+  (select count(*) = 0 from pg_constraint c where c.contype = 'f' and c.confdeltype = 'a' and c.connamespace = 'public'::regnamespace and c.confrelid in ('public.profiles'::regclass, 'auth.users'::regclass)
+     and not (select a.attnotnull from pg_attribute a where a.attrelid = c.conrelid and a.attnum = c.conkey[1])) as ok;
+rollback;
