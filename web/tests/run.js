@@ -15,7 +15,7 @@ process.env.STRIPE_API_BASE = 'https://stripe.test';
 process.env.ANTHROPIC_API_KEY = 'sk-ant-FAKE-MUST-NEVER-LEAK';
 process.env.ANTHROPIC_API_BASE = 'https://anthropic.test';
 process.env.EMAIL_API_KEY = 'mail-key-MUST-NOT-LEAK';
-process.env.EMAIL_FROM = 'Tremcore <hello@tremcore.co.uk>';
+process.env.EMAIL_FROM = 'Tremcore <info@tremcore.co.uk>';
 process.env.EMAIL_API_BASE = 'https://mail.test';
 const server = require('../server.js');
 const mockJs = fs.readFileSync(path.join(__dirname, 'mock-supabase.js'), 'utf8');
@@ -289,7 +289,7 @@ const USERS = {
       check('offer email: staff make a code with their own token, so the database decides who is allowed', rr.status === 200 && offerCalls.some((c) => c.k === 'create' && c.auth === 'Bearer staff-token' && c.b.p_days === 30));
       check('offer email: the email is sent to the prospect from Tremcore with the link and code', jo.sent === true && mailCalls.length === 1 && mailCalls[0].body.to[0] === 'pat@prospect.example');
       const mb = mailCalls[0].body;
-      check('offer email: it states the prices (7.99 for 12 months, normally 14.99, extra sites 7.99) and the code link', mb.text.includes('£7.99 a month + VAT for your first 12 months') && mb.text.includes('£14.99') && mb.text.includes('Each additional site: £7.99') && mb.text.includes('/app/?signup=1&code=TC-ABC234') && mb.html.includes('Sign up with your code') && mb.from === 'Tremcore <hello@tremcore.co.uk>' && mailCalls[0].o.headers.Authorization === 'Bearer mail-key-MUST-NOT-LEAK');
+      check('offer email: it states the prices (7.99 for 12 months, normally 14.99, extra sites 7.99) and the code link', mb.text.includes('£7.99 a month + VAT for your first 12 months') && mb.text.includes('£14.99') && mb.text.includes('Each additional site: £7.99') && mb.text.includes('/app/?signup=1&code=TC-ABC234') && mb.html.includes('Sign up with your code') && mb.from === 'Tremcore <info@tremcore.co.uk>' && mailCalls[0].o.headers.Authorization === 'Bearer mail-key-MUST-NOT-LEAK');
       check('offer email: the secret keys never appear in the answer', !JSON.stringify(jo).includes('MUST-NOT-LEAK') && !JSON.stringify(jo).includes('SERVICE-SECRET') && jo.code === 'TC-ABC234' && jo.link.includes('code=TC-ABC234'));
       check('offer email: it is marked as emailed afterwards', offerCalls.some((c) => c.k === 'sent' && c.b.p_id === OFFER_ROW.id));
       mailFail = true; offerCalls.length = 0; rr = await so({ email: 'pat@prospect.example', days: 30 }); jo = await rr.json();
@@ -946,7 +946,7 @@ const USERS = {
       if (level) window.__mock.users['site@t'].profile.level = level;
     };
     t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
-    check('passport: Email Tremcore (not a phone number) is at the very top of the screen for a Self-Managed client', (await t.page.locator('main > .callbar #contact-tremcore').count()) === 1 && (await t.page.locator('#contact-tremcore').innerText()) === 'Email Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk') && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
+    check('passport: Email Tremcore (not a phone number) is at the very top of the screen for a Self-Managed client', (await t.page.locator('main > .callbar #contact-tremcore').count()) === 1 && (await t.page.locator('#contact-tremcore').innerText()) === 'Email Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('mailto:info@tremcore.co.uk') && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
     check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.stat.red .num').innerText()) === '1' && (await t.page.locator('.stat.missing .num').innerText()) === '1' && (await t.page.locator('.stat.green .num').innerText()) === '2');
     check('passport: a check with no date is "No date", never green', (await t.page.locator('.item:has-text("PAT Testing") .tag').innerText()) === 'No date' && (await t.page.locator('.item:has-text("PAT Testing") .dot.missing').count()) === 1 && (await t.page.locator('.item:has-text("PAT Testing") .dot.green').count()) === 0);
     check('passport: overdue, due soon and in date are labelled in words as well as colour', (await t.page.locator('.item:has-text("Fire Alarm Test") .tag').innerText()) === 'Overdue' && (await t.page.locator('.item:has-text("Gas Safety") .tag').innerText()) === 'Due soon' && (await t.page.locator('.item:has-text("EICR") .tag').innerText()) === 'In date');
@@ -1126,7 +1126,7 @@ const USERS = {
     check('settings: head office can change the business phone', (await calls(t.page, 'rpc:update_business')).pop().p_phone === '01634 999999');
     await t.page.fill('[data-site-name=s2]', 'Station Road Depot'); await t.page.click('[data-save-site=s2]'); await t.page.waitForSelector('text=Site saved.');
     check('settings: head office can rename a site', (await t.page.evaluate(() => window.__mock.tables.properties[1].name)) === 'Station Road Depot');
-    check('settings: Email Tremcore help button', (await t.page.locator('#help-email').getAttribute('href')).startsWith('mailto:hello@tremcore.co.uk'));
+    check('settings: Email Tremcore help button', (await t.page.locator('#help-email').getAttribute('href')).startsWith('mailto:info@tremcore.co.uk'));
     await t.ctx.close();
     // a view-only user: sees tasks and emergency details but cannot change them
     t = await newPage(appSeed, { rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');

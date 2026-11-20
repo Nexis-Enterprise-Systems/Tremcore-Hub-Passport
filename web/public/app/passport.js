@@ -540,7 +540,7 @@
         }) }, 'Save')] : [h('strong', {}, p.name), h('span', { class: 'muted small' }, [p.address, p.postcode].filter(Boolean).join(', '))]);
       };
       const premises = h('div', { class: 'card' }, h('h2', {}, 'Manage Premises'), ...props.map(siteRow),
-        h('p', { class: 'muted small' }, 'To add another site, ', h('a', { href: 'mailto:hello@tremcore.co.uk?subject=Add%20a%20site' }, 'email Tremcore'), '. Each site is £7.99 + VAT per month.'));
+        h('p', { class: 'muted small' }, 'To add another site, ', h('a', { href: 'mailto:info@tremcore.co.uk?subject=Add%20a%20site' }, 'email Tremcore'), '. Each site is £7.99 + VAT per month.'));
       const lvl = (company && company.level) || (ctx.req && ctx.req.level) || 1;
       const n = props.length, yearly = company && company.billing_interval === 'annual';
       const owned = extras.filter((e) => e.owned).map((e) => e.name);
@@ -568,7 +568,7 @@
         h('button', { class: 'btn small ghost', id: 'open-tasks', type: 'button', onclick: () => go('tasks') }, 'Open My Tasks'));
       const help = h('div', { class: 'card' }, h('h2', {}, 'Help & Support'),
         h('p', { class: 'muted' }, 'Questions about your passport? We are happy to help.'),
-        h('a', { class: 'btn small', id: 'help-email', href: 'mailto:hello@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'Email Tremcore'));
+        h('a', { class: 'btn small', id: 'help-email', href: 'mailto:info@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'Email Tremcore'));
       const acct = h('div', { class: 'card' }, h('h2', {}, 'My account'), ...(ctx.account || []));
       shell('settings', h('div', { class: 'card' }, h('h1', {}, 'Settings'), ...heading(note), box), biz, premises, plan, custom, help, acct);
     }

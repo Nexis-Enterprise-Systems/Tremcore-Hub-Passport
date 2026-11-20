@@ -43,7 +43,7 @@
   }
   // Every signed-in client screen has a contact button at the top. Self-Managed (Level 1) clients email Tremcore for now (no phone calls);
   // Managed clients (Levels 2 and 3) get Call Tremcore. The phone number is a placeholder until the real one is known.
-  const SUPPORT_EMAIL = 'hello@tremcore.co.uk';
+  const SUPPORT_EMAIL = 'info@tremcore.co.uk';
   let contactLevel = 1;
   let setupNote = null;   // shown once on the passport right after first-run set-up
   const callBar = () => h('div', { class: 'callbar' }, contactLevel > 1
