@@ -160,6 +160,7 @@
       if (name === 'regen_clock_token') { if (M().regenError) return { data: null, error: { message: 'not_allowed' } }; const p = (db().properties || []).find((x) => x.id === args.p_property); if (p) p.clock_token = 'b'.repeat(32); return { data: p && p.clock_token }; }
       if (name === 'cancel_offer_code') { const r = (db().offer_codes || []).find((x) => x.id === args.p_id); if (r) r.status = 'cancelled'; return { data: 'cancelled' }; }
       if (name === 'attach_my_offer') { if (M().attachFail) return { data: null, error: { message: 'offer_invalid' } }; return { data: [{ discount_pence: 700, months: 12 }] }; }
+      if (name === 'mfa_enforced') return { data: M().mfaEnforced === false ? false : true };
       if (name === 'passport_rights') return { data: [M().rights || { can_edit: true, can_manage: true }] };
       if (name === 'my_access' && M().accessError) return { data: null, error: { message: M().accessError } };
       if (name === 'my_access') return { data: [M().access || { state: 'ok', is_head: true }] };
@@ -194,7 +195,7 @@
         return { data: 'c-new', error: null };
       }
       if (name !== 'auth_requirements' || !userRow() || !userRow().profile) return { data: [] };
-      return { data: [userRow().profile] };
+      return { data: [M().mfaEnforced === false && userRow().profile.role_name !== 'client_site' ? Object.assign({}, userRow().profile, { mfa_required: false }) : userRow().profile] };
     }
   }; } };
 })();

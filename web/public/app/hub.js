@@ -638,6 +638,9 @@
     const rows = await q(ctx.sb.from('app_settings').select('key,value').eq('key', 'self_signup_open'));
     if (my !== token) return;
     const open = rows.length > 0 && rows[0].value === true;
+    const mfaRows = await q(ctx.sb.from('app_settings').select('key,value').eq('key', 'enforce_2fa'));
+    if (my !== token) return;
+    const mfaOn = !(mfaRows.length > 0 && mfaRows[0].value === false);
     const areaRows = await q(ctx.sb.from('app_settings').select('key,value').in('key', ['managed_base', 'managed_radius_miles']));
     if (my !== token) return;
     const base = (areaRows.find((r) => r.key === 'managed_base') || {}).value || null;
@@ -652,7 +655,21 @@
         } catch (err) { note(out, 'err', 'Not changed: ' + err.message); }
       });
     } }, open ? 'Close sign-up' : 'Open sign-up');
+    const mfaOut = h('div');
+    const mfaBtn = h('button', { class: 'btn small' + (mfaOn ? ' danger' : ''), id: 'mfa-toggle', onclick: async () => {
+      await busy(mfaBtn, async () => {
+        try {
+          const done = await q(ctx.sb.from('app_settings').update({ value: !mfaOn, updated_at: new Date().toISOString() }).eq('key', 'enforce_2fa').select());
+          if (!done || !done.length) throw new Error('Only a Tremcore administrator can change this.');
+          pageSettings(++token);
+        } catch (err) { note(mfaOut, 'err', 'Not changed: ' + err.message); }
+      });
+    } }, mfaOn ? 'Switch 2FA off' : 'Switch 2FA on');
     chrome('settings', h('h1', {}, 'Settings'),
+      h('section', { class: 'card', id: 'mfa-card' },
+        h('div', { class: 'titlerow' }, h('h2', {}, 'Two-step sign-in (2FA)'), badge(mfaOn ? 'green' : 'red', mfaOn ? 'On' : 'Off')),
+        h('p', { class: 'hint' }, mfaOn ? 'Tremcore staff and customer head-office users must enter a code from an authenticator app each time they sign in.' : 'OFF: nobody is asked for a code. Fine for testing, but switch it back on before real customers use the system, because anyone with a staff password could see every client\u2019s records.'),
+        h('div', { class: 'actions' }, mfaBtn), mfaOut),
       h('section', { class: 'card' },
         h('div', { class: 'titlerow' }, h('h2', {}, 'Self-Managed sign-up'), badge(open ? 'green' : 'missing', open ? 'Open' : 'Closed')),
         h('p', {}, open

@@ -121,3 +121,8 @@
 - One code per prospect (`TC-XXXXXX`), single use, expiry date (14/30/60/90 days), can be switched off. Made in the hub (Offers page) by Tremcore staff with 2FA; clients cannot see or create codes. A code is used up when the first payment is confirmed (not when sign-up starts), and the company's recorded monthly value is reduced by £7 for the offer period.
 - The email goes out automatically through Resend (`EMAIL_API_KEY`, `EMAIL_FROM`; the sending address must be on a domain verified in Resend). If it is not set up or fails, the code is still made and the hub shows the link to send by hand.
 - Not built: the recorded monthly value is not raised back after 12 months (MRR will read £7 low for that client until set by hand); no reminder before the offer ends.
+
+## 2FA switch (20 Nov 2026, migration 0029)
+- **Aaron chose to switch 2FA OFF for everyone while testing.** The rule "2FA compulsory for Tremcore staff and customer head-office users" is now a setting, `enforce_2fa` (Hub > Settings > Two-step sign-in; administrators only). The migration sets it OFF. **It must be switched back ON before real customers use the system** (go-live checklist item).
+- When off: the database (`mfa_ok()`) and the sign-in page stop asking staff and head-office users for a code, including people who already set up an authenticator. A company that asked for 2FA for its own site users (`companies.require_mfa`) still gets it.
+- When on (or the setting is missing) the strict rule applies exactly as before; the original permission tests run with it on.

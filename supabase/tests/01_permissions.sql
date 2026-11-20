@@ -44,6 +44,8 @@ insert into jobs(id,property_id,issue_type,location,description) values
  ('40000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-0000000000c1','Leak','Kitchen','Drip');
 insert into job_internal(job_id,notes) values ('40000000-0000-0000-0000-000000000001','secret');
 
+update app_settings set value = 'true'::jsonb where key = 'enforce_2fa';   -- the strict rule is what the tests below prove; the switch itself is tested at the end
+
 -- Helper: run a check as a given user. Usage: select * from chk('label', uid, aal, 'sql returning boolean');
 create function chk(label text, uid uuid, aal text, q text) returns table(test text, ok boolean)
 language plpgsql as $$
@@ -1073,4 +1075,21 @@ select 'delete user: a user who created records can be deleted, and the records 
 select 'delete user: no column pointing at a person is left without a rule' as test,
   (select count(*) = 0 from pg_constraint c where c.contype = 'f' and c.confdeltype = 'a' and c.connamespace = 'public'::regnamespace and c.confrelid in ('public.profiles'::regclass, 'auth.users'::regclass)
      and not (select a.attnotnull from pg_attribute a where a.attrelid = c.conrelid and a.attnum = c.conkey[1])) as ok;
+rollback;
+
+-- The 2FA switch (migration 0029) -----------------------------------------------------------------------
+begin;
+select 'switch: the setting exists and a fresh system is OFF (Aaron chose this for testing)' as test, (select count(*) = 1 from app_settings where key = 'enforce_2fa') as ok;
+select * from chk('switch: with 2FA enforced, staff without a code see nothing', :'staff', 'aal1', $$select count(*) = 0 from companies$$);
+select * from chk('switch: with 2FA enforced, a head-office user without a code sees nothing', :'superA', 'aal1', $$select count(*) = 0 from properties$$);
+update app_settings set value = 'false'::jsonb where key = 'enforce_2fa';
+select * from chk('switch: with 2FA off, staff can work without a code', :'staff', 'aal1', $$select count(*) >= 3 from companies$$);
+select * from chk('switch: with 2FA off, a head-office user can work without a code', :'superA', 'aal1', $$select count(*) >= 1 from properties$$);
+select * from chk('switch: with 2FA off, auth_requirements no longer demands 2FA for staff', :'staff', 'aal1', $$select not (select mfa_required from auth_requirements())$$);
+update companies set require_mfa = true where id = '10000000-0000-0000-0000-00000000000a';
+select * from chk('switch: a company that asked for 2FA for its own users still needs it, even with the switch off', :'siteAu', 'aal1', $$select count(*) = 0 from properties$$);
+select * from chk('switch: ...and passes once the code is given', :'siteAu', 'aal2', $$select count(*) >= 1 from properties$$);
+select * from chk('switch: a customer cannot change the setting', :'superA', 'aal2', $$with u as (update app_settings set value = 'true'::jsonb where key = 'enforce_2fa' returning 1) select count(*) = 0 from u$$);
+select * from chk('switch: an administrator can switch it back on', :'staff', 'aal1', $$with u as (update app_settings set value = 'true'::jsonb where key = 'enforce_2fa' returning 1) select count(*) = 1 from u$$);
+select * from chk('switch: with it back on, the strict rule applies again', :'staff', 'aal1', $$select count(*) = 0 from companies$$);
 rollback;

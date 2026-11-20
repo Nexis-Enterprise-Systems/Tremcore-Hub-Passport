@@ -620,7 +620,9 @@
     const aal = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data || {};
     const factors = (await sb.auth.mfa.listFactors()).data || {};
     const verified = factors.totp || [];
-    if (verified.length && aal.currentLevel !== 'aal2') return viewVerify(verified[0].id);
+    // The switch in Hub > Settings: when 2FA is not being enforced, staff and head-office users are not asked for a code (a company that asked for 2FA still is).
+    let enforced = true; try { const en = await sb.rpc('mfa_enforced'); if (en && en.data === false) enforced = false; } catch (e) { enforced = true; }
+    if (verified.length && aal.currentLevel !== 'aal2' && (enforced || req.mfa_required)) return viewVerify(verified[0].id);
     if ((req.mfa_required && !verified.length) || wantEnroll) return viewEnroll(req.mfa_required);
     return viewHome(req, verified.length > 0);
   }

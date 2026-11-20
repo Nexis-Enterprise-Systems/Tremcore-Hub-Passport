@@ -453,7 +453,7 @@ const USERS = {
       { id: C1, name: 'Harbour Cafe Group', level: 1, subscription: 'active', monthly_value_pence: 4900, require_mfa: false, contact_email: 'ops@harbour.example', created_at: '2026-10-01' },
       { id: C2, name: 'Quay Offices Ltd', level: 2, subscription: 'trial', monthly_value_pence: 0, require_mfa: true, created_at: '2026-10-02' },
       { id: C3, name: 'Online Bakery Ltd', level: 1, subscription: 'trial', monthly_value_pence: 0, require_mfa: false, source: 'self_signup', contact_name: 'Bea Baker', contact_email: 'bea@bakery.example', created_at: '2026-11-08' }],
-    app_settings: [{ key: 'self_signup_open', value: false }, { key: 'managed_base', value: { label: 'Medway (ME)', lat: 51.385, lng: 0.52 } }, { key: 'managed_radius_miles', value: 30 }],
+    app_settings: [{ key: 'enforce_2fa', value: true }, { key: 'self_signup_open', value: false }, { key: 'managed_base', value: { label: 'Medway (ME)', lat: 51.385, lng: 0.52 } }, { key: 'managed_radius_miles', value: 30 }],
     properties: [{ id: P1, company_id: C1, name: 'Harbour Cafe Ipswich', address: '1 Quay Road' }, { id: P2, company_id: C1, name: 'Harbour Cafe Colchester' }, { id: P3, company_id: C2, name: 'Quay House' }],
     compliance_items: [
       { id: 'i1', property_id: P1, grp: 'Fire safety', title: 'Fire risk assessment', basis: 'legal', frequency_months: 12, due_date: day(120), notes: '' },
@@ -604,6 +604,12 @@ const USERS = {
     await orow('TC-WAIT22').locator('button:has-text("Switch off")').click(); await p.waitForSelector('tr[data-code=TC-WAIT22] >> text=Switched off');
     check('offers: switching a code off marks it switched off and removes its buttons', (await orow('TC-WAIT22').locator('button').count()) === 0);
 
+    // the 2FA switch in Settings
+    await p.goto(base + '/app/#/settings'); await p.waitForSelector('#mfa-card');
+    check('2FA switch: Settings shows 2FA is on, with a button to switch it off', (await p.locator('#mfa-card').innerText()).includes('On') && (await p.locator('#mfa-toggle').innerText()) === 'Switch 2FA off');
+    await p.click('#mfa-toggle'); await p.waitForSelector('#mfa-toggle:has-text("Switch 2FA on")');
+    const mfaUp = (await dbCalls(p, "x.table==='app_settings'&&x.op==='update'")).pop();
+    check('2FA switch: pressing it saves "off" and the page warns it must go back on before real customers', mfaUp.payload.value === false && mfaUp.filters.includes('key=enforce_2fa') && (await p.locator('#mfa-card').innerText()).includes('OFF'));
     // phone layout + errors
     await p.setViewportSize({ width: 390, height: 800 });
     for (const u of ['#/dashboard', '#/clients', '#/clients/' + C1, '#/sites/' + P1, '#/subscriptions', '#/offers', '#/enquiries']) {
@@ -1265,7 +1271,7 @@ const USERS = {
     await pg.click('a:has-text("Online Bakery Ltd")'); await pg.waitForSelector('.msg.ok');
     check('their page tells staff who to contact and what to do next', (await pg.locator('.msg.ok').innerText()).includes('bea@bakery.example') && (await pg.locator('.msg.ok').innerText()).includes('Active'));
     await pg.click('.hubnav >> text=Settings'); await pg.waitForSelector('text=Self-Managed sign-up');
-    check('settings shows sign-up as closed with what to do before opening', (await pg.locator('.badge:has-text("Closed")').count()) === 1 && (await pg.locator('.hint').innerText()).includes('Confirm email'));
+    check('settings shows sign-up as closed with what to do before opening', (await pg.locator('.badge:has-text("Closed")').count()) === 1 && (await pg.locator('.hint:has-text("Confirm email")').innerText()).includes('Confirm email'));
     check('settings shows the Managed Service area: Medway, 30 miles', (await pg.locator('text=within 30 miles of Medway (ME)').count()) === 1);
     await pg.fill('#m-miles', '0'); await pg.click('button:has-text("Save area")'); await pg.waitForSelector('.msg.err');
     check('a silly distance is refused', (await pg.locator('.msg.err').innerText()).includes('between 1 and 300'));
