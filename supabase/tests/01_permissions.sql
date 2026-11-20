@@ -1093,3 +1093,19 @@ select * from chk('switch: a customer cannot change the setting', :'superA', 'aa
 select * from chk('switch: an administrator can switch it back on', :'staff', 'aal1', $$with u as (update app_settings set value = 'true'::jsonb where key = 'enforce_2fa' returning 1) select count(*) = 1 from u$$);
 select * from chk('switch: with it back on, the strict rule applies again', :'staff', 'aal1', $$select count(*) = 0 from companies$$);
 rollback;
+
+-- account_overview (migration 0030): who is who, private to the dashboard -----------------------------
+begin;
+select 'overview: Hub staff, customer head office and site users are labelled, with their company' as test,
+  (select account_type = 'HUB: administrator' and company is null from account_overview where email = 'staff@t')
+  and (select account_type = 'CUSTOMER: head office' and company = 'Company A (L1)' and plan = 'Self-Managed' from account_overview where email = 'superA@t')
+  and (select account_type = 'CUSTOMER: site user (update)' from account_overview where email = 'siteA_update@t') as ok;
+insert into auth.users(id,email) values ('00000000-0000-0000-0000-0000000000f9','orphan@t');
+select 'overview: a login with no profile is flagged as having no access' as test, (select account_type like 'NO ACCESS%' from account_overview where email = 'orphan@t') as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform count(*) from account_overview; e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a signed-in user could read account_overview: %', e; end if; end $$;
+select 'overview: signed-in users (even Hub staff) cannot read it through the app, so email addresses stay private' as test, true as ok;
+rollback;
