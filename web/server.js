@@ -105,6 +105,7 @@ async function handleEnquiry(req, res) {
   return reply(200, { ok: true });
 }
 
+const { interestThanks, COMPANY } = require('./mail-template');
 const interestHits = new Map();
 function limitedInterest(ip) { const now = Date.now(), a = (interestHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); interestHits.set(ip, a); if (interestHits.size > 5000) for (const [k, v] of interestHits) if (!v.some((t) => now - t < 600000)) interestHits.delete(k); return a.length > 5; }
 // ---- "Register your interest" (public website form). Stored through the public key; the database only lets anyone ADD a row.
@@ -132,6 +133,16 @@ async function handleInterest(req, res) {
     if (r.status === 409) return out(200, { ok: true });   // already on the list: the same friendly answer, and it does not reveal who is registered
     if (!r.ok) { console.error('interest insert failed', r.status); return out(502, { error: 'Sorry, that did not send. Please try again, or email us.' }); }
   } catch (e) { console.error('interest insert error', e.message); return out(502, { error: 'Sorry, that did not send. Please try again, or email us.' }); }
+  // The thank-you email. If it cannot be sent the person is still registered, so this never turns into an error for them.
+  if (EMAIL_API_KEY && EMAIL_FROM) {
+    try {
+      const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+      const mail = interestThanks(row, proto + '://' + req.headers.host);
+      const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: EMAIL_FROM, to: [row.email], reply_to: COMPANY.email, subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(8000) });
+      if (!er.ok) console.error('interest thank-you email failed', er.status);
+    } catch (e) { console.error('interest thank-you email error', e.message); }
+  }
   return out(200, { ok: true });
 }
 

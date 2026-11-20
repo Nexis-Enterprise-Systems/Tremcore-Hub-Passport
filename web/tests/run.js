@@ -143,6 +143,12 @@ const USERS = {
   const goodReg = { name: 'Pat Prospect', email: 'Pat@Shop.example', business_name: 'Pat Shop Ltd', business_address: '1 High St, Rochester', sites: '3', consent: true };
   r = await reg(goodReg);
   check('interest: stored through the public key only, email lower-cased, status not settable', r.status === 200 && sent.length === 1 && sent[0].u.endsWith('/rest/v1/interest_list') && sent[0].o.headers.apikey === 'anon-public-key' && JSON.parse(sent[0].o.body).email === 'pat@shop.example' && JSON.parse(sent[0].o.body).sites === 3 && !('status' in JSON.parse(sent[0].o.body)) && !JSON.stringify(sent[0]).includes('SERVICE-SECRET'));
+  const tm = mailCalls.find((c) => c.body.subject === 'Thank you for registering your interest');
+  check('interest: a thank-you email goes to the person, from Tremcore, replies go to info@', !!tm && tm.body.to[0] === 'pat@shop.example' && tm.body.from === 'Tremcore <info@tremcore.co.uk>' && tm.body.reply_to === 'info@tremcore.co.uk');
+  check('interest: the email greets them by first name and carries the wording, sign-off, logo and company footer', !!tm && tm.body.text.startsWith('Hi Pat,') && tm.body.text.includes('Thank you for registering your interest in using the Tremcore Passport') && tm.body.text.includes('Tremcore Passport Team') && tm.body.html.includes('/img/logo-full.png') && tm.body.html.includes('Company number 17507064') && tm.body.html.includes('Goldfinch Grove') && tm.body.html.includes('Thank you for registering your interest</div>'));
+  check('interest: the email cannot be tampered with by what someone types as their name', !(() => { const m2 = require('../mail-template').interestThanks({ name: '<script>x</script>' }, 'http://x'); return m2.html.includes('<script>'); })());
+  mailCalls.length = 0; r = await reg(Object.assign({}, goodReg, { email: 'second@shop.example' })); mailFail = true; mailCalls.length = 0;
+  r = await reg(Object.assign({}, goodReg, { email: 'third@shop.example' })); check('interest: if the thank-you email cannot be sent the person is still registered', r.status === 200); mailFail = false;
   for (const [what, b] of [['no name', { name: '' }], ['bad email', { email: 'nope' }], ['no business', { business_name: '' }], ['no address', { business_address: '' }], ['0 sites', { sites: 0 }], ['101 sites', { sites: 101 }], ['no consent', { consent: false }]]) {
     const n0 = sent.length; r = await reg(Object.assign({}, goodReg, b)); check('interest: refused when ' + what, r.status === 422 && sent.length === n0);
   }

@@ -132,3 +132,6 @@
 - The form collects name, email, business name, business address, number of sites, and a consent tick. Stored in `interest_list`: the public can only ADD a row; only Tremcore staff can read or change the list.
 - Hub "Interest list" page: registered / waiting / link sent / signed up. "Send the sign-up link" emails everyone waiting a plain link (no offer) via `/api/send-launch`; it refuses while sign-up is closed and only marks people as invited after the email service accepted them. Per-person "Send offer code" reuses `/api/send-offer`. People move to "Signed up" automatically when their company becomes active.
 - Revenue page has a monthly (12 months) and yearly report. New revenue is estimated from the monthly values recorded on companies, not from Stripe payments (a payments ledger is a later job).
+
+## Thank-you email on registering interest (20 Nov 2026)
+- When someone registers on the website the server emails them a branded thank-you (`web/mail-template.js`: black and gold header, wording agreed with Aaron, logo, company footer). Replies go to info@tremcore.co.uk. It is sent once (not again if the same email registers twice) and a failed send never stops the registration. Needs `EMAIL_API_KEY` and `EMAIL_FROM` in Railway; without them nothing is sent.
