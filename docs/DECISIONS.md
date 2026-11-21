@@ -135,3 +135,6 @@
 
 ## Thank-you email on registering interest (20 Nov 2026)
 - When someone registers on the website the server emails them a branded thank-you (`web/mail-template.js`: black and gold header, wording agreed with Aaron, logo, company footer). Replies go to info@tremcore.co.uk. It is sent once (not again if the same email registers twice) and a failed send never stops the registration. Needs `EMAIL_API_KEY` and `EMAIL_FROM` in Railway; without them nothing is sent.
+
+## Live database set-up (21 Nov 2026)
+- New Supabase projects do not give the logged-in role access to new tables automatically (the old test project did). The Hub then fails with "permission denied for table companies". `supabase/tools/build-live-sql.sh` builds one file that sets those default grants first, then applies every migration. Row-level security still decides who sees which rows; anonymous visitors only get the few explicit grants (enquiries, interest list, etc.). Use it for any new empty project.
