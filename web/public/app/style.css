@@ -463,3 +463,4 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 
 /* "Update now" bar, shown when a newer version of the site has been deployed */
 .updatebar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;background:#121212;border:1px solid var(--gold);border-radius:999px;box-shadow:0 8px 30px rgba(0,0,0,.6);color:var(--text);font-weight:600;max-width:calc(100vw - 24px)}
+.hubuser-actions{display:flex;gap:18px;align-items:center}

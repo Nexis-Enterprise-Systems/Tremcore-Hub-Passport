@@ -106,7 +106,7 @@
         h('div', { class: 'hubuser' },
           h('div', { class: 'muted' }, (r.full_name || 'Staff') + ' · ' + (ROLE[r.role_name] || r.role_name)),
           h('div', { class: 'hubuser-row' }, h('span', { class: 'muted small' }, '2FA'), h('span', { class: 'badge ' + (ctx.hasFactor ? 'on' : 'off'), title: '2FA' }, ctx.hasFactor ? 'On' : 'Off')),
-          h('button', { class: 'linkbtn', onclick: ctx.signOut }, 'Sign out'))));
+          h('div', { class: 'hubuser-actions' }, h('button', { class: 'linkbtn', id: 'hub-refresh', onclick: (e) => { e.target.textContent = 'Refreshing…'; window.TCRefresh && window.TCRefresh(); } }, 'Refresh'), h('button', { class: 'linkbtn', onclick: ctx.signOut }, 'Sign out')))));
     ctx.root.replaceChildren(side, h('div', { class: 'hubmain' }, ...content));
   }
 

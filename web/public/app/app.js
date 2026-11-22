@@ -240,6 +240,7 @@
       !hasFactor && h('button', { class: 'btn ghost', onclick: () => { wantEnroll = true; route(); } }, 'Set up 2FA'),
       a.is_head && h('button', { class: 'btn', id: 'team-open', onclick: () => viewTeam() }, 'Manage my team'),
       a.is_head && a.state !== 'cancelling' && h('button', { class: 'btn ghost', id: 'cancel-start', onclick: () => viewCancel() }, 'Cancel my subscription'),
+      h('button', { class: 'btn ghost', id: 'refresh-app', onclick: (e) => { e.target.disabled = true; e.target.textContent = 'Refreshing…'; refreshApp(); } }, 'Refresh'),
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')];
     const note = setupNote; setupNote = null;
     return window.TCPassport.mount({ sb, h, show: showIn, message, busy, fmtDate, req, banner, account, note, returned });
@@ -650,6 +651,14 @@
     await route();
   }
 
+  // Installed on a phone, there is no browser refresh button, so the app offers its own: clear the saved copy of the app and reload.
+  async function refreshApp() {
+    try { if ('caches' in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } } catch (e) { /* carry on */ }
+    try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((x) => x.update())); } catch (e) { /* carry on */ }
+    location.reload();
+  }
+  window.TCRefresh = refreshApp;
+
   // "Update now": when a new version of the site has been deployed, a bar appears so people choose when to refresh (nothing reloads under them).
   (function watchForUpdates() {
     let loaded = null, shown = false;
@@ -662,9 +671,7 @@
           shown = true;
           const go = h('button', { type: 'button', class: 'btn small', id: 'update-now', onclick: async () => {
             go.disabled = true; go.textContent = 'Updating…';
-            try { if ('caches' in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } } catch (e) { /* carry on */ }
-            try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((x) => x.update())); } catch (e) { /* carry on */ }
-            location.reload();
+            await refreshApp();
           } }, 'Update now');
           document.body.append(h('div', { class: 'updatebar', role: 'status', id: 'update-bar' }, h('span', {}, 'A new version is ready.'), go));
         }

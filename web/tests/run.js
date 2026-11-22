@@ -521,6 +521,7 @@ const USERS = {
     { const sb = await p.locator('.hubside').boundingBox(), mb = await p.locator('.hubmain').boundingBox();
       check('hub desktop: the menu is a sidebar on the left and the page gets the rest of the width', sb.x === 0 && sb.width >= 240 && sb.width <= 280 && mb.x >= sb.width - 1 && mb.width > 900);
       check('hub desktop: menu items are grouped under headings', (await p.locator('.hubgroup-label').allInnerTexts()).join() === 'OVERVIEW,CUSTOMERS,GROWTH,SYSTEM' || (await p.locator('.hubgroup-label').allInnerTexts()).join().toLowerCase() === 'overview,customers,growth,system');
+      check('hub: a Refresh button sits next to Sign out (an installed phone app has no browser refresh)', (await p.locator('#hub-refresh').innerText()) === 'Refresh');
       check('hub desktop: no burger button', !(await p.locator('.hubburger').isVisible())); }
     if (process.env.SHOT) { await p.setViewportSize({ width: 1440, height: 900 }); await p.waitForTimeout(300); await p.screenshot({ path: '/tmp/shot/hub1440.png' }); }
     await p.setViewportSize({ width: 390, height: 844 });
