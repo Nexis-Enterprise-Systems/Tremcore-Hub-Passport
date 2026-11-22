@@ -523,6 +523,10 @@ const USERS = {
       check('hub desktop: menu items are grouped under headings', (await p.locator('.hubgroup-label').allInnerTexts()).join() === 'OVERVIEW,CUSTOMERS,GROWTH,SYSTEM' || (await p.locator('.hubgroup-label').allInnerTexts()).join().toLowerCase() === 'overview,customers,growth,system');
       check('hub: a Refresh button sits next to Sign out (an installed phone app has no browser refresh)', (await p.locator('#hub-refresh').innerText()) === 'Refresh');
       check('hub desktop: no burger button', !(await p.locator('.hubburger').isVisible())); }
+    check('hub back: the Dashboard has no Back button, other pages do', (await p.locator('#hub-back').count()) === 1);
+    await p.click('#hub-back'); await p.waitForSelector('.tiles');
+    check('hub back: Back returns to the page you came from (desktop)', (await p.locator('#hub-back').count()) === 0 && (await p.locator('.hubnav a.on').innerText()) === 'Dashboard');
+    await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
     if (process.env.SHOT) { await p.setViewportSize({ width: 1440, height: 900 }); await p.waitForTimeout(300); await p.screenshot({ path: '/tmp/shot/hub1440.png' }); }
     await p.setViewportSize({ width: 390, height: 844 });
     check('hub phone: the menu is hidden behind a burger button', (await p.locator('.hubburger').isVisible()) && !(await p.locator('.hubnav').isVisible()));
@@ -530,6 +534,8 @@ const USERS = {
     if (process.env.SHOT) await p.screenshot({ path: '/tmp/shot/hub390.png' });
     check('hub phone: tapping the burger opens the list of pages', (await p.locator('.hubburger').getAttribute('aria-expanded')) === 'true' && (await p.locator('.hubnav a:visible').count()) >= 9);
     await p.click('.hubnav a:has-text("Revenue")'); await p.waitForSelector('text=Revenue by package');
+    check('hub back: the Back button is there on a phone too and works', (await p.locator('#hub-back').isVisible()) && await (async () => { await p.click('#hub-back'); await p.waitForSelector('table'); return (await p.locator('.hubmain h1').first().innerText()) === 'Clients'; })());
+    await p.click('.hubburger'); await p.click('.hubnav a:has-text("Revenue")'); await p.waitForSelector('text=Revenue by package');
     check('hub phone: choosing a page opens it and closes the menu', !(await p.locator('.hubnav').isVisible()));
     await p.setViewportSize({ width: 1280, height: 900 });
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
@@ -542,6 +548,19 @@ const USERS = {
       await Promise.all([up.waitForNavigation(), up.click('#update-now')]); await up.waitForSelector('#app');   // the pretend database forgets its sign-in on reload; the real one keeps it
       check('update: pressing Update now reloads onto the new version and the bar goes', (await up.locator('#update-bar').count()) === 0);
       await u.ctx.close(); }
+
+    { const t2 = await newPage((sd) => { window.__mock.tables = sd.tables; Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5 }); }, seed()); const tp = t2.page;
+      await login(tp, 'staff2fa@t'); await tp.waitForSelector('#code'); await tp.fill('#code', '123456'); await tp.click('button[type=submit]'); await tp.waitForSelector('.tiles');
+      const drag = (y1, y2, end) => tp.evaluate(([a, b, e]) => { const t = (y) => new Touch({ identifier: 1, target: document.body, clientX: 100, clientY: y });
+        document.dispatchEvent(new TouchEvent('touchstart', { touches: [t(a)], bubbles: true })); document.dispatchEvent(new TouchEvent('touchmove', { touches: [t(b)], bubbles: true }));
+        if (e) document.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true })); }, [y1, y2, end]);
+      await drag(100, 130, true); await tp.waitForTimeout(200);
+      check('pull to refresh: a short pull does nothing', (await tp.locator('#pull-ind.show').count()) === 0);
+      await drag(100, 230, false); await tp.waitForSelector('#pull-ind.show');
+      check('pull to refresh: pulling far enough says Release to refresh', (await tp.locator('#pull-ind').innerText()) === 'Release to refresh');
+      await Promise.all([tp.waitForNavigation(), tp.evaluate(() => document.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true })))]);
+      check('pull to refresh: letting go reloads the app', true);
+      await t2.ctx.close(); }
     check('clients list shows every client with package and site counts', (await p.locator('tbody tr').count()) === 3 && (await p.locator('tbody').innerText()).includes('Managed Service'));
     await p.fill('input[type=search]', 'quay'); check('search narrows the client list', (await p.locator('tbody tr').count()) === 1);
     await p.fill('input[type=search]', 'zzz'); check('search with no match says so', (await p.locator('tbody').innerText()).includes('No clients match'));

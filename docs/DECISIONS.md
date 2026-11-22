@@ -142,3 +142,7 @@
 ## Hub layout and "Update now" (22 Nov 2026)
 - Hub menu is a left sidebar on desktop (grouped Overview / Customers / Growth / System; page gets the remaining width, up to 1700px). On phones and tablets it is a top bar with a burger button that opens the list.
 - When a new version is deployed, a gold "A new version is ready. Update now" bar appears (all signed-in screens). The server reports a build id at `/api/version` (Railway's commit id, or the time that copy started); the app checks every 3 minutes and when the tab is shown again. Nothing reloads by itself, so nobody loses what they are typing.
+
+## Back button and pull to refresh (22 Nov 2026)
+- Every Hub page except the Dashboard has a "‹ Back" button at the top (goes to the previous page; if there is none it goes to Clients for client/site pages, otherwise the Dashboard).
+- On touch screens, pulling down from the top of any page refreshes the app (installed phone apps have no refresh button). Pull further than about 80px and let go. Typing boxes and scrolling lists are excluded so it does not trigger by accident.

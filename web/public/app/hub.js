@@ -107,7 +107,11 @@
           h('div', { class: 'muted' }, (r.full_name || 'Staff') + ' · ' + (ROLE[r.role_name] || r.role_name)),
           h('div', { class: 'hubuser-row' }, h('span', { class: 'muted small' }, '2FA'), h('span', { class: 'badge ' + (ctx.hasFactor ? 'on' : 'off'), title: '2FA' }, ctx.hasFactor ? 'On' : 'Off')),
           h('div', { class: 'hubuser-actions' }, h('button', { class: 'linkbtn', id: 'hub-refresh', onclick: (e) => { e.target.textContent = 'Refreshing…'; window.TCRefresh && window.TCRefresh(); } }, 'Refresh'), h('button', { class: 'linkbtn', onclick: ctx.signOut }, 'Sign out')))));
-    ctx.root.replaceChildren(side, h('div', { class: 'hubmain' }, ...content));
+    const here = location.hash.replace(/^#\/?/, '').split('/');
+    const back = !here[0] || here[0] === 'dashboard' ? null : h('button', { type: 'button', class: 'hubback', id: 'hub-back', onclick: () => {
+      if (pagesSeen > 1) history.back(); else location.hash = (here[0] === 'clients' || here[0] === 'sites') && here[1] ? '#/clients' : '#/dashboard';
+    } }, h('span', { 'aria-hidden': 'true' }, '‹'), ' Back');
+    ctx.root.replaceChildren(side, h('div', { class: 'hubmain' }, back, ...content));
   }
 
   function donut(sum, size) {
@@ -806,9 +810,11 @@
   }
 
   // ---------- routing ----------
+  let pagesSeen = 0;   // how many pages have been opened in this visit: if there is a page before this one, Back goes to it
   async function render() {
     if (!ctx) return;
     const my = ++token;
+    pagesSeen += 1;
     const [a, id] = (location.hash.replace(/^#\/?/, '') || 'dashboard').split('/');
     try {
       if (a === 'clients' && id && UUID.test(id)) await pageClient(my, id);

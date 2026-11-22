@@ -464,3 +464,11 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 /* "Update now" bar, shown when a newer version of the site has been deployed */
 .updatebar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;background:#121212;border:1px solid var(--gold);border-radius:999px;box-shadow:0 8px 30px rgba(0,0,0,.6);color:var(--text);font-weight:600;max-width:calc(100vw - 24px)}
 .hubuser-actions{display:flex;gap:18px;align-items:center}
+.hubback{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;padding:8px 14px 8px 10px;border:1px solid var(--line);border-radius:999px;background:#121212;color:var(--text);font:inherit;font-weight:600;font-size:.95rem;cursor:pointer}
+.hubback span{font-size:1.4rem;line-height:1;margin-top:-2px;color:var(--gold)}
+.hubback:hover{border-color:var(--gold)}
+.hubback:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+/* Pull down to refresh (touch screens) */
+body{overscroll-behavior-y:contain}
+.pullind{position:fixed;top:0;left:50%;z-index:70;transform:translate(-50%,-70px);display:flex;align-items:center;gap:8px;padding:9px 16px;background:#121212;border:1px solid var(--gold);border-radius:999px;color:var(--text);font-weight:600;font-size:.9rem;box-shadow:0 6px 24px rgba(0,0,0,.6);pointer-events:none;opacity:0}
+.pullind.show{opacity:1}

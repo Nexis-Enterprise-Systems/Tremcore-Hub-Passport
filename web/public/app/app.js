@@ -659,6 +659,29 @@
   }
   window.TCRefresh = refreshApp;
 
+  // Pull down from the top of the page to refresh: an installed phone app has no refresh button of its own. Touch screens only.
+  (function pullToRefresh() {
+    if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) return;
+    let startY = null, dist = 0, busyNow = false, bar = null;
+    const THRESH = 80;
+    const make = () => { if (!bar) { bar = h('div', { class: 'pullind', id: 'pull-ind', role: 'status', 'aria-live': 'polite' }, 'Pull to refresh'); document.body.append(bar); } return bar; };
+    const reset = () => { if (bar) { bar.classList.remove('show'); bar.style.transform = ''; } startY = null; dist = 0; };
+    const blocked = (el) => { for (let n = el; n && n !== document.body; n = n.parentElement) { if (/^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName) || (n.scrollTop > 0 && /(auto|scroll)/.test(getComputedStyle(n).overflowY))) return true; } return false; };
+    document.addEventListener('touchstart', (e) => { startY = (!busyNow && window.scrollY <= 0 && e.touches.length === 1 && !blocked(e.target)) ? e.touches[0].clientY : null; dist = 0; }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+      if (startY === null) return;
+      dist = e.touches[0].clientY - startY;
+      if (dist <= 10 || window.scrollY > 0) { if (dist <= 0) reset(); return; }
+      const b = make(); b.classList.add('show'); b.textContent = dist >= THRESH ? 'Release to refresh' : 'Pull to refresh';
+      b.style.transform = 'translate(-50%,' + (Math.min(dist, 140) - 52) + 'px)';
+    }, { passive: true });
+    document.addEventListener('touchend', () => {
+      if (startY !== null && dist >= THRESH && !busyNow) { busyNow = true; make().classList.add('show'); bar.textContent = 'Refreshing…'; bar.style.transform = 'translate(-50%,16px)'; refreshApp(); return; }
+      reset();
+    }, { passive: true });
+    document.addEventListener('touchcancel', reset, { passive: true });
+  })();
+
   // "Update now": when a new version of the site has been deployed, a bar appears so people choose when to refresh (nothing reloads under them).
   (function watchForUpdates() {
     let loaded = null, shown = false;
