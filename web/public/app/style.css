@@ -36,7 +36,7 @@ ol.steps{padding-left:20px;margin:0 0 6px}ol.steps li{margin-bottom:8px}
 
 /* ---------- management hub (staff) ---------- */
 body.hub{display:block;padding:0 0 60px}
-body.hub main{max-width:1100px;margin:0 auto;padding:0 16px}
+body.hub main{max-width:none;margin:0;padding:0;width:100%}
 select,textarea{width:100%;border-radius:12px;border:1px solid var(--line);background:#0d0d0d;color:var(--text);padding:10px 14px;font:inherit;font-size:1rem}
 select{height:48px;padding:0 10px}
 select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold)}
@@ -44,13 +44,37 @@ select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:1px;bor
 input[type=checkbox],input[type=radio]{width:16px;height:16px;padding:0;margin:0;accent-color:var(--gold);flex:none;border-radius:0}
 input[type=checkbox]:focus,input[type=radio]:focus{outline:none;border-color:var(--line)}
 input[type=checkbox]:focus-visible,input[type=radio]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.hubbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 0;border-bottom:1px solid var(--line);margin-bottom:22px}
-.hublogo{width:44px;height:auto}
-.hubnav{display:flex;flex-wrap:wrap;gap:4px;flex:1}
-.hubnav a{color:var(--muted);text-decoration:none;padding:8px 14px;border-radius:999px;font-weight:600;font-size:.95rem}
-.hubnav a:hover{color:var(--text)}
+/* Hub layout: a sidebar on desktop (the page gets the rest of the width); a top bar with a burger menu on phones and tablets */
+body.hub{padding:0 0 60px}
+.hubbar{position:sticky;top:0;z-index:20;background:#0b0b0b;border-bottom:1px solid var(--line)}
+.hubtop{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px}
+.hubbrand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text)}
+.hublogo{width:46px;height:auto;display:block}
+.hubtitle{font-weight:700;letter-spacing:.3px;font-size:.95rem}
+.hubburger{display:flex;flex-direction:column;justify-content:center;gap:5px;width:46px;height:46px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:#121212;cursor:pointer}
+.hubburger span{display:block;height:2px;border-radius:2px;background:var(--gold)}
+.hubburger:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.hubmenu{display:none;padding:6px 14px 16px;border-top:1px solid var(--line);max-height:calc(100vh - 68px);overflow-y:auto}
+.hubside.open .hubmenu{display:block}
+.hubnav{display:flex;flex-direction:column;gap:14px}
+.hubgroup{display:flex;flex-direction:column;gap:2px}
+.hubgroup-label{font-size:.72rem;letter-spacing:1.2px;text-transform:uppercase;color:#7f7b70;padding:6px 12px 4px}
+.hubnav a{color:var(--muted);text-decoration:none;padding:11px 12px;border-radius:10px;font-weight:600;font-size:1rem}
+.hubnav a:hover{color:var(--text);background:#161616}
 .hubnav a.on{background:var(--gold-grad);box-shadow:var(--gold-shine);color:var(--ink)}
-.hubuser{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hubuser{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.hubuser-row{display:flex;align-items:center;gap:8px}
+.hubmain{padding:18px 16px 0;min-width:0}
+@media (min-width:960px){
+  body.hub main{display:grid;grid-template-columns:260px minmax(0,1fr);align-items:start}
+  .hubbar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;border-bottom:0;border-right:1px solid var(--line)}
+  .hubtop{padding:20px 18px 12px}
+  .hublogo{width:54px}
+  .hubburger{display:none}
+  .hubmenu{display:flex;flex-direction:column;flex:1;border-top:0;max-height:none;padding:6px 14px 18px}
+  .hubside .hubuser{margin-top:auto}
+  .hubmain{padding:28px 36px 0;max-width:1700px}
+}
 .hubmain h1{font-size:1.6rem;margin:0 0 14px}
 .hubmain h2{font-size:1.1rem;margin:0 0 12px}
 .hubmain a{color:var(--gold)}
@@ -436,3 +460,6 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
   .appshell-home .appbody>.card,.appshell-home .appbody>.sitepick{margin-bottom:12px}
   .appshell-home .promos{grid-template-columns:1fr}
 }
+
+/* "Update now" bar, shown when a newer version of the site has been deployed */
+.updatebar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;background:#121212;border:1px solid var(--gold);border-radius:999px;box-shadow:0 8px 30px rgba(0,0,0,.6);color:var(--text);font-weight:600;max-width:calc(100vw - 24px)}

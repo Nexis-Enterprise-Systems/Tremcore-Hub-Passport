@@ -84,19 +84,30 @@
   const badge = (kind, label) => h('span', { class: 'badge ' + kind }, label);
 
   // ---------- page frame ----------
+  // Menu groups, in the order they appear in the sidebar.
+  const NAV_GROUPS = [['Overview', ['dashboard']], ['Customers', ['clients', 'subscriptions', 'renewals']], ['Growth', ['interest', 'offers', 'revenue', 'enquiries']], ['System', ['activity', 'settings']]];
   function chrome(active, ...content) {
     const r = ctx.req;
     document.body.classList.add('hub');
-    ctx.root.replaceChildren(
-      h('header', { class: 'hubbar' },
-        h('img', { class: 'hublogo', src: '/img/logo-mark.png', alt: 'Tremcore' }),
+    const items = Object.fromEntries(navFor());
+    const burger = h('button', { type: 'button', class: 'hubburger', 'aria-label': 'Menu', 'aria-expanded': 'false', 'aria-controls': 'hub-menu', onclick: () => {
+      const open = side.classList.toggle('open'); burger.setAttribute('aria-expanded', String(open));
+    } }, h('span'), h('span'), h('span'));
+    const side = h('header', { class: 'hubbar hubside' },
+      h('div', { class: 'hubtop' },
+        h('a', { href: '#/dashboard', class: 'hubbrand', 'aria-label': 'Tremcore Hub home' }, h('img', { class: 'hublogo', src: '/img/logo-mark.png', alt: 'Tremcore' }), h('span', { class: 'hubtitle' }, 'Management Hub')),
+        burger),
+      h('div', { class: 'hubmenu', id: 'hub-menu' },
         h('nav', { class: 'hubnav', 'aria-label': 'Hub sections' },
-          navFor().map(([k, label]) => h('a', { href: '#/' + k, class: active === k ? 'on' : null, 'aria-current': active === k ? 'page' : null }, label))),
+          NAV_GROUPS.map(([label, keys]) => {
+            const links = keys.filter((k) => items[k]).map((k) => h('a', { href: '#/' + k, class: active === k ? 'on' : null, 'aria-current': active === k ? 'page' : null }, items[k]));
+            return links.length ? h('div', { class: 'hubgroup' }, h('div', { class: 'hubgroup-label' }, label), ...links) : null;
+          })),
         h('div', { class: 'hubuser' },
-          h('span', { class: 'muted' }, (r.full_name || 'Staff') + ' · ' + (ROLE[r.role_name] || r.role_name)),
-          h('span', { class: 'badge ' + (ctx.hasFactor ? 'on' : 'off'), title: '2FA' }, ctx.hasFactor ? 'On' : 'Off'),
-          h('button', { class: 'linkbtn', onclick: ctx.signOut }, 'Sign out'))),
-      h('div', { class: 'hubmain' }, ...content));
+          h('div', { class: 'muted' }, (r.full_name || 'Staff') + ' · ' + (ROLE[r.role_name] || r.role_name)),
+          h('div', { class: 'hubuser-row' }, h('span', { class: 'muted small' }, '2FA'), h('span', { class: 'badge ' + (ctx.hasFactor ? 'on' : 'off'), title: '2FA' }, ctx.hasFactor ? 'On' : 'Off')),
+          h('button', { class: 'linkbtn', onclick: ctx.signOut }, 'Sign out'))));
+    ctx.root.replaceChildren(side, h('div', { class: 'hubmain' }, ...content));
   }
 
   function donut(sum, size) {

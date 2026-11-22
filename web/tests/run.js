@@ -502,6 +502,7 @@ const USERS = {
   const dbCalls = (p, f) => p.evaluate((fn) => window.__calls.filter((c) => c[0] === 'db').map((c) => c[1]).filter((x) => new Function('x', 'return ' + fn)(x)), f);
   async function hubPage(seedOverride, who) {
     const t = await newPage((sd) => { window.__mock.tables = sd.tables; }, seedOverride || seed());
+    await t.page.setViewportSize({ width: 1280, height: 900 });   // the hub is tested on a desktop screen; the phone menu has its own test below
     await login(t.page, who || 'staff2fa@t'); await t.page.waitForSelector('#code');
     await t.page.fill('#code', '123456'); await t.page.click('button[type=submit]'); await t.page.waitForSelector('.hubbar');
     await t.page.waitForSelector('.tiles');
@@ -513,10 +514,33 @@ const USERS = {
     check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Renewals,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
+    { const sb = await p.locator('.hubside').boundingBox(), mb = await p.locator('.hubmain').boundingBox();
+      check('hub desktop: the menu is a sidebar on the left and the page gets the rest of the width', sb.x === 0 && sb.width >= 240 && sb.width <= 280 && mb.x >= sb.width - 1 && mb.width > 900);
+      check('hub desktop: menu items are grouped under headings', (await p.locator('.hubgroup-label').allInnerTexts()).join() === 'OVERVIEW,CUSTOMERS,GROWTH,SYSTEM' || (await p.locator('.hubgroup-label').allInnerTexts()).join().toLowerCase() === 'overview,customers,growth,system');
+      check('hub desktop: no burger button', !(await p.locator('.hubburger').isVisible())); }
+    if (process.env.SHOT) { await p.setViewportSize({ width: 1440, height: 900 }); await p.waitForTimeout(300); await p.screenshot({ path: '/tmp/shot/hub1440.png' }); }
+    await p.setViewportSize({ width: 390, height: 844 });
+    check('hub phone: the menu is hidden behind a burger button', (await p.locator('.hubburger').isVisible()) && !(await p.locator('.hubnav').isVisible()));
+    await p.click('.hubburger'); await p.waitForSelector('.hubnav a:has-text("Revenue")', { state: 'visible' });
+    if (process.env.SHOT) await p.screenshot({ path: '/tmp/shot/hub390.png' });
+    check('hub phone: tapping the burger opens the list of pages', (await p.locator('.hubburger').getAttribute('aria-expanded')) === 'true' && (await p.locator('.hubnav a:visible').count()) >= 9);
+    await p.click('.hubnav a:has-text("Revenue")'); await p.waitForSelector('text=Revenue by package');
+    check('hub phone: choosing a page opens it and closes the menu', !(await p.locator('.hubnav').isVisible()));
+    await p.setViewportSize({ width: 1280, height: 900 });
+    await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
+    { const u = await hubPage(); const up = u.page;
+      await up.route('**/api/version', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: '{"v":"a-newer-version"}' }));
+      check('update: no bar while nothing new has been deployed', (await up.locator('#update-bar').count()) === 0);
+      await up.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await up.waitForSelector('#update-bar');
+      check('update: when a new version is deployed an "Update now" button appears', (await up.locator('#update-now').innerText()) === 'Update now');
+      await up.unroute('**/api/version');
+      await Promise.all([up.waitForNavigation(), up.click('#update-now')]); await up.waitForSelector('#app');   // the pretend database forgets its sign-in on reload; the real one keeps it
+      check('update: pressing Update now reloads onto the new version and the bar goes', (await up.locator('#update-bar').count()) === 0);
+      await u.ctx.close(); }
     check('clients list shows every client with package and site counts', (await p.locator('tbody tr').count()) === 3 && (await p.locator('tbody').innerText()).includes('Managed Service'));
     await p.fill('input[type=search]', 'quay'); check('search narrows the client list', (await p.locator('tbody tr').count()) === 1);
     await p.fill('input[type=search]', 'zzz'); check('search with no match says so', (await p.locator('tbody').innerText()).includes('No clients match'));
@@ -1342,7 +1366,7 @@ const USERS = {
     await t.ctx.close();
 
     t = await hubPage(null, 'staffonly@t'); pg = t.page;
-    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Renewals,Subscriptions,Interest list,Offers,Revenue,Enquiries,Activity');
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Renewals,Interest list,Offers,Revenue,Enquiries,Activity');
     await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
     check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
     await t.ctx.close();

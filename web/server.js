@@ -106,6 +106,8 @@ async function handleEnquiry(req, res) {
 }
 
 const { interestThanks, COMPANY } = require('./mail-template');
+// Changes every time the site is deployed (Railway gives the commit; otherwise the time this copy started). The app compares it to show "Update now".
+const BUILD_ID = String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.BUILD_ID || Date.now());
 const interestHits = new Map();
 function limitedInterest(ip) { const now = Date.now(), a = (interestHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); interestHits.set(ip, a); if (interestHits.size > 5000) for (const [k, v] of interestHits) if (!v.some((t) => now - t < 600000)) interestHits.delete(k); return a.length > 5; }
 // ---- "Register your interest" (public website form). Stored through the public key; the database only lets anyone ADD a row.
@@ -610,6 +612,7 @@ const server = http.createServer((req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
 
   if (pathname === '/healthz') return send(res, 200, 'ok', { 'Content-Type': 'text/plain' });
+  if (pathname === '/api/version') return send(res, 200, JSON.stringify({ v: BUILD_ID }), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
   if (pathname === '/config.json') {
     return send(res, 200, JSON.stringify({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY }),
       { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });

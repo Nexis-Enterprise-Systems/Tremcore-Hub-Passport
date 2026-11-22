@@ -138,3 +138,7 @@
 
 ## Live database set-up (21 Nov 2026)
 - New Supabase projects do not give the logged-in role access to new tables automatically (the old test project did). The Hub then fails with "permission denied for table companies". `supabase/tools/build-live-sql.sh` builds one file that sets those default grants first, then applies every migration. Row-level security still decides who sees which rows; anonymous visitors only get the few explicit grants (enquiries, interest list, etc.). Use it for any new empty project.
+
+## Hub layout and "Update now" (22 Nov 2026)
+- Hub menu is a left sidebar on desktop (grouped Overview / Customers / Growth / System; page gets the remaining width, up to 1700px). On phones and tablets it is a top bar with a burger button that opens the list.
+- When a new version is deployed, a gold "A new version is ready. Update now" bar appears (all signed-in screens). The server reports a build id at `/api/version` (Railway's commit id, or the time that copy started); the app checks every 3 minutes and when the tab is shown again. Nothing reloads by itself, so nobody loses what they are typing.
