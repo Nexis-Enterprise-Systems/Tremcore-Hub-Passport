@@ -472,3 +472,11 @@ input.autofilled{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 body{overscroll-behavior-y:contain}
 .pullind{position:fixed;top:0;left:50%;z-index:70;transform:translate(-50%,-70px);display:flex;align-items:center;gap:8px;padding:9px 16px;background:#121212;border:1px solid var(--gold);border-radius:999px;color:var(--text);font-weight:600;font-size:.9rem;box-shadow:0 6px 24px rgba(0,0,0,.6);pointer-events:none;opacity:0}
 .pullind.show{opacity:1}
+
+/* Wide screens show tables; phones show cards */
+.only-narrow{display:none}
+@media (max-width:699px){.only-wide{display:none}.only-narrow{display:block}}
+.icard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
+.icard-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.icard-biz{font-size:1.05rem}
+.icard-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}

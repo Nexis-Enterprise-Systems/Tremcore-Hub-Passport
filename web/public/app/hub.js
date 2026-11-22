@@ -522,25 +522,41 @@
       const lines = [head].concat(rows.map((r) => [r.name, r.email, r.business_name, r.business_address, r.sites, day(r.created_at), (STATE[r.status] || [])[1], day(r.invited_at), day(r.signed_up_at)]));
       const a = h('a', { href: URL.createObjectURL(new Blob([lines.map((l) => l.map(cell).join(',')).join('\r\n')], { type: 'text/csv' })), download: 'interest-list.csv' }); document.body.append(a); a.click(); a.remove();
     } }, 'Download as a spreadsheet');
+    // The buttons for one person. Built fresh for each view (table and phone card) so each has its own message area.
+    const actionsFor = (r) => {
+      const rowOut = h('span', { class: 'muted', role: 'status' });
+      const offer = r.status === 'signed_up' || r.status === 'removed' ? null : h('button', { class: 'btn ghost small', onclick: async () => {
+        await busy(offer, async () => { try { const j = await post('/api/send-offer', { email: r.email, name: r.name, days: 30 }); rowOut.replaceChildren(j.sent ? 'Offer emailed. Code ' + j.code : (j.note || '') + ' Link: ' + j.link); } catch (err) { rowOut.replaceChildren(err.message); } });
+      } }, 'Send offer code');
+      const remove = r.status === 'removed' || r.status === 'signed_up' ? null : h('button', { class: 'btn ghost small', onclick: async () => {
+        await busy(remove, async () => { try { await q(ctx.sb.from('interest_list').update({ status: 'removed' }).eq('id', r.id).select()); await pageInterest(++token); } catch (err) { rowOut.replaceChildren(err.message); } });
+      } }, 'Remove');
+      return { offer, remove, rowOut };
+    };
     chrome('interest', h('h1', {}, 'Interest list'),
       h('div', { class: 'tiles' }, tile('Registered interest', String(total)), tile('Waiting for the link', String(waiting)), tile('Link sent', String(n('invited'))), tile('Signed up', String(signed)), tile('Registered to signed up', conv)),
-      h('p', { class: 'hint' }, 'People who registered on the website. When the passport opens, send them the plain sign-up link below. They move to "Signed up" by themselves once they pay. To give someone an introductory offer instead, use "Send offer code" on their row.'),
+      h('p', { class: 'hint' }, 'People who registered on the website. When the passport opens, send them the plain sign-up link below. They move to "Signed up" by themselves once they pay. To give someone an introductory offer instead, use "Send offer code" next to their name.'),
       h('div', { class: 'actions' }, sendAll, ' ', csvBtn), out,
       flash ? h('div', { class: 'msg ' + flash.kind, role: 'status' }, flash.text) : null,
-      h('div', { class: 'tablewrap' }, h('table', { id: 'interest-table' },
+      h('div', { class: 'only-wide' }, h('div', { class: 'tablewrap' }, h('table', { id: 'interest-table' },
         h('thead', {}, h('tr', {}, ['Name', 'Business', 'Address', 'Sites', 'Registered', 'Status', ''].map((x) => h('th', {}, x)))),
         h('tbody', {}, rows.length ? rows.map((r) => {
-          const [kind, label] = STATE[r.status] || ['missing', r.status], rowOut = h('span', { class: 'muted', role: 'status' });
-          const offer = r.status === 'signed_up' || r.status === 'removed' ? null : h('button', { class: 'btn ghost small', onclick: async () => {
-            await busy(offer, async () => { try { const j = await post('/api/send-offer', { email: r.email, name: r.name, days: 30 }); rowOut.replaceChildren(j.sent ? 'Offer emailed. Code ' + j.code : (j.note || '') + ' Link: ' + j.link); } catch (err) { rowOut.replaceChildren(err.message); } });
-          } }, 'Send offer code');
-          const remove = r.status === 'removed' || r.status === 'signed_up' ? null : h('button', { class: 'btn ghost small', onclick: async () => {
-            await busy(remove, async () => { try { await q(ctx.sb.from('interest_list').update({ status: 'removed' }).eq('id', r.id).select()); await pageInterest(++token); } catch (err) { rowOut.replaceChildren(err.message); } });
-          } }, 'Remove');
+          const [kind, label] = STATE[r.status] || ['missing', r.status], a = actionsFor(r);
           return h('tr', { 'data-email': r.email }, h('td', {}, h('strong', {}, r.name), h('div', { class: 'muted small' }, r.email)), h('td', {}, r.business_name), h('td', {}, r.business_address),
             h('td', { class: 'num' }, String(r.sites)), h('td', {}, day(r.created_at)), h('td', {}, badge(kind, label), r.invited_at && r.status === 'invited' ? h('div', { class: 'muted small' }, day(r.invited_at)) : null),
-            h('td', {}, offer, ' ', remove, ' ', rowOut));
-        }) : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'Nobody has registered yet.'))]))));
+            h('td', {}, a.offer, ' ', a.remove, ' ', a.rowOut));
+        }) : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'Nobody has registered yet.'))])))),
+      // On a phone each business is a card, so nothing needs scrolling sideways.
+      h('div', { class: 'only-narrow', id: 'interest-cards' }, rows.length ? rows.map((r) => {
+        const [kind, label] = STATE[r.status] || ['missing', r.status], a = actionsFor(r);
+        return h('article', { class: 'icard', 'data-email': r.email },
+          h('div', { class: 'icard-head' }, h('strong', { class: 'icard-biz' }, r.business_name), badge(kind, label)),
+          h('div', {}, r.name + ' · ' + r.sites + (r.sites === 1 ? ' site' : ' sites')),
+          h('div', {}, h('a', { href: 'mailto:' + r.email }, r.email)),
+          h('div', { class: 'muted' }, r.business_address),
+          h('div', { class: 'muted small' }, 'Registered ' + day(r.created_at) + (r.invited_at && r.status === 'invited' ? ' · Link sent ' + day(r.invited_at) : '') + (r.signed_up_at ? ' · Signed up ' + day(r.signed_up_at) : '')),
+          (a.offer || a.remove) ? h('div', { class: 'icard-actions' }, a.offer, a.remove) : null, a.rowOut);
+      }) : [h('p', { class: 'muted' }, 'Nobody has registered yet.')]));
   }
 
   // ---------- Revenue & growth ----------

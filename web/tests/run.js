@@ -689,6 +689,15 @@ const USERS = {
     check('interest: lists name, business, address, sites and status', (await irow('ivy@i.example').innerText()).includes('Ivy Cafe Ltd') && (await irow('ivy@i.example').innerText()).includes('2 Quay Rd, Chatham') && (await irow('ivy@i.example').innerText()).includes('Waiting') && (await irow('sid@s.example').innerText()).includes('Signed up'));
     check('interest: the tiles count registered (not removed), waiting and signed up', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('2 Registered interest') && (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('1 Signed up'));
     check('interest: only people still waiting can be sent an offer or removed', (await irow('ivy@i.example').locator('button').allInnerTexts()).join() === 'Send offer code,Remove' && (await irow('sid@s.example').locator('button').count()) === 0);
+    await p.setViewportSize({ width: 390, height: 844 });
+    { const card = p.locator('.icard[data-email="ivy@i.example"]');
+      if (process.env.SHOT) await p.screenshot({ path: '/tmp/shot/interest390.png', fullPage: true });
+      check('interest on a phone: a card per business instead of a table', (await card.isVisible()) && !(await p.locator('#interest-table').isVisible()));
+      const txt = await card.innerText();
+      check('interest on a phone: every detail is on the card', ['Ivy Cafe Ltd', 'Ivy Interested', '2 sites', 'ivy@i.example', '2 Quay Rd, Chatham', 'Registered', 'Waiting'].every((x) => txt.includes(x)));
+      check('interest on a phone: nothing runs off the side of the screen', (await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
+      check('interest on a phone: the card has its own Send offer code and Remove buttons', (await card.locator('button').allInnerTexts()).join() === 'Send offer code,Remove'); }
+    await p.setViewportSize({ width: 1280, height: 900 });
     let ilBody = null; await p.route('**/api/send-launch', (rt) => { ilBody = JSON.parse(rt.request().postData()); rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"sent":1,"failed":0}' }); });
     p.once('dialog', (d) => d.accept()); await p.click('#launch-send'); await p.waitForSelector('text=Sent to 1');
     check('interest: the launch button asks the server to send the link to those waiting', ilBody && !ilBody.ids);
