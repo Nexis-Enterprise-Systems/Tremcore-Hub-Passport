@@ -36,7 +36,7 @@ def page(path, title, desc, body, current, noindex=False):
 <meta name="description" content="{desc}">
 <meta name="theme-color" content="#0c0b09">{'<meta name="robots" content="noindex">' if noindex else ''}
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:type" content="website">
-<link rel="icon" href="/img/favicon.png">
+<link rel="icon" href="/img/favicon.png"><link rel="apple-touch-icon" href="/img/icon-180.png">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
