@@ -47,6 +47,31 @@ function interestThanks(person, siteUrl) {
 }
 
 
+// Turns a plain list of lines (blank line = new paragraph, "- " = bullet, a line holding the link = a gold button) into the branded email.
+// Used for the emails Tremcore staff send out: offers, free access and the "now open" email.
+function fromLines(lines, { link, label, title, subject, siteUrl, why }) {
+  const out = []; let bullets = [];
+  const flush = () => { if (bullets.length) { out.push('<ul style="margin:0 0 18px;padding-left:22px;">' + bullets.map((b) => '<li style="margin:0 0 6px;">' + esc(b) + '</li>').join('') + '</ul>'); bullets = []; } };
+  const signIdx = lines.lastIndexOf('Kind regards,');
+  const body = signIdx >= 0 ? lines.slice(0, signIdx) : lines;
+  for (const l of body) {
+    if (l === '') { flush(); continue; }
+    if (l.startsWith('- ')) { bullets.push(l.slice(2)); continue; }
+    flush();
+    if (link && l.includes(link)) {
+      const before = l.split(link)[0].replace(/[:\s]+$/, '');
+      if (before) out.push('<p style="margin:0 0 14px;">' + esc(before) + '</p>');
+      out.push('<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px;"><tr><td style="background:' + GOLD + ';border-radius:4px;"><a href="' + esc(link) + '" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:' + BLACK + ';text-decoration:none;">' + esc(label || 'Open') + '</a></td></tr></table>'
+        + '<p style="margin:0 0 18px;font-size:13px;color:#777;">If the button does not work, copy this address into your browser:<br><span style="word-break:break-all;">' + esc(link) + '</span></p>');
+      continue;
+    }
+    out.push('<p style="margin:0 0 18px;">' + esc(l) + '</p>');
+  }
+  flush();
+  out.push('<p style="margin:26px 0 20px;">Kind regards,<br><strong>' + esc(signIdx >= 0 ? lines[signIdx + 1] : 'Tremcore Ltd') + '</strong></p>');
+  return shell({ title, bodyHtml: out.join(''), siteUrl, why });
+}
+
 function simpleMail(title, paras, siteUrl, why, subject) {
   const text = [].concat(paras, ['', 'Kindest Regards,', 'Tremcore Passport Team', '', '--', COMPANY.name, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why]).join('\n');
   const bodyHtml = paras.map((t) => '<p style="margin:0 0 18px;">' + esc(t) + '</p>').join('') + '<p style="margin:26px 0 20px;">Kindest Regards,<br><strong>Tremcore Passport Team</strong></p>';
@@ -73,4 +98,4 @@ function paymentFailed(person, siteUrl, forTremcore) {
   return simpleMail('Payment problem', paras, siteUrl, forTremcore ? 'Internal alert from the Tremcore Passport.' : 'You are receiving this email because you have a Tremcore Passport subscription.', forTremcore ? 'Payment failed: ' + (person.company || 'customer') : 'We could not take your payment');
 }
 
-module.exports = { shell, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };
+module.exports = { shell, fromLines, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };

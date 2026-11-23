@@ -105,7 +105,7 @@ async function handleEnquiry(req, res) {
   return reply(200, { ok: true });
 }
 
-const { interestThanks, welcomeReceipt, paymentFailed, COMPANY } = require('./mail-template');
+const { fromLines, interestThanks, welcomeReceipt, paymentFailed, COMPANY } = require('./mail-template');
 // Changes every time the site is deployed (Railway gives the commit; otherwise the time this copy started). The app compares it to show "Update now".
 const BUILD_ID = String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.BUILD_ID || Date.now());
 const interestHits = new Map();
@@ -150,7 +150,7 @@ async function handleInterest(req, res) {
 
 // ---- Launch email (Tremcore staff, from the hub). Sends the sign-up link to people on the interest list, with the staff member's OWN token,
 // so the database decides who may read the list. Only people marked as sent are changed, and only after the email service accepted them.
-function launchEmail(person, link) {
+function launchEmail(person, link, siteUrl) {
   const first = String(person.name || '').split(/\s+/)[0];
   const lines = ['Hello' + (first ? ' ' + first : '') + ',', '',
     'Thank you for registering your interest in the Tremcore Compliance Passport' + (person.business_name ? ' for ' + person.business_name : '') + '. It is now open.',
@@ -158,8 +158,8 @@ function launchEmail(person, link) {
     'The Self-Managed plan is ' + gbp(1499) + ' a month + VAT for your first site and ' + gbp(799) + ' a month + VAT for each extra site (or pay yearly and save 15%). Your account opens as soon as your payment is confirmed.',
     '', 'If you have any questions, just reply to this email. If you would rather not hear from us again, reply with the word STOP and we will take you off the list.', '',
     'Kind regards,', 'Tremcore Ltd'];
-  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">' + lines.map((l) => l === '' ? '<br>' : esc(l).replace(esc(link), '<a href="' + esc(link) + '">Sign up to the Compliance Passport</a>')).join('') + '</div>';
-  return { subject: 'The Tremcore Compliance Passport is now open', text: lines.join('\n'), html };
+  const subject = 'The Tremcore Compliance Passport is now open';
+  return { subject, text: lines.join('\n'), html: fromLines(lines, { link, label: 'Sign up to the Compliance Passport', title: subject, subject, siteUrl, why: 'You are receiving this email because you registered your interest on our website. If you would rather not hear from us, just reply with the word STOP.' }) };
 }
 async function handleSendLaunch(req, res) {
   const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
@@ -189,7 +189,7 @@ async function handleSendLaunch(req, res) {
     for (let i = 0; i < people.length; i += 50) {
       const chunk = people.slice(i, i + 50);
       const er = await fetch(EMAIL_API + '/emails/batch', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify(chunk.map((p) => { const mail = launchEmail(p, link); return { from: EMAIL_FROM, to: [p.email], subject: mail.subject, text: mail.text, html: mail.html }; })), signal: AbortSignal.timeout(20000) }).catch(() => null);
+        body: JSON.stringify(chunk.map((p) => { const mail = launchEmail(p, link, proto + '://' + req.headers.host); return { from: EMAIL_FROM, reply_to: COMPANY.email, to: [p.email], subject: mail.subject, text: mail.text, html: mail.html }; })), signal: AbortSignal.timeout(20000) }).catch(() => null);
       if (!er || !er.ok) { failed += chunk.length; console.error('launch email batch failed', er && er.status); continue; }
       sent += chunk.length;
       await fetch(SUPABASE_URL + '/rest/v1/rpc/mark_interest_invited', { method: 'POST', headers: mine, body: JSON.stringify({ p_ids: chunk.map((p) => p.id) }), signal: AbortSignal.timeout(8000) }).catch(() => {});
@@ -540,17 +540,17 @@ const offerHits = new Map();
 function offerLimited(ip) { const now = Date.now(), a = (offerHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); offerHits.set(ip, a); return a.length > 30; }
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const gbp = (pence) => '£' + (pence / 100).toFixed(2);
-function freeAccessEmail(row, link) {
+function freeAccessEmail(row, link, siteUrl) {
   const first = String(row.prospect_name || '').split(/\s+/)[0];
   const until = new Date(row.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const lines = ['Hello' + (first ? ' ' + first : '') + ',', '', 'You have been given free access to the Tremcore Compliance Passport.', '',
     'To open your account, sign up using this link. Your access code is already filled in and no payment is needed: ' + link, 'Your code: ' + row.code + ' (use it by ' + until + '; it can be used once).', '',
     'If you have any questions, just reply to this email.', '', 'Kind regards,', 'Tremcore Ltd'];
-  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">' + lines.map((l) => l === '' ? '<br>' : esc(l).replace(esc(link), '<a href="' + esc(link) + '">Open your free account</a>')).join('<br>') + '</div>';
-  return { subject: 'Your free access to the Tremcore Compliance Passport', text: lines.join('\n'), html };
+  const subject = 'Your free access to the Tremcore Compliance Passport';
+  return { subject, text: lines.join('\n'), html: fromLines(lines, { link, label: 'Open your free account', title: 'Your free access', subject, siteUrl, why: 'You are receiving this email because Tremcore gave you access to the Compliance Passport.' }) };
 }
-function offerEmail(row, link) {
-  if (row.kind === 'free') return freeAccessEmail(row, link);
+function offerEmail(row, link, siteUrl) {
+  if (row.kind === 'free') return freeAccessEmail(row, link, siteUrl);
   const first = String(row.prospect_name || '').split(/\s+/)[0];
   const until = new Date(row.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const now = gbp(1499 - row.discount_pence), full = gbp(1499), extra = gbp(799), mo = row.months;
@@ -572,8 +572,7 @@ function offerEmail(row, link) {
     'Kind regards,',
     'Tremcore Ltd'
   ];
-  const html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">' + lines.map((l) => l === '' ? '<br>' : l.startsWith('- ') ? '<div>&bull; ' + esc(l.slice(2)) + '</div>' : esc(l).replace(esc(link), '<a href="' + esc(link) + '">Sign up with your code</a>')).join('') + '</div>';
-  return { subject, text: lines.join('\n'), html };
+  return { subject, text: lines.join('\n'), html: fromLines(lines, { link, label: 'Take up your offer', title: 'Your introductory offer', subject, siteUrl, why: 'You are receiving this email because you registered your interest in the Tremcore Compliance Passport.' }) };
 }
 async function handleSendOffer(req, res) {
   const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
@@ -609,9 +608,9 @@ async function handleSendOffer(req, res) {
     const link = proto + '://' + req.headers.host + '/app/?signup=1&code=' + encodeURIComponent(row.code);
     const result = { ok: true, id: row.id, code: row.code, link, sent: false };
     if (!EMAIL_API_KEY || !EMAIL_FROM) { result.note = 'The email service is not set up yet, so nothing was sent. Copy the link and send it yourself.'; return out(200, result); }
-    const mail = offerEmail(row, link);
+    const mail = offerEmail(row, link, proto + '://' + req.headers.host);
     const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: EMAIL_FROM, to: [row.prospect_email], subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
+      body: JSON.stringify({ from: EMAIL_FROM, reply_to: COMPANY.email, to: [row.prospect_email], subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
     if (!er.ok) { console.error('offer email failed', er.status); result.note = 'The code was made but the email could not be sent (' + er.status + '). Copy the link and send it yourself.'; return out(200, result); }
     result.sent = true;
     await fetch(SUPABASE_URL + '/rest/v1/rpc/mark_offer_sent', { method: 'POST', headers: mine, body: JSON.stringify({ p_id: row.id }), signal: AbortSignal.timeout(8000) }).catch(() => {});
