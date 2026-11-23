@@ -98,4 +98,65 @@ function paymentFailed(person, siteUrl, forTremcore) {
   return simpleMail('Payment problem', paras, siteUrl, forTremcore ? 'Internal alert from the Tremcore Passport.' : 'You are receiving this email because you have a Tremcore Passport subscription.', forTremcore ? 'Payment failed: ' + (person.company || 'customer') : 'We could not take your payment');
 }
 
-module.exports = { shell, fromLines, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };
+// ---- compliance reminders (Level 1) and the "Tremcore is managing this" notice (Levels 2 and 3)
+const longDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+function dueTag(it) {
+  const n = it.days_left;
+  const red = n < 0, text = red ? 'OVERDUE BY ' + (-n) + (n === -1 ? ' DAY' : ' DAYS') : n === 0 ? 'DUE TODAY' : 'DUE IN ' + n + (n === 1 ? ' DAY' : ' DAYS');
+  return { red, text };
+}
+function itemTable(items, showSite) {
+  const MAX = 25, shown = items.slice(0, MAX);
+  const rows = shown.map((it) => {
+    const t = dueTag(it);
+    return '<tr><td style="padding:14px 16px;border-top:1px solid #e3dccb;">'
+      + '<div style="font-size:16px;font-weight:bold;color:' + BLACK + ';">' + esc(it.title) + '</div>'
+      + (showSite && it.site ? '<div style="font-size:13px;color:#777;">' + esc(it.site) + '</div>' : '')
+      + '<div style="margin-top:6px;"><span style="display:inline-block;background:' + (t.red ? '#c0392b' : '#f0b429') + ';color:' + (t.red ? '#ffffff' : BLACK) + ';font-size:11px;font-weight:bold;padding:3px 9px;border-radius:10px;">' + t.text + '</span>'
+      + ' <span style="font-size:13px;color:#555;">Due ' + esc(longDate(String(it.due_date).slice(0, 10))) + '</span></div></td></tr>';
+  }).join('');
+  const more = items.length > MAX ? '<tr><td style="padding:12px 16px;border-top:1px solid #e3dccb;font-size:13px;color:#555;">and ' + (items.length - MAX) + ' more. Open your passport to see them all.</td></tr>' : '';
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border:1px solid #e3dccb;border-radius:4px;border-collapse:separate;">' + rows.replace(/^<tr><td style="padding:14px 16px;border-top:1px solid #e3dccb;">/, '<tr><td style="padding:14px 16px;">') + more + '</table>';
+}
+function itemText(items) {
+  return items.slice(0, 25).map((it) => { const t = dueTag(it); return '- ' + it.title + (it.site ? ' (' + it.site + ')' : '') + ': ' + t.text.toLowerCase() + ', due ' + longDate(String(it.due_date).slice(0, 10)); }).join('\n')
+    + (items.length > 25 ? '\nand ' + (items.length - 25) + ' more' : '');
+}
+function button(href, label) {
+  return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px;"><tr><td style="background:' + GOLD + ';border-radius:4px;"><a href="' + esc(href) + '" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:' + BLACK + ';text-decoration:none;">' + esc(label) + '</a></td></tr></table>';
+}
+
+// rec: { name, company, items:[{title, site, due_date, days_left}] }. Level 1 summary of everything due soon or overdue.
+function complianceReminder(rec, siteUrl) {
+  const first = firstName(rec.name), hi = first ? 'Hi ' + first + ',' : 'Hi,';
+  const items = rec.items, overdue = items.filter((i) => i.days_left < 0).length;
+  const multi = new Set(items.map((i) => i.site)).size > 1;
+  const intro = overdue
+    ? (overdue === 1 ? 'One compliance item' : overdue + ' compliance items') + ' for ' + rec.company + ' ' + (overdue === 1 ? 'is' : 'are') + ' overdue' + (items.length > overdue ? ', and others are coming due' : '') + '. Here is where things stand:'
+    : 'The following compliance ' + (items.length === 1 ? 'item for ' : 'items for ') + rec.company + (items.length === 1 ? ' is' : ' are') + ' coming due:';
+  const outro = 'Please arrange the work and upload the new certificate once you have it, so your passport stays up to date. If a date is wrong, you can correct it in the passport.';
+  const subject = overdue ? 'Action needed: ' + (overdue === 1 ? '1 compliance item is overdue' : overdue + ' compliance items are overdue') : (items.length === 1 ? 'Reminder: a compliance item is due soon' : 'Reminder: ' + items.length + ' compliance items are due soon');
+  const why = 'You are receiving this reminder because you look after compliance records for ' + rec.company + ' in the Tremcore Passport. If you would rather not receive these, reply with the word STOP.';
+  const text = [hi, '', intro, '', itemText(items), '', outro, 'Open your passport: ' + siteUrl + '/app/', '', 'Kindest Regards,', 'Tremcore Passport Team', '', '--', COMPANY.name, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why].join('\n');
+  const bodyHtml = '<p style="margin:0 0 18px;">' + esc(hi) + '</p><p style="margin:0 0 18px;">' + esc(intro) + '</p>' + itemTable(items, multi)
+    + '<p style="margin:0 0 14px;">' + esc(outro) + '</p>' + button(siteUrl + '/app/', 'Open my passport')
+    + '<p style="margin:26px 0 20px;">Kindest Regards,<br><strong>Tremcore Passport Team</strong></p>';
+  return { subject, text, html: shell({ title: overdue ? 'Compliance overdue' : 'Compliance reminder', bodyHtml, siteUrl, why }) };
+}
+
+// Levels 2 and 3: Tremcore looks after the renewal, so the message says so instead of asking the client to act.
+function managedNotice(rec, siteUrl) {
+  const first = firstName(rec.name), hi = first ? 'Hi ' + first + ',' : 'Hi,';
+  const items = rec.items, multi = new Set(items.map((i) => i.site)).size > 1;
+  const intro = (items.length === 1 ? 'A compliance item' : items.length + ' compliance items') + ' for ' + rec.company + ' will soon be due for renewal:';
+  const outro = 'There is nothing you need to do. Tremcore is managing the renewal and will be in touch about the arrangements. You can see the up to date status in your passport at any time.';
+  const subject = 'Your renewal is coming up. Tremcore is on it';
+  const why = 'You are receiving this because you are the head-office user for ' + rec.company + ' in the Tremcore Passport.';
+  const text = [hi, '', intro, '', itemText(items), '', outro, 'Open your passport: ' + siteUrl + '/app/', '', 'Kindest Regards,', 'Tremcore Passport Team', '', '--', COMPANY.name, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why].join('\n');
+  const bodyHtml = '<p style="margin:0 0 18px;">' + esc(hi) + '</p><p style="margin:0 0 18px;">' + esc(intro) + '</p>' + itemTable(items, multi)
+    + '<p style="margin:0 0 14px;">' + esc(outro) + '</p>' + button(siteUrl + '/app/', 'Open my passport')
+    + '<p style="margin:26px 0 20px;">Kindest Regards,<br><strong>Tremcore Passport Team</strong></p>';
+  return { subject, text, html: shell({ title: 'Renewal coming up', bodyHtml, siteUrl, why }) };
+}
+
+module.exports = { complianceReminder, managedNotice, shell, fromLines, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };

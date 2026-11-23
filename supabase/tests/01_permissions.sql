@@ -1215,3 +1215,55 @@ do $$ declare e text; begin set local role service_role;
   reset role; if e <> '22023' then raise exception 'an unknown code opened an account: %', e; end if; end $$;
 select 'free code: an unknown code or one not attached to the company opens nothing' as test, (select subscription = 'trial' from companies where id = '10000000-0000-0000-0000-0000000000f8') as ok;
 rollback;
+
+-- Certificate reminders (migration 0033) ------------------------------------------------------------------
+begin;
+update auth.users set email_confirmed_at = now() where id in ('00000000-0000-0000-0000-0000000000a2','00000000-0000-0000-0000-0000000000a3','00000000-0000-0000-0000-0000000000a4','00000000-0000-0000-0000-0000000000b1');
+update companies set subscription = 'active' where id in ('10000000-0000-0000-0000-00000000000a','10000000-0000-0000-0000-00000000000b');
+insert into compliance_items(id,property_id,title,due_date) values
+ ('30000000-0000-0000-0000-0000000000d1','20000000-0000-0000-0000-0000000000b1','B soon',current_date+20);
+create temp table rp as select reminders_pending() as j;
+grant select on rp to public;
+select 'reminders: Level 1 head-office user is emailed for the amber and overdue items (not green or missing)' as test,
+  (select count(*) = 2 from jsonb_array_elements((select j from rp)) p, jsonb_array_elements(p -> 'items') i where p ->> 'email' = 'superA@t' and p ->> 'company' = 'Company A (L1)') as ok;
+select 'reminders: a site user who can update only hears about their own site' as test,
+  (select count(*) = 2 from jsonb_array_elements((select j from rp)) p, jsonb_array_elements(p -> 'items') i where p ->> 'email' = 'siteA_update@t')
+  and not exists (select 1 from jsonb_array_elements((select j from rp)) p, jsonb_array_elements(p -> 'items') i where p ->> 'email' = 'siteA_update@t' and i ->> 'site' <> 'A Site 1') as ok;
+select 'reminders: a view-only site user is never emailed' as test, not exists (select 1 from jsonb_array_elements((select j from rp)) p where p ->> 'email' = 'siteA_view@t') as ok;
+select 'reminders: the stages are right (overdue and due-in-a-month)' as test,
+  (select bool_and(i ->> 'stage' = case when i ->> 'title' = 'Overdue' then 'overdue' else 'd30' end) from jsonb_array_elements((select j from rp)) p, jsonb_array_elements(p -> 'items') i where p ->> 'email' = 'superA@t') as ok;
+select 'reminders: Level 2 gets one managed notice per item, never an overdue chase' as test,
+  (select count(*) = 1 and bool_and(i ->> 'mark_stage' = 'managed') from jsonb_array_elements((select j from rp)) p, jsonb_array_elements(p -> 'items') i where p ->> 'company' = 'Company B (L2)') as ok;
+do $$ declare n int; begin
+  set local role service_role;
+  select reminders_mark((select jsonb_agg(jsonb_build_object('item_id', i ->> 'item_id', 'stage', i ->> 'mark_stage', 'due_date', i ->> 'due_date'))
+    from jsonb_array_elements((select j from rp)) p, jsonb_array_elements(p -> 'items') i where i ->> 'triggered' = 'true')) into n;
+  reset role;
+  if n < 3 then raise exception 'nothing was recorded: %', n; end if; end $$;
+create temp table rp2 as select reminders_pending() as j;
+grant select on rp2 to public;
+select 'reminders: once recorded, nobody is emailed the same reminder again the same day' as test, (select j = '[]'::jsonb from rp2) as ok;
+update reminder_log set sent_at = now() - interval '8 days' where stage = 'overdue';
+select 'reminders: an overdue item is chased again after a week' as test,
+  (select count(*) >= 1 from jsonb_array_elements(reminders_pending()) p, jsonb_array_elements(p -> 'items') i where i ->> 'stage' = 'overdue' and i ->> 'triggered' = 'true') as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform reminders_pending(); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client could read the reminder list: %', e; end if; end $$;
+select 'reminders: a signed-in client cannot call the reminder functions' as test, true as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform reminders_mark('[]'::jsonb); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'staff could write the reminder log: %', e; end if; end $$;
+select 'reminders: not even staff can write to the log from the app' as test, true as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform count(*) from reminder_log; e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'the reminder log is readable: %', e; end if; end $$;
+select 'reminders: the log table is not readable from the app' as test, true as ok;
+update companies set subscription = 'cancelled', access_ends_at = now() - interval '1 day' where id = '10000000-0000-0000-0000-00000000000a';
+select 'reminders: an ended account gets nothing' as test, not exists (select 1 from jsonb_array_elements(reminders_pending()) p where p ->> 'company' = 'Company A (L1)') as ok;
+rollback;

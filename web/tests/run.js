@@ -15,6 +15,7 @@ process.env.STRIPE_API_BASE = 'https://stripe.test';
 process.env.ANTHROPIC_API_KEY = 'sk-ant-FAKE-MUST-NEVER-LEAK';
 process.env.ANTHROPIC_API_BASE = 'https://anthropic.test';
 process.env.EMAIL_API_KEY = 'mail-key-MUST-NOT-LEAK';
+process.env.REMINDER_SECRET = 'reminder-secret-for-tests';
 process.env.EMAIL_FROM = 'Tremcore <info@tremcore.co.uk>';
 process.env.EMAIL_API_BASE = 'https://mail.test';
 const server = require('../server.js');
@@ -83,7 +84,7 @@ const USERS = {
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   const launchCalls = []; let launchOpen = true; let launchPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'pat prospect', email: 'pat@shop.example', business_name: 'Pat Shop Ltd' }];
-  const cancelCalls = []; let linkOk = true, linkSub = 'sub_live1', linkStatus = 403;
+  let remPeople = []; const cancelCalls = []; let linkOk = true, linkSub = 'sub_live1', linkStatus = 403;
   const offerCalls = [], mailCalls = []; let offerGood = true, couponExists = false, mailFail = false, myOffer = [], attachOk = true, createOk = true;
   const OFFER_ROW = { id: '99999999-9999-4999-8999-999999999999', code: 'TC-ABC234', prospect_name: 'Pat Prospect', prospect_email: 'pat@prospect.example', discount_pence: 700, months: 12, expires_at: new Date(Date.now() + 20 * 86400000).toISOString(), status: 'active', sent_at: null };
   global.fetch = (u, o) => {
@@ -106,6 +107,8 @@ const USERS = {
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/free_activate') { cancelCalls.push({ k: 'free', b: JSON.parse(o.body), auth: o.headers.Authorization }); return Promise.resolve(new Response('"opened"', { status: 200 })); }
     if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/companies?') && url.includes('select=offer_code')) return Promise.resolve(new Response(JSON.stringify([{ offer_code: 'TC-FREE22' }]), { status: 200 }));
     if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/companies?') && url.includes('contact_email')) { cancelCalls.push({ k: 'company', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify([{ name: 'Acme Cafes Ltd', contact_name: 'pat jones', contact_email: 'pat@acme.example' }]), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/reminders_pending') { cancelCalls.push({ k: 'rem-list', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify(remPeople), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/reminders_mark') { cancelCalls.push({ k: 'rem-mark', b: JSON.parse(o.body), auth: o.headers.Authorization }); return Promise.resolve(new Response('1', { status: 200 })); }
     if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info') { sent.push({ u: url, o }); return Promise.resolve(extraReply.status === 200 ? new Response(JSON.stringify(extraReply.rows), { status: 200 }) : new Response(JSON.stringify({ message: extraReply.message || 'not_allowed' }), { status: extraReply.status })); }
@@ -376,6 +379,28 @@ const USERS = {
     check('failed payment: if the email service is down the webhook still succeeds', rr.status === 200);
     const dupN = mailCalls.length; applyResult = 'duplicate'; const fl3 = evt('invoice.payment_failed', { customer: 'cus_1', subscription: 'sub_1' }, 'evt_fail2'); await hook(fl3, sign(fl3)); applyResult = 'applied';
     check('failed payment: a repeated message sends no second email', mailCalls.length === dupN);
+    // ---- daily reminder emails
+    const rem = (auth) => realFetch(base + '/api/send-reminders', { method: 'POST', headers: auth === null ? {} : { Authorization: auth || 'Bearer reminder-secret-for-tests' } });
+    rr = await rem(null); check('reminders: starting a run needs the secret', rr.status === 401);
+    rr = await rem('Bearer wrong-secret-xxxxxxxxxxx'); check('reminders: a wrong secret is refused', rr.status === 401);
+    cancelCalls.length = 0; mailCalls.length = 0; remPeople = [];
+    rr = await rem(); let rjr = await rr.json(); const rj0 = rjr; check('reminders: nothing due means no emails and nothing recorded', rr.status === 200 && rj0.sent === 0 && mailCalls.length === 0 && !cancelCalls.some((c) => c.k === 'rem-mark'));
+    remPeople = [
+      { profile_id: 'p1', email: 'pat@acme.example', name: 'pat jones', company_id: 'co-1', company: 'Acme Cafes Ltd', level: 1, items: [
+        { item_id: 'i1', title: 'Gas Safety', site: 'High Street', due_date: '2026-11-20', days_left: -3, stage: 'overdue', triggered: true, mark_stage: 'overdue' },
+        { item_id: 'i2', title: 'Fire Risk Assessment', site: 'High Street', due_date: '2026-12-03', days_left: 10, stage: 'd30', triggered: false, mark_stage: null },
+        { item_id: 'i3', title: 'PAT Testing', site: 'Station Road', due_date: '2026-12-20', days_left: 27, stage: 'd30', triggered: true, mark_stage: 'd30' }] },
+      { profile_id: 'p2', email: 'boss@managed.example', name: 'sam boss', company_id: 'co-2', company: 'Managed Co', level: 2, items: [
+        { item_id: 'i9', title: 'EICR', site: 'Depot', due_date: '2026-12-10', days_left: 17, stage: 'd30', triggered: true, mark_stage: 'managed' }] }];
+    rr = await rem(); rjr = await rr.json(); const rjn = rjr;
+    const m1 = mailCalls.find((m) => m.body.to[0] === 'pat@acme.example'), m2 = mailCalls.find((m) => m.body.to[0] === 'boss@managed.example');
+    check('reminders: a Level 1 customer gets one summary email listing every due and overdue item, in the branded template', rr.status === 200 && rjn.sent === 2 && m1 && /overdue/.test(m1.body.subject) && m1.body.text.includes('Hi Pat,') && m1.body.text.includes('Gas Safety') && m1.body.text.includes('Fire Risk Assessment') && m1.body.text.includes('PAT Testing') && m1.body.html.includes('OVERDUE BY 3 DAYS') && m1.body.html.includes('Company number 17507064') && m1.body.html.includes('Open my passport') && m1.body.reply_to === 'info@tremcore.co.uk');
+    check('reminders: with more than one site the site name is shown', m1.body.html.includes('Station Road') && m1.body.html.includes('High Street'));
+    check('reminders: a Level 2 or 3 customer is told Tremcore is managing the renewal and need do nothing', m2 && m2.body.text.includes('Tremcore is managing the renewal') && !/overdue/i.test(m2.body.subject) && m2.body.text.includes('EICR'));
+    const marks = cancelCalls.filter((c) => c.k === 'rem-mark');
+    check('reminders: only the items that triggered are recorded as sent (not the others listed), with the service key', marks.length === 2 && marks[0].auth === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK' && marks[0].b.p_items.map((i) => i.item_id).join() === 'i1,i3' && marks[0].b.p_items[0].stage === 'overdue' && marks[1].b.p_items[0].stage === 'managed');
+    mailFail = true; cancelCalls.length = 0; mailCalls.length = 0; rr = await rem(); const rjf = await rr.json(); mailFail = false;
+    check('reminders: if an email fails it is not recorded as sent, so it is tried again tomorrow', rjf.failed === 2 && rjf.sent === 0 && !cancelCalls.some((c) => c.k === 'rem-mark')); remPeople = [];
     applyStatus = 500; rr = await hook(paidBody, sign(paidBody)); check('webhook: if the database is down we answer with an error so Stripe tries again', rr.status === 500); applyStatus = 200;
     check('billing helpers: signature check accepts a good one and rejects junk', billing.verifySignature('x', sign('x'), 'whsec_testsecret') && !billing.verifySignature('x', 'garbage', 'whsec_testsecret') && !billing.verifySignature('x', sign('x'), ''));
     check('billing helpers: price for 100 sites is built without error and 101 is refused', (() => { try { billing.checkoutParams({ companyId: 'c', sites: 100, interval: 'monthly', origin: 'https://x' }); } catch { return false; } try { billing.checkoutParams({ companyId: 'c', sites: 101, interval: 'monthly', origin: 'https://x' }); return false; } catch { return true; } })());

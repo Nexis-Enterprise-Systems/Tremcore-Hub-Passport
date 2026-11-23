@@ -158,3 +158,9 @@
 - Suggestions only: the person checks every row (site, which check it files under or a new check, dates) and presses "Add all". Skipped or unreadable files are not stored. Photos, scans and Word files are not read (the person types the dates). Empty dates show as "No date", never green. A due date worked out from the usual repeat period is flagged.
 - The PDF text reader (pdf.js 3.11.174) is loaded from the already-allowed jsdelivr CDN only when bulk upload is used. If it fails to load, rows simply come up as "Needs checking".
 - Uses the existing database rules (documents and checks are limited to people who can edit that site), so no new migration. Level 2 and 3 clients are view-only and do not see the button. A Hub version for Tremcore staff is a later item.
+
+## Certificate reminder emails (23 Nov 2026)
+- **Level 1:** one summary email per person listing every item due within 30 days or overdue. Sent when an item newly reaches: 30 to 8 days before (once), 7 to 1 days before (once), the due date (once), then weekly while overdue, up to 8 chases per due date. A new due date starts the count again. Items with no date never trigger an email. Stopped or ended accounts get nothing.
+- **Who:** the head-office user, plus site users who can update their site (their own sites only). View-only users are never emailed.
+- **Levels 2 and 3:** one notice per item as it comes within 30 days: "Tremcore is managing the renewal and will be in touch", to the head-office user only. No overdue chasing.
+- **How:** the database (`reminders_pending` / `reminders_mark`, migration 0033, service key only) decides and records, so nobody gets the same reminder twice. The server sends the emails once a day from 8am UK time when `REMINDERS_ON=1` (set on LIVE only). `POST /api/send-reminders` with `Authorization: Bearer <REMINDER_SECRET>` runs it by hand. Needs the Resend email set-up.

@@ -2,6 +2,7 @@
 // Serves the app files and hands the browser the PUBLIC Supabase settings.
 // The Supabase service-role (secret) key is never sent to the browser.
 'use strict';
+const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -105,7 +106,7 @@ async function handleEnquiry(req, res) {
   return reply(200, { ok: true });
 }
 
-const { fromLines, interestThanks, welcomeReceipt, paymentFailed, COMPANY } = require('./mail-template');
+const { complianceReminder, managedNotice, fromLines, interestThanks, welcomeReceipt, paymentFailed, COMPANY } = require('./mail-template');
 // Changes every time the site is deployed (Railway gives the commit; otherwise the time this copy started). The app compares it to show "Update now".
 const BUILD_ID = String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.BUILD_ID || Date.now());
 const interestHits = new Map();
@@ -196,6 +197,56 @@ async function handleSendLaunch(req, res) {
     }
     return out(200, { ok: true, sent, failed });
   } catch (e) { console.error('send launch error', e.message); return out(502, { error: 'Sorry, that did not work. Please try again.' }); }
+}
+
+// ---- Daily certificate reminders. The database says who needs an email today (and never repeats one); this sends them and then records them.
+// Runs once a day by itself when REMINDERS_ON=1 is set (live only), and can be started by hand with the secret in REMINDER_SECRET.
+const SITE_URL = (process.env.SITE_URL || 'https://www.tremcore.co.uk').replace(/\/+$/, '');
+let remindersRunning = false;
+async function runReminders() {
+  if (remindersRunning) return { skipped: 'already running' };
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return { skipped: 'not configured' };
+  if (!EMAIL_API_KEY || !EMAIL_FROM) return { skipped: 'email is not set up' };
+  remindersRunning = true;
+  const svc = { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' };
+  const out = { people: 0, sent: 0, failed: 0, marked: 0 };
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/reminders_pending', { method: 'POST', headers: svc, body: '{}', signal: AbortSignal.timeout(20000) });
+    if (!r.ok) { console.error('reminders_pending failed', r.status); return Object.assign(out, { skipped: 'could not get the list' }); }
+    const people = await r.json(); out.people = people.length;
+    for (const p of people) {
+      try {
+        const mail = p.level > 1 ? managedNotice(p, SITE_URL) : complianceReminder(p, SITE_URL);
+        const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: EMAIL_FROM, to: [p.email], reply_to: COMPANY.email, subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
+        if (!er.ok) { out.failed++; console.error('reminder email failed', er.status); continue; }
+        out.sent++;
+        const mark = p.items.filter((i) => i.triggered).map((i) => ({ item_id: i.item_id, stage: i.mark_stage, due_date: String(i.due_date).slice(0, 10) }));
+        const mr = await fetch(SUPABASE_URL + '/rest/v1/rpc/reminders_mark', { method: 'POST', headers: svc, body: JSON.stringify({ p_items: mark }), signal: AbortSignal.timeout(10000) });
+        if (mr.ok) out.marked += mark.length; else console.error('reminders_mark failed', mr.status);
+      } catch (e) { out.failed++; console.error('reminder error', e.message); }
+    }
+  } catch (e) { console.error('reminders error', e.message); out.skipped = 'error'; }
+  finally { remindersRunning = false; }
+  console.log('reminders: ' + JSON.stringify(out));
+  return out;
+}
+async function handleSendReminders(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const secret = process.env.REMINDER_SECRET || '';
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m || m[1].length !== secret.length || !crypto.timingSafeEqual(Buffer.from(m[1]), Buffer.from(secret))) return out(401, { error: 'Not allowed.' });
+  return out(200, await runReminders());
+}
+// Once an hour check whether it is time (8 o'clock UK time or later, and not yet done today); the database stops any repeat.
+let lastReminderDay = '';
+function startReminderTimer() {
+  const tick = () => {
+    const uk = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(new Date());
+    const g = (t) => (uk.find((x) => x.type === t) || {}).value, day = g('year') + g('month') + g('day');
+    if (+g('hour') >= 8 && day !== lastReminderDay) { lastReminderDay = day; runReminders().catch((e) => console.error('reminders', e.message)); }
+  };
+  setTimeout(tick, 60 * 1000).unref(); setInterval(tick, 60 * 60 * 1000).unref();
 }
 
 // ---- Cancelling (and un-cancelling) a subscription. The app used to change only OUR records, so Stripe could keep charging. Now the server does both:
@@ -712,6 +763,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/signup-checkout') return handleSignupCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout-extra') return handleCheckoutExtra(req, res);
+  if (req.method === 'POST' && pathname === '/api/send-reminders') return handleSendReminders(req, res);
   if (req.method === 'POST' && pathname === '/api/cancellation') return handleCancellation(req, res);
   if (req.method === 'POST' && pathname === '/api/interest') return handleInterest(req, res);
   if (req.method === 'POST' && pathname === '/api/send-launch') return handleSendLaunch(req, res);
@@ -752,5 +804,6 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) console.warn('WARNING: SUPABASE_URL and SUPABASE_ANON_KEY are not set; sign-in will not work.');
   server.listen(PORT, () => console.log('Tremcore web listening on ' + PORT));
+  if (process.env.REMINDERS_ON === '1') { startReminderTimer(); console.log('Daily reminder emails are ON.'); } else console.log('Daily reminder emails are off (set REMINDERS_ON=1 to switch them on).');
 }
 module.exports = server;
