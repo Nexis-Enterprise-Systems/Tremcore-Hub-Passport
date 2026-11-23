@@ -83,6 +83,7 @@ const USERS = {
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   const launchCalls = []; let launchOpen = true; let launchPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'pat prospect', email: 'pat@shop.example', business_name: 'Pat Shop Ltd' }];
+  const cancelCalls = []; let linkOk = true, linkSub = 'sub_live1', linkStatus = 403;
   const offerCalls = [], mailCalls = []; let offerGood = true, couponExists = false, mailFail = false, myOffer = [], attachOk = true, createOk = true;
   const OFFER_ROW = { id: '99999999-9999-4999-8999-999999999999', code: 'TC-ABC234', prospect_name: 'Pat Prospect', prospect_email: 'pat@prospect.example', discount_pence: 700, months: 12, expires_at: new Date(Date.now() + 20 * 86400000).toISOString(), status: 'active', sent_at: null };
   global.fetch = (u, o) => {
@@ -99,6 +100,12 @@ const USERS = {
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/create_offer_code') { const b = JSON.parse(o.body); offerCalls.push({ k: 'create', b, auth: o.headers.Authorization }); return Promise.resolve(createOk ? new Response(JSON.stringify(Object.assign({}, OFFER_ROW, { prospect_email: String(b.p_email).toLowerCase() })), { status: 200 }) : new Response('{"message":"not_allowed"}', { status: 400 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/mark_offer_sent') { offerCalls.push({ k: 'sent', b: JSON.parse(o.body) }); return Promise.resolve(new Response('null', { status: 200 })); }
     if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/offer_codes?id=eq.')) { offerCalls.push({ k: 'get', u: url }); return Promise.resolve(new Response(JSON.stringify([OFFER_ROW]), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/my_billing_link') { cancelCalls.push({ k: 'link', auth: o.headers.Authorization }); return Promise.resolve(linkOk ? new Response(JSON.stringify([{ company_id: 'co-1', stripe_subscription_id: linkSub }]), { status: 200 }) : new Response('{}', { status: linkStatus })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/request_cancellation') { cancelCalls.push({ k: 'request', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify('2026-12-23T00:00:00Z'), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/withdraw_cancellation') { cancelCalls.push({ k: 'withdraw', auth: o.headers.Authorization }); return Promise.resolve(new Response('null', { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/free_activate') { cancelCalls.push({ k: 'free', b: JSON.parse(o.body), auth: o.headers.Authorization }); return Promise.resolve(new Response('"opened"', { status: 200 })); }
+    if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/companies?') && url.includes('select=offer_code')) return Promise.resolve(new Response(JSON.stringify([{ offer_code: 'TC-FREE22' }]), { status: 200 }));
+    if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/companies?') && url.includes('contact_email')) { cancelCalls.push({ k: 'company', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify([{ name: 'Acme Cafes Ltd', contact_name: 'pat jones', contact_email: 'pat@acme.example' }]), { status: 200 })); }
     if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info') { sent.push({ u: url, o }); return Promise.resolve(extraReply.status === 200 ? new Response(JSON.stringify(extraReply.rows), { status: 200 }) : new Response(JSON.stringify({ message: extraReply.message || 'not_allowed' }), { status: extraReply.status })); }
@@ -337,6 +344,38 @@ const USERS = {
     const xs = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_x', metadata: { kind: 'extra', extra_code: 'staff_signin', quantity: '3', company_id: 'co-1' } }, 'evt_extra');
     const nA = applied.length; rr = await realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'Stripe-Signature': sign(xs) }, body: xs });
     check('webhook: a paid add-on is passed on as an add-on with its code and quantity (not as the main account)', rr.status === 200 && applied.length === nA + 1 && applied[nA].body.p_action === 'extra_paid' && applied[nA].body.p_extra === 'staff_signin' && applied[nA].body.p_quantity === 3 && applied[nA].body.p_subscription === 'sub_x');
+    // ---- cancelling also stops Stripe
+    let cnN = 0; const cn = (action, auth) => realFetch(base + '/api/cancellation', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.' + (++cnN) }, auth === null ? {} : { Authorization: auth || 'Bearer user-token' }), body: JSON.stringify({ action }) });
+    cancelCalls.length = 0; stripeCalls.length = 0;
+    rr = await cn('request', null); check('cancel (server): no sign-in is refused', rr.status === 401 && stripeCalls.length === 0);
+    rr = await cn('request'); let cj = await rr.json(); const cs = stripeCalls[stripeCalls.length - 1];
+    check('cancel (server): notice is recorded by the database first, then the Stripe subscription is set to end on that date', rr.status === 200 && cj.stripe === true && cancelCalls.map((c) => c.k).join() === 'link,request' && cs && cs.u === 'https://stripe.test/v1/subscriptions/sub_live1' && new URLSearchParams(cs.o.body).get('cancel_at') === String(Math.floor(new Date('2026-12-23T00:00:00Z').getTime() / 1000)));
+    check('cancel (server): it all happens with the person\'s own token', cancelCalls.every((c) => c.auth === 'Bearer user-token'));
+    stripeCalls.length = 0; cancelCalls.length = 0; stripeFail = true; rr = await cn('request');
+    check('cancel (server): if Stripe refuses, our records are put back so the two agree, and a plain message is shown', rr.status === 502 && cancelCalls.map((c) => c.k).join() === 'link,request,withdraw' && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
+    stripeCalls.length = 0; cancelCalls.length = 0; rr = await cn('withdraw');
+    check('cancel (server): keeping the account removes the end date at Stripe and in our records', rr.status === 200 && new URLSearchParams(stripeCalls[0].o.body).get('cancel_at') === '' && cancelCalls.map((c) => c.k).join() === 'link,withdraw');
+    stripeCalls.length = 0; stripeFail = true; cancelCalls.length = 0; rr = await cn('withdraw'); check('cancel (server): if Stripe refuses to keep it, our records are left alone', rr.status === 502 && !cancelCalls.some((c) => c.k === 'withdraw')); stripeFail = false;
+    linkOk = false; cancelCalls.length = 0; rr = await cn('request'); check('cancel (server): anyone but the head-office user is refused before anything changes', rr.status === 403 && !cancelCalls.some((c) => c.k === 'request')); linkOk = true;
+    linkSub = null; stripeCalls.length = 0; rr = await cn('request'); check('cancel (server): an account that is not on Stripe (trial or free access) is cancelled in our records only', rr.status === 200 && stripeCalls.length === 0); linkSub = 'sub_live1';
+    rr = await cn('explode'); check('cancel (server): unknown actions are refused', rr.status === 400);
+    // ---- free access code
+    cancelCalls.length = 0; stripeCalls.length = 0; billingRows = [{ company_id: 'co-1', sites: 1, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }]; myOffer = [{ kind: 'free', discount_pence: 0, months: 0 }];
+    rr = await realFetch(base + '/api/checkout', { method: 'POST', headers: { Authorization: 'Bearer user-token', 'X-Forwarded-For': '198.51.100.250' } }); cj = await rr.json();
+    check('free access: Pay now with a free code opens the account without calling Stripe, using the server key', rr.status === 200 && cj.free === true && /\/app\/\?paid=1$/.test(cj.url) && stripeCalls.length === 0 && cancelCalls.some((c) => c.k === 'free' && c.b.p_code === 'TC-FREE22' && c.b.p_company === 'co-1' && c.auth === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK'));
+    myOffer = []; billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }];
+    // ---- emails from the webhook
+    mailCalls.length = 0; const ew = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_1' }, 'evt_welcome');
+    rr = await hook(ew, sign(ew));
+    check('welcome email: the first payment sends one welcome and receipt to the customer', rr.status === 200 && mailCalls.length === 1 && mailCalls[0].body.to[0] === 'pat@acme.example' && /Welcome|Payment received/.test(mailCalls[0].body.subject) && mailCalls[0].body.text.includes('Hi Pat,') && mailCalls[0].body.reply_to === 'info@tremcore.co.uk');
+    mailCalls.length = 0; const rn = evt('invoice.paid', { customer: 'cus_1', subscription: 'sub_1' }, 'evt_renew'); rr = await hook(rn, sign(rn));
+    check('welcome email: later renewals send no welcome', mailCalls.length === 0);
+    mailCalls.length = 0; const fl = evt('invoice.payment_failed', { customer: 'cus_1', subscription: 'sub_1' }, 'evt_fail2'); rr = await hook(fl, sign(fl));
+    check('failed payment: the customer and Tremcore are both emailed', rr.status === 200 && mailCalls.length === 2 && mailCalls.some((m) => m.body.to[0] === 'pat@acme.example' && /could not take/.test(m.body.subject)) && mailCalls.some((m) => m.body.to[0] === 'info@tremcore.co.uk' && /Payment failed: Acme Cafes Ltd/.test(m.body.subject)));
+    mailFail = true; mailCalls.length = 0; const fl2 = evt('invoice.payment_failed', { customer: 'cus_1', subscription: 'sub_1' }, 'evt_fail3'); rr = await hook(fl2, sign(fl2)); mailFail = false;
+    check('failed payment: if the email service is down the webhook still succeeds', rr.status === 200);
+    const dupN = mailCalls.length; applyResult = 'duplicate'; const fl3 = evt('invoice.payment_failed', { customer: 'cus_1', subscription: 'sub_1' }, 'evt_fail2'); await hook(fl3, sign(fl3)); applyResult = 'applied';
+    check('failed payment: a repeated message sends no second email', mailCalls.length === dupN);
     applyStatus = 500; rr = await hook(paidBody, sign(paidBody)); check('webhook: if the database is down we answer with an error so Stripe tries again', rr.status === 500); applyStatus = 200;
     check('billing helpers: signature check accepts a good one and rejects junk', billing.verifySignature('x', sign('x'), 'whsec_testsecret') && !billing.verifySignature('x', 'garbage', 'whsec_testsecret') && !billing.verifySignature('x', sign('x'), ''));
     check('billing helpers: price for 100 sites is built without error and 101 is refused', (() => { try { billing.checkoutParams({ companyId: 'c', sites: 100, interval: 'monthly', origin: 'https://x' }); } catch { return false; } try { billing.checkoutParams({ companyId: 'c', sites: 101, interval: 'monthly', origin: 'https://x' }); return false; } catch { return true; } })());
@@ -948,10 +987,12 @@ const USERS = {
     await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
     await t.page.click('#cancel-start'); await t.page.waitForSelector('#cancel-confirm');
     check('cancel: explains one month notice, data removal and that a year paid up front is not refunded', (await t.page.locator('.card').innerText()).includes('one month') && (await t.page.locator('.card').innerText()).includes('not refunded'));
+    const cancelBodies = []; await t.page.route('**/api/cancellation', async (rt) => { const b = JSON.parse(rt.request().postData() || '{}'); cancelBodies.push(b.action);
+      await t.page.evaluate((a) => { window.__mock.access = a === 'request' ? { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 } : { state: 'ok', is_head: true }; }, b.action); rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
     await t.page.click('#cancel-confirm'); await t.page.waitForSelector('text=due to close on');
-    check('cancel: after giving notice the banner shows the end date and a Keep my account button', (await t.page.locator('button:has-text("Keep my account")').count()) === 1 && (await calls(t.page, 'rpc:request_cancellation')).length === 1);
+    check('cancel: after giving notice the banner shows the end date and a Keep my account button', (await t.page.locator('button:has-text("Keep my account")').count()) === 1 && cancelBodies.join() === 'request');
     await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
-    check('cancel: notice can be withdrawn', (await calls(t.page, 'rpc:withdraw_cancellation')).length === 1);
+    check('cancel: notice can be withdrawn (through the server, so Stripe is told too)', cancelBodies.join() === 'request,withdraw');
     await t.ctx.close();
     // the website's Login button always shows the login page, even if someone is still signed in on this device
     t = await newPage(() => { window.__mock.startAs = 'site@t'; }); 

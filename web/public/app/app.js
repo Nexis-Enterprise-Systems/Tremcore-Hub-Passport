@@ -230,7 +230,7 @@
         : h('div', { class: 'msg err', role: 'alert' }, 'A payment for this account has failed. Please ask your head-office user to fix it, or the account will be put on stop by ' + fmtDate(a.ends_at) + '.');
     } else if (a.state === 'cancelling') {
       banner = h('div', { class: 'msg err', role: 'status' }, 'Your account is due to close on ' + fmtDate(a.ends_at) + '. After that you will not be able to sign in and your data will be removed.',
-        a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async () => { await sb.rpc('withdraw_cancellation'); route(); } }, 'Keep my account')));
+        a.is_head && h('div', {}, h('button', { class: 'btn ghost', onclick: async (e) => { e.target.disabled = true; const r = await cancellation('withdraw'); if (!r.ok) { e.target.disabled = false; e.target.after(h('div', { class: 'msg err', role: 'alert' }, r.error || 'We could not do that. Please contact Tremcore.')); return; } route(); } }, 'Keep my account')));
     }
     const returned = { extra: new URLSearchParams(location.search).get('extra'), paid: new URLSearchParams(location.search).get('paid') };   // coming back from paying for an add-on
     if (location.search.includes('paid=')) history.replaceState(null, '', '/app/');
@@ -295,6 +295,16 @@
       h('button', { class: 'btn ghost', onclick: signOut }, 'Sign out')));
   }
 
+  // Cancelling goes through our server so that the Stripe subscription is ended (or kept) at the same time as our own records.
+  async function cancellation(action) {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      const r = await fetch('/api/cancellation', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ((session && session.access_token) || '') }, body: JSON.stringify({ action }) });
+      const j = await r.json().catch(() => ({}));
+      return r.ok ? { ok: true } : { ok: false, error: j.error };
+    } catch (e) { return { ok: false, error: 'Sorry, that did not go through. Please check your connection and try again.' }; }
+  }
+
   function viewCancel() {
     const msg = h('div', { id: 'cancel-msg' });
     showIn(h('div', { class: 'card' }, h('h1', {}, 'Cancel my subscription'),
@@ -302,8 +312,8 @@
       h('p', { class: 'muted' }, 'If you have paid for a year up front, you keep access to the end of the year you paid for and that payment is not refunded (see the Terms). Please download or save anything you need before the end date.'),
       msg,
       h('button', { class: 'btn', id: 'cancel-confirm', onclick: async () => {
-        const r = await sb.rpc('request_cancellation');
-        if (r.error) { msg.replaceChildren(h('div', { class: 'msg err', role: 'alert' }, 'We could not record your notice. Please contact Tremcore.')); return; }
+        const r = await cancellation('request');
+        if (!r.ok) { msg.replaceChildren(h('div', { class: 'msg err', role: 'alert' }, r.error || 'We could not record your notice. Please contact Tremcore.')); return; }
         route();
       } }, 'Give my notice'),
       h('button', { class: 'btn ghost', onclick: () => route() }, 'Go back')));
@@ -528,7 +538,7 @@
       h('label', { for: 'su-email' }, 'Email address'), email,
       h('label', { for: 'su-pass' }, 'Password'), pass,
       billing,
-      h('label', { for: 'su-code' }, 'Discount code (if you have one)'), offerBox, offerNote,
+      h('label', { for: 'su-code' }, 'Discount or access code (if you have one)'), offerBox, offerNote,
       h('label', { class: 'check' }, terms, h('span', {}, 'I am signing up for a business and agree to the ', h('a', { href: '/terms/', target: '_blank', rel: 'noopener' }, 'terms and conditions'), '. I have read the ', h('a', { href: '/privacy/', target: '_blank', rel: 'noopener' }, 'privacy notice'), '. (Both open in a new tab.)')),
       btn, box,
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'linkbtn', onclick: () => viewLogin() }, 'I already have an account')));
@@ -546,10 +556,10 @@
   }
 
   // Back from Stripe after paying at sign-up (signed out: the email still has to be confirmed).
-  function viewWelcome(paid) {
+  function viewWelcome(paid, free) {
     let email = ''; try { email = sessionStorage.getItem('tc_signup_email') || ''; } catch (e) { /* ignore */ }
-    show(h('div', { class: 'card', id: 'welcome' }, h('h1', {}, paid ? 'Payment received. Thank you' : 'Payment not completed'),
-      paid ? h('p', {}, 'One last step: we have emailed you a link' + (email ? ' at ' : '. '), email ? h('strong', {}, email) : null, email ? '. ' : '', 'Open it to confirm your address, then sign in. Your account opens as soon as your payment is confirmed, usually within seconds.')
+    show(h('div', { class: 'card', id: 'welcome' }, h('h1', {}, free ? 'Your free access is set up' : paid ? 'Payment received. Thank you' : 'Payment not completed'),
+      paid ? h('p', {}, 'One last step: we have emailed you a link' + (email ? ' at ' : '. '), email ? h('strong', {}, email) : null, email ? '. ' : '', 'Open it to confirm your address, then sign in. ' + (free ? 'Your account is already open: no payment is needed.' : 'Your account opens as soon as your payment is confirmed, usually within seconds.'))
         : h('p', {}, 'You have not been charged. Your sign-up is saved but nothing opens until you pay. Open the link we emailed you to confirm your address, sign in, and you will be taken to the payment step.'),
       h('p', { class: 'muted' }, 'You will be asked to set up 2FA with an authenticator app the first time you sign in. Nothing arrived? Check your spam folder.'),
       email ? resendButton(email) : null,
@@ -587,7 +597,7 @@
   async function route() {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) { const q = new URLSearchParams(location.search);
-      if (q.get('welcome') === '1' || q.get('welcome') === '0') { const paid = q.get('welcome') === '1'; history.replaceState(null, '', '/app/'); return viewWelcome(paid); }
+      if (q.get('welcome') === '1' || q.get('welcome') === '0') { const paid = q.get('welcome') === '1', free = q.get('free') === '1'; history.replaceState(null, '', '/app/'); return viewWelcome(paid, free); }
       return q.has('invite') ? viewInviteSignup() : q.has('signup') ? viewSignup() : viewLogin(); }
     if (recovering) return viewReset();
     let { data: rows, error } = await sb.rpc('auth_requirements');

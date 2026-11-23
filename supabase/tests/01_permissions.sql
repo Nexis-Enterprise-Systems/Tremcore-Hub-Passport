@@ -1154,3 +1154,64 @@ update companies set subscription = 'active' where id = '10000000-0000-0000-0000
 select 'interest: once they pay, the person moves to signed up and is linked to their company' as test,
   (select status = 'signed_up' and company_id = '10000000-0000-0000-0000-0000000000e5' and signed_up_at is not null from interest_list where lower(email) = 'pat@shop.example') as ok;
 rollback;
+
+-- Cancelling also stops Stripe (my_billing_link) and free access codes (migration 0032) ---------------------
+begin;
+update companies set stripe_subscription_id = 'sub_cancel_test' where id = '10000000-0000-0000-0000-00000000000a';
+select * from chk('billing link: the head-office user gets their own company''s Stripe subscription', :'superA', 'aal2',
+  $$select count(*) = 1 and bool_and(stripe_subscription_id = 'sub_cancel_test' and company_id = '10000000-0000-0000-0000-00000000000a') from my_billing_link()$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a3', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform * from my_billing_link(); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a site user could ask about the subscription: %', e; end if; end $$;
+select 'billing link: a site user (not head office) is refused' as test, true as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform * from my_billing_link(); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'Tremcore staff could use the client billing link: %', e; end if; end $$;
+select 'billing link: staff cannot use the client lookup' as test, true as ok;
+do $$ declare e text; begin
+  set local role anon;
+  begin perform * from my_billing_link(); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'anon could call my_billing_link: %', e; end if; end $$;
+select 'billing link: not open to the public' as test, true as ok;
+
+select * from chk('free code: staff can make one', :'staff', 'aal2', $$select (create_offer_code('free@example.com', 'Fay Free', 30, 'free')).kind = 'free'$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform create_offer_code('free2@example.com', 'X', 30, 'free'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client made a free code: %', e; end if; end $$;
+select 'free code: a client cannot make one' as test, true as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform create_offer_code('free3@example.com', 'X', 30, 'bogus'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '22023' then raise exception 'unknown kind accepted: %', e; end if; end $$;
+select 'free code: an unknown kind is refused' as test, true as ok;
+create temp table fc as select code from offer_codes where prospect_email = 'free@example.com';
+grant select on fc to public;
+insert into companies(id,name,level,subscription,billing_interval,monthly_value_pence,source) values ('10000000-0000-0000-0000-0000000000f7','Free Co',1,'trial','annual',0,'self_signup');
+select 'free code: it can be used on a yearly sign-up too (no price involved)' as test, (select kind = 'free' and discount_pence = 0 from offer_attach('10000000-0000-0000-0000-0000000000f7', (select code from fc))) as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform free_activate('10000000-0000-0000-0000-0000000000f7', (select code from fc)); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client could open an account for free: %', e; end if; end $$;
+select 'free code: only the server can open an account with it, never a signed-in user' as test, true as ok;
+do $$ begin set local role service_role; perform free_activate('10000000-0000-0000-0000-0000000000f7', (select code from fc)); reset role; end $$;
+select 'free code: the account opens with no payment, flagged as free access, value zero' as test,
+  (select subscription = 'active' and free_access and monthly_value_pence = 0 and offer_ends_at is null from companies where id = '10000000-0000-0000-0000-0000000000f7') as ok;
+select 'free code: the code is used up and tied to the company' as test, (select status = 'used' and used_company = '10000000-0000-0000-0000-0000000000f7' from offer_codes where code = (select code from fc)) as ok;
+do $$ declare e text; begin set local role service_role;
+  begin perform free_activate('10000000-0000-0000-0000-0000000000f7', (select code from fc)); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '22023' then raise exception 'a used free code opened an account again: %', e; end if; end $$;
+select 'free code: it cannot be used twice' as test, true as ok;
+insert into companies(id,name,level,subscription,billing_interval,monthly_value_pence,source) values ('10000000-0000-0000-0000-0000000000f8','Nope Co',1,'trial','monthly',0,'self_signup');
+do $$ declare e text; begin set local role service_role;
+  begin perform free_activate('10000000-0000-0000-0000-0000000000f8', 'TC-AAAAAA'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '22023' then raise exception 'an unknown code opened an account: %', e; end if; end $$;
+select 'free code: an unknown code or one not attached to the company opens nothing' as test, (select subscription = 'trial' from companies where id = '10000000-0000-0000-0000-0000000000f8') as ok;
+rollback;

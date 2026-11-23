@@ -46,4 +46,31 @@ function interestThanks(person, siteUrl) {
   return { subject: 'Thank you for registering your interest', text, html: shell({ title: 'Thank you for registering your interest', bodyHtml, siteUrl, why }) };
 }
 
-module.exports = { shell, interestThanks, firstName, COMPANY };
+
+function simpleMail(title, paras, siteUrl, why, subject) {
+  const text = [].concat(paras, ['', 'Kindest Regards,', 'Tremcore Passport Team', '', '--', COMPANY.name, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why]).join('\n');
+  const bodyHtml = paras.map((t) => '<p style="margin:0 0 18px;">' + esc(t) + '</p>').join('') + '<p style="margin:26px 0 20px;">Kindest Regards,<br><strong>Tremcore Passport Team</strong></p>';
+  return { subject: subject || title, text, html: shell({ title, bodyHtml, siteUrl, why }) };
+}
+
+// Sent once, after the first successful payment.
+function welcomeReceipt(person, siteUrl) {
+  const first = firstName(person.name), hi = first ? 'Hi ' + first + ',' : 'Hi,';
+  const paras = [hi, 'Thank you. We have received your payment and your Tremcore Passport account is now active' + (person.company ? ' for ' + person.company : '') + '.',
+    'You can sign in at ' + siteUrl + '/app/ to add your sites and compliance records. Stripe will email you a separate receipt for this payment, and you can see your plan in the app under Your account.',
+    'If you have any questions, just reply to this email and one of the team will be in touch.'];
+  return simpleMail('Welcome to the Tremcore Passport', paras, siteUrl, 'You are receiving this email because you signed up for the Tremcore Passport.', 'Welcome to the Tremcore Passport. Payment received');
+}
+
+// A payment did not go through. Sent to the head-office user, and a copy to Tremcore.
+function paymentFailed(person, siteUrl, forTremcore) {
+  const first = firstName(person.name), hi = forTremcore ? 'Hello,' : (first ? 'Hi ' + first + ',' : 'Hi,');
+  const paras = forTremcore
+    ? [hi, 'A payment failed for ' + (person.company || 'a customer') + (person.email ? ' (' + person.email + ')' : '') + '. Their account is marked Past due in the Hub. Stripe will retry automatically.']
+    : [hi, 'We were not able to take your latest Tremcore Passport payment' + (person.company ? ' for ' + person.company : '') + '.',
+       'Please check that your card or bank details are up to date. Sign in at ' + siteUrl + '/app/ and open Your account to update them. Your account stays open while we retry the payment.',
+       'If you need a hand, just reply to this email.'];
+  return simpleMail('Payment problem', paras, siteUrl, forTremcore ? 'Internal alert from the Tremcore Passport.' : 'You are receiving this email because you have a Tremcore Passport subscription.', forTremcore ? 'Payment failed: ' + (person.company || 'customer') : 'We could not take your payment');
+}
+
+module.exports = { shell, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };

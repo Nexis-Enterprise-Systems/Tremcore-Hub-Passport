@@ -446,6 +446,7 @@
     const out = h('div', { id: 'offer-out' });
     const name = text('', { id: 'of-name', autocomplete: 'off', maxlength: '120' }), email = text('', { id: 'of-email', type: 'email', inputmode: 'email', autocomplete: 'off' });
     const days = select({ '14': '14 days', '30': '30 days', '60': '60 days', '90': '90 days' }, '30');
+    const kind = select({ discount: 'Introductory offer (first site £7.99 for 12 months)', free: 'Free access (no payment)' }, 'discount'); kind.id = 'of-kind';
     const showResult = (j) => {
       const link = h('input', { type: 'text', readonly: true, value: j.link, 'aria-label': 'Sign-up link', id: 'offer-link' });
       const copy = h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(j.link); copy.textContent = 'Copied'; } catch (e) { link.select(); } } }, 'Copy link');
@@ -462,7 +463,7 @@
       const em = email.value.trim();
       if (!EMAIL.test(em)) return note(out, 'err', 'Please enter the prospect’s email address.');
       await busy(create, async () => {
-        try { const j = await call({ email: em, name: titleCase(name.value.trim()), days: Number(days.value) }); await pageOffers(++token, j); }
+        try { const j = await call({ email: em, name: titleCase(name.value.trim()), days: Number(days.value), kind: kind.value }); await pageOffers(++token, j); }
         catch (err) { note(out, 'err', err.message); }
       });
     } }, 'Create code and email it');
@@ -470,6 +471,7 @@
       h('section', { class: 'card' }, h('h2', {}, 'Introductory offer for Self-Managed'),
         h('p', { class: 'hint' }, 'First site £7.99 a month + VAT for the first 12 months (normally £14.99), then it goes back to £14.99 by itself. Extra sites are the normal £7.99. Monthly billing only. Each code works once, for one prospect.'),
         h('div', { class: 'grid2' }, field('of-name', 'Prospect’s name (optional)', name), field('of-email', 'Prospect’s email', email)),
+        h('div', { class: 'f' }, h('label', { for: 'of-kind' }, 'Type of code'), kind),
         h('div', { class: 'f' }, h('label', {}, 'Code is valid for'), days),
         h('div', { class: 'actions' }, create), out),
       h('h2', {}, 'Codes'),
@@ -481,7 +483,7 @@
           const off = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(off, async () => { try { await q(ctx.sb.rpc('cancel_offer_code', { p_id: c.id })); await pageOffers(++token); } catch (err) { rowOut.replaceChildren('Not switched off: ' + err.message); } }); } }, 'Switch off') : null;
           const copyLink = live ? h('button', { class: 'btn ghost small', onclick: async () => { const l = location.origin + '/app/?signup=1&code=' + encodeURIComponent(c.code); try { await navigator.clipboard.writeText(l); rowOut.replaceChildren('Link copied'); } catch (e) { rowOut.replaceChildren(l); } } }, 'Copy link') : null;
           const cc = c.used_company && co[c.used_company];
-          return h('tr', { 'data-code': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, [c.prospect_name, c.prospect_email].filter(Boolean).join(' · ')), h('td', {}, badge(kind, label)),
+          return h('tr', { 'data-code': c.code }, h('td', {}, h('strong', {}, c.code), c.kind === 'free' ? h('div', { class: 'muted small' }, 'Free access') : null), h('td', {}, [c.prospect_name, c.prospect_email].filter(Boolean).join(' · ')), h('td', {}, badge(kind, label)),
             h('td', {}, c.sent_at ? day(c.sent_at) : 'Not emailed'), h('td', {}, day(c.expires_at)),
             h('td', {}, cc ? [h('a', { href: '#/clients/' + cc.id }, cc.name), cc.offer_ends_at ? h('div', { class: 'muted small' }, 'Offer price until ' + day(cc.offer_ends_at)) : null] : ''),
             h('td', {}, copyLink, ' ', resend, ' ', off, ' ', rowOut));
@@ -562,9 +564,10 @@
   // ---------- Revenue & growth ----------
   async function pageRevenue(my) {
     chrome('revenue', h('h1', {}, 'Revenue & growth'), loading());
-    const companies = await q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,source,created_at'));
+    const companies = await q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,source,created_at,free_access'));
     if (my !== token) return;
-    const active = companies.filter((c) => c.subscription === 'active');
+    const freeN = companies.filter((c) => c.subscription === 'active' && c.free_access).length;
+    const active = companies.filter((c) => c.subscription === 'active' && !c.free_access);   // free-access accounts are not paying, so they are left out of the revenue figures
     const mrr = active.reduce((t, c) => t + (c.monthly_value_pence || 0), 0);
     const count = (st) => companies.filter((c) => c.subscription === st).length;
     const ever = companies.filter((c) => c.subscription !== 'trial').length;
@@ -600,7 +603,7 @@
       h('div', { class: 'tiles' },
         tile('Monthly recurring revenue', money(mrr)), tile('Yearly run rate', money(mrr * 12)),
         tile('Paying clients', String(active.length)), tile('Average per paying client', avg),
-        tile('On trial', String(count('trial'))), tile('Past due', String(count('past_due'))),
+        tile('Free accounts', String(freeN)), tile('On trial', String(count('trial'))), tile('Past due', String(count('past_due'))),
         tile('Cancelled', String(count('cancelled'))), tile('Trial to paying', conv)),
       noValue ? h('div', { class: 'msg' }, noValue + ' active client' + (noValue === 1 ? ' has' : 's have') + ' no monthly value set, so the figures above are low. Set them on the Subscriptions page.') : null,
       h('p', { class: 'hint' }, 'Based on the subscriptions and monthly values you record by hand. When Stripe is connected these will fill in automatically. Figures exclude VAT.'),

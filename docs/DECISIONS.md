@@ -146,3 +146,8 @@
 ## Back button and pull to refresh (22 Nov 2026)
 - Every Hub page except the Dashboard has a "‹ Back" button at the top (goes to the previous page; if there is none it goes to Clients for client/site pages, otherwise the Dashboard).
 - On touch screens, pulling down from the top of any page refreshes the app (installed phone apps have no refresh button). Pull further than about 80px and let go. Typing boxes and scrolling lists are excluded so it does not trigger by accident.
+
+## 23 Nov 2026: cancelling, free access and payment emails
+- **Cancelling in the app now also stops Stripe.** The app calls `/api/cancellation` on our server. The database decides who is allowed (head-office user only, via `my_billing_link()`) and works out the end date; the server then sets the Stripe subscription to end on that date (or removes the end date for "Keep my account"). If Stripe refuses, our records are put back, so the two always agree.
+- **Free access codes** (migration 0032): staff make them on the Offers page (type "Free access"). Single-use, expiring, can be switched off. Using one opens the account with no Stripe step (`free_activate`, server key only), flags the company `free_access` and value £0. Free accounts are left out of the revenue figures. Intended for testing and for any invited free account.
+- **Emails from the Stripe webhook** (only when the email service is set up, never blocks the webhook): a welcome/receipt after the first payment only; a failed-payment email to the head-office user plus a copy to info@tremcore.co.uk.
