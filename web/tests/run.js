@@ -1045,6 +1045,45 @@ const USERS = {
       if (rights) window.__mock.rights = rights;
       if (level) window.__mock.users['site@t'].profile.level = level;
     };
+    // ---- bulk upload of certificates (reads the text of PDFs in the browser; here the PDF reader is replaced by a stand-in that returns the file's own text)
+    const certRead = require('../public/app/certread.js');
+    const rd = certRead.parse('Landlord Gas Safety Certificate CP12 Certificate No: GS123456 Date of inspection: 14/03/2026 Next inspection due by: 13/03/2027', 'x.pdf');
+    check('bulk reader: finds a gas safety certificate, both dates and the number', rd.type.code === 'gas' && rd.issue === '2026-03-14' && rd.expiry === '2027-03-13' && rd.number === 'GS123456' && rd.sure);
+    const ri = certRead.parse('Public Liability policy. Period of insurance from 01/09/2026 to 31/08/2027', 'p.pdf');
+    check('bulk reader: "from ... to ..." gives start and end dates', ri.type.code === 'ins_pl' && ri.issue === '2026-09-01' && ri.expiry === '2027-08-31' && !ri.expiryWorkedOut);
+    const rw = certRead.parse('Emergency lighting test. Date of test 31/01/2026', 'a.pdf');
+    check('bulk reader: with only a test date the due date is worked out from the usual period and flagged as worked out', rw.expiry === '2027-01-31' && rw.expiryWorkedOut);
+    const ru = certRead.parse('hello there', 'random.pdf');
+    check('bulk reader: unknown documents give no type and no dates (never guessed)', !ru.type && !ru.issue && !ru.expiry && !ru.sure);
+    check('bulk reader: the file name helps when the text has nothing', certRead.parse('', 'Fire_Extinguisher_service_2026.pdf').type.code === 'extinguish');
+    check('bulk reader: impossible dates are ignored', certRead.parse('Gas safety. Next inspection due 31/02/2027', 'g.pdf').expiry === null);
+    const tb = await newPage(ppSeed, {}); await login(tb.page, 'site@t'); await tb.page.waitForSelector('.summary');
+    await tb.page.evaluate(() => { window.pdfjsLib = { getDocument: ({ data }) => ({ promise: Promise.resolve({ numPages: 1, getPage: async () => ({ getTextContent: async () => ({ items: [{ str: new TextDecoder().decode(data) }] }) }) }) }) }; }); await tb.page.click('[data-nav=compliance]'); await tb.page.waitForSelector('#bulk-upload');
+    await tb.page.click('#bulk-upload'); await tb.page.waitForSelector('#bulk-files');
+    await tb.page.click('#bulk-read'); check('bulk: pressing Read with no files asks for files', (await tb.page.locator('#bulk-msg').innerText()).includes('Choose one or more'));
+    await tb.page.setInputFiles('#bulk-files', [
+      { name: 'gas-cert.pdf', mimeType: 'application/pdf', buffer: Buffer.from('Landlord Gas Safety Certificate CP12 Certificate No: GS123456 Date of inspection: 14/03/2026 Next inspection due by: 13/03/2027') },
+      { name: 'mystery.pdf', mimeType: 'application/pdf', buffer: Buffer.from('hello there') },
+      { name: 'site photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('jpg') },
+      { name: 'Public liability.pdf', mimeType: 'application/pdf', buffer: Buffer.from('Public liability insurance. Period of insurance from 01/09/2026 to 31/08/2027 Policy number: PL-99887') }]);
+    await tb.page.click('#bulk-read'); await tb.page.waitForSelector('.bulkrow');
+    const gasRow = tb.page.locator('.bulkrow[data-file="gas-cert.pdf"]');
+    check('bulk: each file becomes a row to check', (await tb.page.locator('.bulkrow').count()) === 4);
+    check('bulk: a gas certificate is matched to the existing Gas Safety check with its dates filled in', (await gasRow.locator('.b-item option:checked').innerText()) === 'Gas Safety' && (await gasRow.locator('.b-last').inputValue()) === '2026-03-14' && (await gasRow.locator('.b-due').inputValue()) === '2027-03-13' && (await gasRow.locator('.pill').innerText()) === 'Read');
+    const plRow = tb.page.locator('.bulkrow[data-file="Public liability.pdf"]');
+    check('bulk: a certificate with no matching check is offered as a new check', (await plRow.locator('.b-item option:checked').innerText()) === 'New check: Public Liability Insurance' && (await plRow.locator('.b-title').inputValue()) === 'Public Liability Insurance');
+    check('bulk: an unreadable file and an unknown one are marked Needs checking with empty dates', (await tb.page.locator('.bulkrow[data-file="mystery.pdf"] .pill').innerText()) === 'Needs checking' && (await tb.page.locator('.bulkrow[data-file="site photo.jpg"] .b-due').inputValue()) === '' && (await tb.page.locator('.bulkrow[data-file="site photo.jpg"]').innerText()).includes('cannot read photos'));
+    await tb.page.click('#bulk-add');
+    check('bulk: Add all refuses until every file has somewhere to go, and saves nothing', (await tb.page.locator('#bulk-msg').innerText()).includes('Please choose where to file') && (await calls(tb.page, 'upload')).length === 0);
+    await tb.page.locator('.bulkrow[data-file="mystery.pdf"] .b-item').selectOption('skip'); await tb.page.locator('.bulkrow[data-file="site photo.jpg"] .b-item').selectOption('skip');
+    await tb.page.click('#bulk-add'); await tb.page.waitForSelector('text=2 certificates added');
+    const ups = await calls(tb.page, 'upload'); const dbs = await calls(tb.page, 'db');
+    check('bulk: Add all stores the two files under their site and check, and skipped files are not stored', ups.length === 2 && ups.some((u) => u.startsWith('documents:s1/i2/')) && !ups.some((u) => /mystery|photo/.test(u)));
+    check('bulk: the existing check gets the dates; the new check is created with the dates and the policy number', dbs.some((c) => c.table === 'compliance_items' && c.op === 'update' && c.payload.due_date === '2027-03-13' && c.payload.last_done === '2026-03-14' && c.payload.certificate_number === 'GS123456') && dbs.some((c) => c.table === 'compliance_items' && c.op === 'insert' && c.payload.title === 'Public Liability Insurance' && c.payload.grp === 'Insurance' && c.payload.due_date === '2027-08-31' && c.payload.certificate_number === 'PL-99887'));
+    check('bulk: two documents are recorded against their checks', dbs.filter((c) => c.table === 'documents' && c.op === 'insert').length === 2);
+    await tb.ctx.close();
+    const tv = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false } }); await login(tv.page, 'site@t'); await tv.page.waitForSelector('.summary'); await tv.page.click('[data-nav=compliance]'); await tv.page.waitForSelector('[data-ctab]');
+    check('bulk: a view-only user is not offered bulk upload', (await tv.page.locator('#bulk-upload').count()) === 0); await tv.ctx.close();
     t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('passport: Email Tremcore (not a phone number) is at the very top of the screen for a Self-Managed client', (await t.page.locator('main > .callbar #contact-tremcore').count()) === 1 && (await t.page.locator('#contact-tremcore').innerText()) === 'Email Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('mailto:info@tremcore.co.uk') && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
     check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.stat.red .num').innerText()) === '1' && (await t.page.locator('.stat.missing .num').innerText()) === '1' && (await t.page.locator('.stat.green .num').innerText()) === '2');

@@ -236,7 +236,7 @@
       const empty = ctab === 'due' ? 'Nothing is due soon, overdue or missing a date. Well done.' : rows.length ? 'Nothing here.' : rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.';
       const checksCard = h('div', { class: 'card' },
         h('div', { class: 'titlerow' }, h('h2', {}, ctab === 'due' ? 'Due Soon' : ctab === 'category' ? 'By Category' : 'Core Compliance'),
-          rights.can_manage && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks'), h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check')) : null),
+          (rights.can_edit || rights.can_manage) && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'bulk-upload', type: 'button', onclick: () => viewBulk() }, 'Bulk upload'), rights.can_manage ? h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks') : null, rights.can_manage ? h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check') : null) : null),
         body.length && ctab !== 'category' ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
         ...(body.length ? body : [h('p', { class: 'muted' }, empty)]));
       // Business insurance missed at set-up: one tap adds the missing insurance checks to the sites being shown.
@@ -786,6 +786,139 @@
     }
 
     // ---------- add your own check ----------
+
+    // ---------- bulk upload: drop in many certificates, check what we found, add them all ----------
+    // Reading is done in this browser from the text inside a PDF, with plain rules (certread.js). Nothing is sent anywhere to be read.
+    // It only suggests: every row is checked by the person, and anything uncertain is left blank.
+    const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/';
+    const loadScript = (src) => new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => no(new Error('load')); document.head.appendChild(el); });
+    let pdfReady = null;
+    const ensurePdfJs = () => pdfReady || (pdfReady = (async () => {
+      if (window.pdfjsLib) return true;
+      await loadScript(PDFJS + 'pdf.worker.min.js');   // loaded first so the reader can run without a separate worker (the security rules only allow our own scripts and the pinned CDN)
+      await loadScript(PDFJS + 'pdf.min.js');
+      if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+      return !!window.pdfjsLib;
+    })().catch(() => { pdfReady = null; return false; }));
+    const withTimeout = (pr, ms) => Promise.race([pr, new Promise((ok) => setTimeout(() => ok(''), ms))]);
+    async function pdfText(file) {
+      if (!/\.pdf$/i.test(file.name) || !(await ensurePdfJs())) return '';
+      try {
+        const doc = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
+        let out = '';
+        for (let n = 1; n <= Math.min(doc.numPages, 6); n++) { const pg = await doc.getPage(n); const tc = await pg.getTextContent(); out += ' ' + tc.items.map((i) => i.str).join(' '); }
+        return out;
+      } catch (e) { return ''; }
+    }
+    const nameToTitle = (fn) => window.TCFormat.cap(String(fn).replace(/\.[A-Za-z0-9]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 120) || 'Certificate';
+
+    function viewBulk(note) {
+      const CR = window.TCCertRead;
+      const msg = h('div', { id: 'bulk-msg' }), list = h('div', { id: 'bulk-rows' }), actions = h('div', { id: 'bulk-actions' });
+      let rows = [];
+      const fileIn = h('input', { id: 'bulk-files', type: 'file', multiple: true, accept: '.pdf,.jpg,.jpeg,.png,.doc,.docx' });
+      const readBtn = h('button', { class: 'btn', type: 'button', id: 'bulk-read' }, 'Read these files');
+      const itemsAt = (pid) => items.filter((i) => i.property_id === pid).sort((a, b) => String(a.title).localeCompare(String(b.title)));
+
+      function drawRow(r) {
+        const siteSel = props.length > 1 ? h('select', { class: 'b-site', 'aria-label': 'Site for ' + r.file.name }, ...props.map((p) => h('option', { value: p.id, selected: p.id === r.site }, p.name))) : null;
+        const fileSel = h('select', { class: 'b-item', 'aria-label': 'Where to file ' + r.file.name });
+        const titleIn = h('input', { class: 'b-title', maxlength: '120', value: r.title, 'aria-label': 'Name for the new check', placeholder: 'Name of the new check' });
+        const last = h('input', { class: 'b-last', type: 'date', value: r.last || '', 'aria-label': 'Last done' }), due = h('input', { class: 'b-due', type: 'date', value: r.due || '', 'aria-label': 'Next due' });
+        const fillItems = () => {
+          const opts = [h('option', { value: '' }, 'Choose where to file it…')].concat(itemsAt(r.site).map((i) => h('option', { value: i.id }, i.title)));
+          opts.push(h('option', { value: 'new' }, r.type ? 'New check: ' + r.type.label : 'New check (name it below)'), h('option', { value: 'skip' }, 'Do not add this file'));
+          fileSel.replaceChildren(...opts); fileSel.value = r.target;
+          titleIn.hidden = r.target !== 'new';
+        };
+        siteSel && siteSel.addEventListener('change', () => { r.site = siteSel.value; const m = r.type && itemsAt(r.site).find((i) => r.type.titleRe.test(i.title)); r.target = m ? m.id : r.type ? 'new' : ''; fillItems(); });
+        fileSel.addEventListener('change', () => { r.target = fileSel.value; titleIn.hidden = r.target !== 'new'; });
+        titleIn.addEventListener('input', () => { r.title = titleIn.value; });
+        last.addEventListener('input', () => { r.last = last.value; });
+        due.addEventListener('input', () => { r.due = due.value; });
+        fillItems();
+        r.els = { last, due };
+        return h('div', { class: 'card bulkrow', 'data-file': r.file.name },
+          h('div', { class: 'titlerow' }, h('strong', { class: 'fname' }, r.file.name),
+            h('span', { class: 'pill ' + (r.sure ? 'green' : 'amber') }, r.sure ? 'Read' : 'Needs checking')),
+          r.note ? h('p', { class: 'muted small' }, r.note) : null,
+          siteSel ? h('label', {}, 'Site') : null, siteSel,
+          h('label', {}, 'File it under'), fileSel, titleIn,
+          h('div', { class: 'two' }, h('div', {}, h('label', {}, 'Last done'), last), h('div', {}, h('label', {}, 'Next due'), due)));
+      }
+
+      readBtn.addEventListener('click', async () => {
+        const files = Array.from(fileIn.files || []);
+        if (!files.length) return message(msg, 'err', 'Choose one or more files first.');
+        if (files.length > 20) return message(msg, 'err', 'Please add up to 20 files at a time.');
+        const bad = files.filter((f) => !FILE_OK.test(f.name) || f.size > MAX_FILE);
+        if (bad.length) return message(msg, 'err', 'These cannot be used (PDF, JPG, PNG or Word only, up to 10 MB each): ' + bad.map((f) => f.name).join(', '));
+        await busy(readBtn, async () => {
+          message(msg, 'ok', 'Reading your files…'); rows = [];
+          const defaultSite = site !== 'all' && props.some((p) => p.id === site) ? site : (props[0] || {}).id;
+          for (const f of files) {
+            const text = await withTimeout(pdfText(f), 20000);
+            const got = CR.parse(text, f.name);
+            const r = { file: f, site: defaultSite, type: got.type, last: got.issue || '', due: got.expiry || '', num: got.number || '', sure: got.sure, title: got.type ? got.type.label : nameToTitle(f.name), target: '' };
+            const m = got.type && itemsAt(r.site).find((i) => got.type.titleRe.test(i.title));
+            r.target = m ? m.id : got.type ? 'new' : '';
+            r.note = !/\.pdf$/i.test(f.name) ? 'We cannot read photos or Word files yet, so please type the dates in.' : !text ? 'We could not read any text in this file (it may be a scan), so please type the dates in.' : !got.type ? 'We could not tell what this certificate is. Please choose where it belongs.' : got.expiryWorkedOut ? 'The next due date was worked out from the usual repeat period. Please check it.' : !got.sure ? 'We could not find dates. Please type them in.' : '';
+            rows.push(r);
+          }
+          message(msg, 'ok', 'Please check each one below. Nothing is saved until you press "Add all".');
+          list.replaceChildren(...rows.map(drawRow));
+          actions.replaceChildren(h('button', { class: 'btn', type: 'button', id: 'bulk-add' }, 'Add all'), h('p', { class: 'muted small' }, 'Dates left empty will show as "No date", never as in date.'));
+          actions.querySelector('#bulk-add').addEventListener('click', addAll);
+        });
+      });
+
+      async function addAll(e) {
+        const todo = rows.filter((r) => r.target !== 'skip');
+        if (!todo.length) return message(msg, 'err', 'Nothing to add.');
+        for (const r of todo) {
+          if (!r.target) return message(msg, 'err', 'Please choose where to file "' + r.file.name + '", or choose "Do not add this file".');
+          if (r.target === 'new' && !String(r.title).trim()) return message(msg, 'err', 'Please name the new check for "' + r.file.name + '".');
+          if (!validDate(r.last || '') || !validDate(r.due || '')) return message(msg, 'err', 'Please check the dates for "' + r.file.name + '".');
+        }
+        await busy(e.currentTarget || e.target, async () => {
+          let uid = null; try { uid = (await sb.auth.getSession()).data.session.user.id; } catch { uid = null; }
+          const made = {}; let ok = 0; const failed = [];
+          for (const r of todo) {
+            try {
+              let itemId = r.target;
+              if (r.target === 'new') {
+                const key = r.site + '|' + String(r.title).trim().toLowerCase();
+                if (made[key]) itemId = made[key];
+                else {
+                  const ins = await sb.from('compliance_items').insert({ property_id: r.site, grp: r.type ? r.type.grp : 'Other', title: String(r.title).trim().replace(/\s+/g, ' '), basis: r.type ? r.type.basis : 'standard', frequency_months: r.type ? r.type.freq : null, last_done: r.last || null, due_date: r.due || null, certificate_number: r.num || null, created_by: uid }).select('id').maybeSingle();
+                  if (ins.error || !ins.data) throw new Error('item');
+                  itemId = made[key] = ins.data.id;
+                }
+              } else {
+                const upd = {}; if (r.last) upd.last_done = r.last; if (r.due) upd.due_date = r.due; if (r.num) upd.certificate_number = r.num;
+                if (Object.keys(upd).length) { const u = await sb.from('compliance_items').update(upd).eq('id', itemId); if (u.error) throw new Error('item'); }
+              }
+              const safe = r.file.name.replace(/[^A-Za-z0-9._-]+/g, '_').slice(-80);
+              const path = r.site + '/' + itemId + '/' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) + '-' + safe;
+              const up = await sb.storage.from('documents').upload(path, r.file, { contentType: r.file.type || undefined });
+              if (up.error) throw new Error('upload');
+              const d = await sb.from('documents').insert({ item_id: itemId, property_id: r.site, storage_path: path, filename: r.file.name, content_type: r.file.type || null, size_bytes: r.file.size, uploaded_by: uid });
+              if (d.error) { await sb.storage.from('documents').remove([path]); throw new Error('doc'); }
+              ok++;
+            } catch (x) { failed.push(r.file.name); }
+          }
+          await reload();
+          if (failed.length) { rows = rows.filter((r) => failed.includes(r.file.name)); list.replaceChildren(...rows.map(drawRow)); message(msg, 'err', ok + ' added. These could not be added, so they are still listed: ' + failed.join(', ') + '. Please press "Add all" to try them again.'); return; }
+          viewList(ok + (ok === 1 ? ' certificate' : ' certificates') + ' added.');
+        });
+      }
+
+      page('form', h('div', { class: 'card form' }, goBack(), h('h1', {}, 'Bulk upload certificates'),
+        h('p', { class: 'muted' }, 'Choose several certificates at once. We read what each one is and its dates from the text in the PDF, and suggest where it belongs. You check everything before it is saved. Photos and scans cannot be read yet, so you type their dates in.'),
+        h('label', { for: 'bulk-files' }, 'Choose your files (up to 20)'), fileIn, readBtn, msg), list, actions);
+      if (note) message(msg, 'ok', note);
+    }
+
     function viewAdd() {
       const msg = h('div', { id: 'add-msg' });
       const title = h('input', { id: 'a-title', maxlength: '120', required: true });
