@@ -82,7 +82,7 @@ const USERS = {
   const docCalls = [], aiCalls = []; let docRows = [{ storage_path: 'p1/i1/x-cert.pdf', filename: 'cert.pdf', content_type: 'application/pdf', compliance_items: { title: 'Public Liability Insurance' } }], aiFail = false, aiText = '{"document_title":"Public liability certificate","issue_date":"2026-03-01","expiry_date":"2027-02-28","certificate_number":"PL-884213","provider":"Acme Insurance Ltd"}';
   const prepCalls = []; let prepReply = { status: 200 };
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
-  const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 699, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
+  const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 599, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   const launchCalls = []; let launchOpen = true; let launchPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'pat prospect', email: 'pat@shop.example', business_name: 'Pat Shop Ltd' }];
   let remPeople = []; const cancelCalls = []; let linkOk = true, linkSub = 'sub_live1', linkStatus = 403;
   const offerCalls = [], mailCalls = []; let offerGood = true, couponExists = false, mailFail = false, myOffer = [], attachOk = true, createOk = true;
@@ -221,7 +221,7 @@ const USERS = {
     const ce = (code, b) => realFetch(base + '/api/checkout-extra', { method: 'POST', headers: Object.assign({ Authorization: 'Bearer user-token', 'Content-Type': 'application/json' }, b || {}), body: JSON.stringify({ code }) });
     const n0 = stripeCalls.length; rr = await ce('staff_signin'); const ep = new URLSearchParams(stripeCalls[n0] && stripeCalls[n0].o.body);
     check('add-on: a head-office user is sent to a Stripe page', rr.status === 200 && (await rr.json()).url.startsWith('https://checkout.stripe.test/'));
-    check('add-on: charged monthly per site (3 sites = 3 x £6.99) as its own subscription, tagged so the webhook knows it is an add-on', ep.get('line_items[0][quantity]') === '3' && ep.get('line_items[0][price_data][unit_amount]') === '699' && ep.get('line_items[0][price_data][recurring][interval]') === 'month' && ep.get('metadata[kind]') === 'extra' && ep.get('subscription_data[metadata][extra_code]') === 'staff_signin' && ep.get('metadata[quantity]') === '3');
+    check('add-on: charged monthly per site (3 sites = 3 x £5.99) as its own subscription, tagged so the webhook knows it is an add-on', ep.get('line_items[0][quantity]') === '3' && ep.get('line_items[0][price_data][unit_amount]') === '599' && ep.get('line_items[0][price_data][recurring][interval]') === 'month' && ep.get('metadata[kind]') === 'extra' && ep.get('subscription_data[metadata][extra_code]') === 'staff_signin' && ep.get('metadata[quantity]') === '3');
     check('add-on: the existing Stripe customer is reused so their card carries over, and they return to the app', ep.get('customer') === 'cus_1' && !ep.get('customer_email') && ep.get('success_url').endsWith('/app/?extra=staff_signin&paid=1') && ep.get('cancel_url').endsWith('/app/?extra=staff_signin&paid=0'));
     check('add-on: the person is checked with their own token', sent.filter((x) => x.u.endsWith('/rpc/extra_checkout_info')).pop().o.headers.Authorization === 'Bearer user-token');
     rr = await realFetch(base + '/api/checkout-extra', { method: 'POST', body: '{"code":"staff_signin"}' }); check('add-on: no sign-in, no payment page', rr.status === 401);
@@ -233,8 +233,8 @@ const USERS = {
     }
     extraReply = { status: 404, message: 'Could not find the function public.extra_checkout_info', }; rr = await ce('staff_signin'); check('add-on: if the database update has not been run, the message says so', rr.status === 503 && (await rr.json()).error.includes('database update'));
     extraReply = { status: 200, rows: [] }; rr = await ce('staff_signin'); check('add-on: no row back means refused', rr.status === 403);
-    extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'p@x', stripe_customer_id: null, name: 'Toolbox Talks', price_pence: 399, charged_per: 'site', quantity: 3 }] }; const n1 = stripeCalls.length; await ce('toolbox_talks'); const tp = new URLSearchParams(stripeCalls[n1].o.body);
-    check('add-on: Toolbox Talks is £3.99 per site (3 sites = 3 x £3.99); a first-time customer is created from their email', tp.get('line_items[0][quantity]') === '3' && tp.get('line_items[0][price_data][unit_amount]') === '399' && !tp.get('customer') && tp.get('customer_email') === 'p@x');
+    extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'p@x', stripe_customer_id: null, name: 'Toolbox Talks', price_pence: 299, charged_per: 'site', quantity: 3 }] }; const n1 = stripeCalls.length; await ce('toolbox_talks'); const tp = new URLSearchParams(stripeCalls[n1].o.body);
+    check('add-on: Toolbox Talks is £2.99 per site (3 sites = 3 x £2.99); a first-time customer is created from their email', tp.get('line_items[0][quantity]') === '3' && tp.get('line_items[0][price_data][unit_amount]') === '299' && !tp.get('customer') && tp.get('customer_email') === 'p@x');
     stripeFail = true; rr = await ce('toolbox_talks'); check('add-on: if Stripe refuses, a plain message only', rr.status === 502 && !(JSON.stringify(await rr.json())).includes('boom')); stripeFail = false;
     // webhook
     const evt = (type, obj, id) => JSON.stringify({ id: id || 'evt_' + type, type, data: { object: obj } });
@@ -1217,7 +1217,7 @@ const USERS = {
     // the app-style screens: Home, Tasks, Emergency Information, Settings and the paid add-ons
     const appExtra = (cfg) => {
       window.__mock.users['site@t'].profile.role_name = (cfg && cfg.role) || 'client_super';
-      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'company', owned: cfg.owned === true || cfg.owned === 'both' }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: cfg.owned === 'staff' || cfg.owned === 'both' }];
+      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 299, charged_per: 'company', owned: cfg.owned === true || cfg.owned === 'both' }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 599, charged_per: 'site', owned: cfg.owned === 'staff' || cfg.owned === 'both' }];
       const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       window.__mock.tables.companies = [{ id: 'c1', name: 'Test Co', contact_phone: '01634 000000', address: '1 High St', level: (cfg && cfg.level) || 1, billing_interval: 'monthly', subscription: 'active' }];
       window.__mock.tables.properties[0].address = '1 High St'; window.__mock.tables.properties[0].clock_token = 'a'.repeat(32); window.__mock.tables.properties[1].clock_token = 'c'.repeat(32);
@@ -1255,7 +1255,7 @@ const USERS = {
     await t.page.click('#attention .item >> nth=0'); await t.page.waitForSelector('#f-due, .kv');
     await t.page.click('[data-back]'); await t.page.click('[data-nav=home]'); await t.page.waitForSelector('#attention');
     await t.page.click('[data-promo=toolbox_talks]'); await t.page.waitForSelector('[data-extra=toolbox_talks]');
-    check('add-on not bought: explains the price and offers a pay-now button (not an email)', (await t.page.locator('.card').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('button#extra-add').count()) === 1 && (await t.page.locator('[data-extra] a[href^=mailto]').count()) === 0);
+    check('add-on not bought: explains the price and offers a pay-now button (not an email)', (await t.page.locator('.card').innerText()).includes('£2.99 + VAT per month') && (await t.page.locator('button#extra-add').count()) === 1 && (await t.page.locator('[data-extra] a[href^=mailto]').count()) === 0);
     await t.page.click('[data-back]'); await t.page.waitForSelector('#view-full');
     await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
     check('Staff Clock In / Out is charged per site', (await t.page.locator('.card').innerText()).includes('per site'));
@@ -1290,7 +1290,7 @@ const USERS = {
     await t.page.click('[data-back]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#b-save');
     check('settings: business info, premises, subscription, customised tasks, help and account are all there', (await t.page.locator('.appbody h2').allInnerTexts()).join('|').replace(/\s+/g, ' ') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
     check('settings: subscription shows the plan, two sites and the price including the extra site', (await t.page.locator('.appbody').innerText()).includes('Self-Managed') && (await t.page.locator('.appbody').innerText()).includes('£22.98 + VAT per month'));
-    check('settings: add-ons not yet taken are offered from the subscription box, with their price', (await t.page.locator('[data-add-addon=toolbox_talks]').innerText()).includes('£3.99') && (await t.page.locator('[data-add-addon=staff_signin]').innerText()).includes('per site'));
+    check('settings: add-ons not yet taken are offered from the subscription box, with their price', (await t.page.locator('[data-add-addon=toolbox_talks]').innerText()).includes('£2.99') && (await t.page.locator('[data-add-addon=staff_signin]').innerText()).includes('per site'));
     check('settings: customised tasks shows how many of the 10 repeating tasks are used', (await t.page.locator('.appbody').innerText()).includes('2 of 10'));
     await t.page.fill('#b-phone', '1634 99'); await t.page.click('#b-save');
     check('formats: a short phone number is refused with a clear message', (await t.page.locator('.msg.err').innerText()).includes('11 digits') && (await calls(t.page, 'rpc:update_business')).length === 0);
@@ -1361,7 +1361,7 @@ const USERS = {
     t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     let extraReq = null; await t.page.route('**/api/checkout-extra', (rt) => { extraReq = { auth: rt.request().headers().authorization, body: rt.request().postData() }; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
     await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('#extra-add');
-    check('add-on: the page shows the per-site total (2 sites x £6.99 = £13.98 + VAT per month)', (await t.page.locator('.card').innerText()).includes('2 × £6.99 = £13.98 + VAT per month'));
+    check('add-on: the page shows the per-site total (2 sites x £5.99 = £11.98 + VAT per month)', (await t.page.locator('.card').innerText()).includes('2 × £5.99 = £11.98 + VAT per month'));
     await t.page.click('#extra-add'); await t.page.waitForURL('**/healthz');
     check('add-on: Add sends the sign-in token and the add-on code to our server, then goes to the payment page', extraReq && extraReq.auth === 'Bearer tok-site@t' && JSON.parse(extraReq.body).code === 'staff_signin');
     await t.ctx.close();
@@ -1376,7 +1376,7 @@ const USERS = {
     // coming back from Stripe: waits for the confirmation, then opens the add-on
     // add-ons the business has are listed in Subscription Details with what each costs
     t = await newPage(appSeed, { owned: 'both' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('[data-addon]');
-    check('settings: each add-on is listed with its monthly cost (Toolbox £3.99; Clock In 2 sites x £6.99 = £13.98) and a total of £17.97', (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£3.99 + VAT per month') && (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £6.99 = £13.98') && (await t.page.locator('#addons-total').innerText()).includes('£17.97') && (await t.page.locator('[data-add-addon]').count()) === 0);
+    check('settings: each add-on is listed with its monthly cost (Toolbox £2.99; Clock In 2 sites x £5.99 = £11.98) and a total of £14.97', (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£2.99 + VAT per month') && (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £5.99 = £11.98') && (await t.page.locator('#addons-total').innerText()).includes('£14.97') && (await t.page.locator('[data-add-addon]').count()) === 0);
     await t.ctx.close();
     // the introductory offer shows in Subscription Details while it lasts
     const offerSeed = new Function('cfg', '(' + appSeed.toString() + ')(cfg); window.__mock.tables.companies[0].offer_code = "TC-ABC234"; window.__mock.tables.companies[0].offer_ends_at = new Date(Date.now() + 200 * 86400000).toISOString();');
@@ -1396,7 +1396,7 @@ const USERS = {
     await t.ctx.close();
     t = await newPage(appSeed, {}); await t.page.goto(base + '/app/?extra=toolbox_talks&paid=1'); await login(t.page, 'site@t'); await t.page.waitForSelector('#extra-confirming');
     check('back from Stripe: the person sees that the payment is being confirmed, with no pay button', (await t.page.locator('#extra-add').count()) === 0);
-    await t.page.evaluate(() => { window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 399, charged_per: 'site', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 699, charged_per: 'site', owned: false }]; });
+    await t.page.evaluate(() => { window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 299, charged_per: 'site', owned: true }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 599, charged_per: 'site', owned: false }]; });
     await t.page.waitForSelector('text=is now on your account', { timeout: 8000 });
     check('back from Stripe: once confirmed it says the add-on is on the account, and the web address is tidied', (await t.page.locator('.msg.ok').first().innerText()).includes('Toolbox Talks') && new URL(t.page.url()).search === '');
     await t.ctx.close();

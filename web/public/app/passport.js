@@ -15,8 +15,8 @@
   const NS = 'http://www.w3.org/2000/svg';
   // Shown if the server list cannot be read, so the paid add-ons are always visible with their price.
   const EXTRA_DEFAULT = [
-    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 399, charged_per: 'site', owned: false },
-    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 699, charged_per: 'site', owned: false }
+    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 299, charged_per: 'site', owned: false },
+    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 599, charged_per: 'site', owned: false }
   ];
   const ICON = {
     home: 'M3 11l9-8 9 8v10h-6v-6H9v6H3z', compliance: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z M8.5 12l2.5 2.5L16 9.5',
