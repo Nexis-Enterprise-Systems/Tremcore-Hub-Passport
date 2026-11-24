@@ -289,10 +289,11 @@
         h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'pending', 'aria-selected': String(ttab === 'pending'), onclick: () => { ttab = 'pending'; viewTasks(); } }, 'Pending (' + pend.length + ')'),
         h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'done', 'aria-selected': String(ttab === 'done'), onclick: () => { ttab = 'done'; viewTasks(); } }, 'Completed'));
       shell('tasks', h('div', { class: 'card' },
-        h('div', { class: 'titlerow' }, h('h1', {}, 'My Tasks'), rights.can_edit && props.length ? h('button', { class: 'btn small', id: 'add-task', type: 'button', onclick: () => viewTaskAdd() }, 'Add New Task +') : null),
+        h('div', { class: 'titlerow' }, h('h1', {}, 'My Tasks')),
         ...heading(note), tabs, box,
         !rights.can_edit ? h('p', { class: 'muted' }, 'You can see these tasks but not change them.') : null,
-        ...(list.length ? list.map(row) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'No pending tasks.' : 'No completed tasks yet.')])),
+        ...(list.length ? list.map(row) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'No pending tasks.' : 'No completed tasks yet.')]),
+        rights.can_edit && props.length ? h('button', { class: 'btn', id: 'add-task', type: 'button', onclick: () => viewTaskAdd() }, 'Add New Task +') : null),
         sitePicker(viewTasks));
     }
     function viewTaskAdd() {

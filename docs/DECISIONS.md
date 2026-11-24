@@ -175,3 +175,5 @@
 - **24 Nov 2026 — Add-on prices follow the website home page (migration 0035).** Toolbox Talks **£2.99** and Staff Clock In / Out **£5.99**, each per site per month + VAT (the "with the Tremcore app" prices; the app has no stand-alone add-on sales, so the £4.99 / £7.99 on the home page are not sold in the app). Only new purchases use the new price; add-ons already bought keep their price. Replaces the earlier £3.99 / £6.99.
 
 - 24 Nov 2026: Website home page shows the Compliance Passport price above the phone: £14.99 a month + VAT (first site), extra sites show "click here for a multi-site discount" (links to Contact) with no price shown; pay yearly and save 15%.
+
+- 24 Nov 2026: Passport app restyled to match the new prototype (Tremcore-Compliance, 24 Nov): bigger home logo, round status icons (tick, !, cross, dash) on every row, arrow on phone rows, segmented gold tabs, flat page titles, full-width Add New Task button. Look only: data, permissions, add-ons and the Email/Call Tremcore button are unchanged. Settings keeps all sections on one page (not separate menu screens). Not copied from the prototype: Core/Other split, document history, task calendar.

@@ -530,3 +530,50 @@ body{overscroll-behavior-y:contain}
   .clockpage #shift-report-card .btn{width:auto;min-width:220px}
   .clockpage .card.form .btn.small{margin-top:0}
 }
+
+/* ---------- passport look to match the 24 Nov prototype (look only, no behaviour change) ---------- */
+.appshell .card{background:linear-gradient(180deg,#171512,#0f0d0a);border:1px solid #3a3125;border-radius:16px;box-shadow:none}
+.appshell .card h2{color:var(--text);font-size:1.1rem;font-weight:700;letter-spacing:0}
+.appshell .card.addons>h2{color:var(--text)}
+/* status icons: a round badge with a shape in it, so colour is never the only signal */
+.appshell .item .dot,.appshell .lg .dot{display:grid;place-items:center;border-radius:50%;color:#fff;font-weight:800;line-height:1}
+.appshell .item .dot{width:34px;height:34px;font-size:17px}
+.appshell .lg .dot{width:20px;height:20px;font-size:12px}
+.appshell .item .dot::before,.appshell .lg .dot::before{content:"\2713"}
+.appshell .item .dot.amber::before,.appshell .lg .dot.amber::before{content:"!";color:#1b1405}
+.appshell .item .dot.red::before,.appshell .lg .dot.red::before{content:"\2715"}
+.appshell .item .dot.missing::before,.appshell .lg .dot.missing::before{content:"\2013"}
+.appshell .item .dot.green,.appshell .lg .dot.green{background:#3fbf5a}
+.appshell .item .dot.amber,.appshell .lg .dot.amber{background:#f2b51d}
+.appshell .item .dot.red,.appshell .lg .dot.red{background:#e2433a}
+.appshell .item .dot.missing,.appshell .lg .dot.missing{background:#6f695d}
+.appshell .item{background:linear-gradient(180deg,#171512,#0f0d0a);border:1px solid #3a3125;border-radius:14px}
+.appshell .item .title{font-weight:500}
+.appshell .item .meta{color:var(--muted)}
+/* segmented tabs */
+.appshell .subtabs{gap:0;padding:4px;background:#12100c;border:1px solid #3a3125;border-radius:12px;margin:12px 0}
+.appshell .subtab{flex:1;text-align:center;border:0;border-radius:9px;padding:10px 6px;color:var(--text)}
+.appshell .subtab[aria-selected=true]{background:var(--gold-grad);color:#0a0a0a;font-weight:700;border-bottom:0}
+/* the main screens: title sits on the page, not inside a box */
+.appbody.view-compliance>.card.overview,.appbody.view-tasks>.card:first-child,.appbody.view-settings>.card:first-child{background:none;border:0;padding:4px 0 0}
+.appbody.view-compliance .card.overview .welcome h1,.appbody.view-tasks>.card:first-child h1,.appbody.view-settings>.card:first-child h1{text-align:center;font-size:1.15rem;font-weight:600}
+.appbody.view-tasks .titlerow{justify-content:center}
+.appbody.view-tasks .titlerow h1{margin:0 auto}
+/* home */
+.appbody.view-home .homelogo{width:min(250px,72%);margin-bottom:10px}
+.appbody.view-home .welcome h1{font-size:1.1rem}
+.appshell .qtile{align-items:center;text-align:center;justify-content:center;background:linear-gradient(180deg,#171512,#0f0d0a);border:1px solid #3a3125}
+.appshell #add-task-bottom{margin-top:14px}
+@media (max-width:959px){
+  /* on a phone the status word becomes a small arrow, as in the prototype; the icon and the date line still say the status */
+  .appshell button.item .tag{font-size:0;padding:0;border:0;min-width:0;background:none}
+  .appshell button.item .tag::after{content:"\203A";font-size:1.7rem;line-height:1;color:var(--gold);font-weight:400}
+}
+.appbody .card h2,.appbody .welcome h1,.appbody .card h1{color:var(--text);-webkit-text-fill-color:currentColor;background:none}
+.appbody .card h2{font-size:1.1rem}
+@media (max-width:959px){
+  .appshell .item.taskrow{grid-template-columns:auto 1fr;grid-template-areas:"dot title" ". meta" "tools tools"}
+  .appshell .item.taskrow .rowtools{grid-area:tools;display:flex;gap:8px;margin-top:8px}
+  .appshell .item.taskrow .rowtools .btn.small{flex:1;margin-top:0}
+}
+@media (min-width:960px){.appshell .item .dot{width:22px;height:22px;font-size:12px}}
