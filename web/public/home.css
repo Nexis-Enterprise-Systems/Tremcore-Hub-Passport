@@ -174,3 +174,4 @@
 .hm .pc-small{margin-top:12px;color:var(--grey);font-size:13px}
 @media (max-width:480px){.hm .pc-num{font-size:52px}}
 .hm .hero .hero-grid.wrap{align-items:start}.hm .hero .hero-grid>div:first-child{padding-top:24px}
+.hm .pc-multi a{color:#45c35f;font-weight:700;text-decoration:underline}

@@ -94,7 +94,7 @@ home = '''<div class="hm"><!-- HERO -->
         <p class="pc-kick">Compliance Passport</p>
         <div class="pc-main"><span class="pc-num">&pound;14.99</span><span class="pc-per">per month<br>+ VAT</span></div>
         <p class="pc-line">Your first site, with a head-office user and one manager.</p>
-        <div class="pc-multi"><b>More than one site?</b> Each extra site is only <b>&pound;7.99</b> a month.</div>
+        <div class="pc-multi"><b>More than one site?</b> <a href="/contact/">Click here for a multi-site discount</a></div>
         <p class="pc-small">Pay yearly and save 15%.</p>
       </div>
       <div class="phone-wrap">
