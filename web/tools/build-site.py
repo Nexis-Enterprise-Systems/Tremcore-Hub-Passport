@@ -24,9 +24,10 @@ SIGNUP_HREF = '/app/?signup=1' if PASSPORT_OPEN else '/register/'
 SIGNUP_LABEL = 'Sign up' if PASSPORT_OPEN else 'Register your interest'
 SIGNUP = f'<a class="btn solid" href="{SIGNUP_HREF}">{SIGNUP_LABEL}</a>'
 
-def page(path, title, desc, body, current, noindex=False):
+def page(path, title, desc, body, current, noindex=False, extra_css=''):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)
     foot = ''.join('<a href="%s">%s</a>' % (h, l) for h, l in NAV)
+    css = f'<link rel="stylesheet" href="/{extra_css}">' if extra_css else ''
     html = f'''<!doctype html>
 <html lang="en-GB">
 <head>
@@ -34,26 +35,32 @@ def page(path, title, desc, body, current, noindex=False):
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content="{desc}">
-<meta name="theme-color" content="#0c0b09">{'<meta name="robots" content="noindex">' if noindex else ''}
+<meta name="theme-color" content="#000000">{'<meta name="robots" content="noindex">' if noindex else ''}
 <meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:type" content="website">
 <link rel="icon" href="/img/favicon.png"><link rel="apple-touch-icon" href="/img/icon-180.png">
-<link rel="stylesheet" href="/site.css">
+<link rel="preload" href="/fonts/tcserif-700.ttf" as="font" type="font/ttf" crossorigin><link rel="preload" href="/fonts/tcsans-400.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/site.css">{css}
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top"><div class="wrap">
-  <a class="brand" href="/" aria-label="Tremcore Ltd home"><img class="mark" src="/img/logo-mark.png" alt="" width="75" height="52"><img class="word" src="/img/logo-word.png" alt="Tremcore" width="158" height="18"></a>
   <nav class="main" id="nav" aria-label="Main">{nav}</nav>
   <div class="hdr-actions"><a class="btn ghost" href="/app/?login=1">Login</a><a class="btn solid" href="{SIGNUP_HREF}">{SIGNUP_LABEL}</a><button class="btn ghost menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button></div>
 </div></header>
+<div class="masthead"><a href="/" aria-label="Tremcore Ltd home"><img class="mast-logo" src="/img/masthead-logo.jpg" alt="Tremcore Ltd" width="300" height="233"></a><p class="slogan gt">The smart way to stay compliant</p></div>
+<div class="rule"></div>
 <main id="main">
 {body}
 </main>
-<footer><div class="wrap">
-  <div><img src="/img/logo-full.png" alt="Tremcore Ltd" width="150" height="115"><p>Compliance passports for commercial premises.</p></div>
-  <nav aria-label="Footer">{foot}<a href="/app/?login=1">Login</a></nav>
-  <div>{PHONE_P}<p>{EMAIL}</p></div>
-  <div class="legal"><span>&copy; 2026 Tremcore Ltd. Company number {CO}.</span></div>
+<div class="rule"></div>
+<footer><div class="wrap fcenter">
+  <a href="/" aria-label="Tremcore Ltd home"><img class="foot-logo" src="/img/masthead-logo.jpg" alt="Tremcore Ltd" width="190" height="147" loading="lazy"></a>
+  <p class="f-slogan gt">The smart way to stay compliant</p>
+  <p class="f-sub">Compliance passports for commercial premises.</p>
+  <div class="f-rule"></div>
+  <nav class="f-nav" aria-label="Footer">{foot}<a href="/app/?login=1">Login</a></nav>
+  <a class="f-mail" href="mailto:{EMAIL}">{EMAIL}</a>
+  <p class="legal">&copy; 2026 Tremcore Ltd &middot; Company number {CO}</p>
 </div></footer>
 <script src="/site.js"></script>
 </body>
@@ -68,24 +75,205 @@ def cta(h, p):
 
 ITEMS = [('g','Fire risk assessment','Mar 2027','In date'),('a','Fire alarm service and test','in 12 days','Due in 12d'),('r','Portable appliance testing','4 days ago','Overdue 4d'),('m','Kitchen extract cleaning','Not entered','No date'),('g','Legionella risk assessment','Jan 2027','In date'),('g','Emergency lighting test','Feb 2027','In date')]
 items = ''.join(f'<li{" class=fade" if i==5 else ""}><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></li>' for i,(c,t,d,l) in enumerate(ITEMS))
-home = f'''<section class="sec hero"><div class="wrap">
-<div><div class="eyebrow">Commercial property compliance</div>
-<h1 class="h1">Every certificate. Every site. <span class="gold">One calm view.</span></h1>
-<p class="lead">Tremcore gives you a single, clear picture of where every property stands: certificates, due dates and reminders, all in one place.</p>
-<div class="row" style="margin-top:32px">{SIGNUP}<a class="btn ghost" href="/what-you-get/?play=1#demo">{PLAY} Watch a 20-second preview</a></div>
-<p class="small" style="margin-top:24px">Fire safety &middot; Electrical &middot; Water hygiene &middot; Building services &middot; and more</p></div>
-<div class="card pass" role="img" aria-label="Sample compliance passport: 80 percent compliant"><div class="pass-head"><img src="/img/logo-mark.png" alt="" width="55" height="38"><div><div class="t">Compliance Passport</div><div class="n">Northgate House</div></div><span class="badge" style="margin-left:auto">Sample property</span></div>
-<div class="pass-body"><div class="donut" data-donut><div class="in"><b>80%</b><span>compliant</span></div></div>
-<div class="legend"><div><span class="dot g"></span>In date<span class="n mono">11</span></div><div><span class="dot a"></span>Due soon<span class="n mono">5</span></div><div><span class="dot r"></span>Overdue<span class="n mono">2</span></div><div><span class="dot m"></span>No date<span class="n mono">2</span></div></div></div>
-<ul class="items">{items}</ul><p class="small" style="margin:12px 0 0">Sample data. The rest is inside the app.</p></div></div></section>
-<div class="strip"><div class="wrap"><div><b>Clear at a glance</b><p>Green, amber and red tell you where to look first.</p></div><div><b>Yours to run</b><p>Your records, your dates, your reminders.</p></div><div><b>Honest about gaps</b><p>Missing information is never dressed up as compliant.</p></div><div><b>Phone, tablet or desktop</b><p>Built to work wherever you are.</p></div></div></div>
-<section class="sec"><div class="wrap"><div class="eyebrow">Sound familiar?</div><h2 class="h2">Compliance has a way of getting scattered</h2>
-<div class="grid3"><div class="tile"><span class="rule"></span><div class="h3">Certificates in inboxes</div><p>The current fire alarm certificate is somewhere in an email from last spring, or with the contractor who issued it.</p></div><div class="tile"><span class="rule"></span><div class="h3">Dates in someone&rsquo;s head</div><p>Renewals depend on whoever remembers them, until that person is busy, away or moves on.</p></div><div class="tile"><span class="rule"></span><div class="h3">No clear picture</div><p>Nobody can say, in one look, what is in date across every site and what needs attention.</p></div></div>
-<p class="lead">The Compliance Passport brings it back together, one property at a time.</p></div></section>
-<section class="sec alt"><div class="wrap"><div class="eyebrow">The Compliance Passport</div><h2 class="h2">Your premises, in your hands</h2><p class="lead">Keep your own certificates, due dates and reminders in one place, and know at a glance what needs attention.</p>
-<div class="grid3"><a class="tile" href="/passport/"><span class="rule"></span><div class="h3">Your records</div><p>Certificates and due dates, always to hand.</p><span class="more">Explore {ARROW}</span></a><a class="tile" href="/passport/"><span class="rule"></span><div class="h3">Your reminders</div><p>A nudge before anything lapses.</p><span class="more">Explore {ARROW}</span></a><a class="tile" href="/passport/"><span class="rule"></span><div class="h3">Your building</div><p>Your premises mapped out, floor by floor.</p><span class="more">Explore {ARROW}</span></a></div></div></section>
-<section class="sec"><div class="wrap"><div class="eyebrow">Inside the app</div><h2 class="h2">There&rsquo;s a lot more behind the passport</h2><p class="lead">What you&rsquo;ve seen here is the surface. Sign up and you can explore the rest yourself, around the premises you look after.</p>
-<div class="grid3">''' + ''.join(f'<div class="locked">{LOCK}<div><b>{a}</b><p>{b}</p></div></div>' for a,b in [('Your whole estate at a glance','See how several sites roll up into one picture.'),('What matters most','Every check labelled, so you know where the law ends and good practice begins.'),('Reminders that find you','How a due date reaches the right person in time.'),('Your building, mapped','Your premises, floor by floor, with the safety points marked.'),('Your records, protected','Who sees what, and how it&rsquo;s kept private.'),('Made around you','Add the checks that are specific to your premises.')]) + '</div></div></section>' + cta('Ready to get your premises in order?','Sign up, add your first site and start adding your certificates.')
+home = '''<div class="hm"><!-- HERO -->
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">Commercial property compliance at your fingertips</p>
+        <h1>Every certificate. Every site. One calm view.</h1>
+        <p class="lead">Tremcore gives every commercial property a compliance passport, so you can see exactly where each site stands.</p>
+        <div class="ctas">
+          <a href="/register/" class="btn btn-primary">Register your interest</a>
+          <a href="/what-you-get/?play=1#demo" class="btn btn-ghost">▶ Watch a 20-second preview</a>
+        </div>
+        <p class="cats">Fire safety · Electrical · Water hygiene · Building services · and more</p>
+      </div>
+
+      <div class="phone-wrap">
+        <div class="phone" role="img" aria-label="Tremcore app home screen showing 80% core compliance, quick access and add-ons">
+          <span class="btn-side l1"></span><span class="btn-side l2"></span><span class="btn-side l3"></span><span class="btn-side r1"></span>
+          <div class="bezel"><div class="screen">
+            <div class="status"><span>9:41</span><span class="punch"></span><span class="icons"><svg width="12" height="8" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#f3eee4"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="#f3eee4"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#f3eee4"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#f3eee4"/></svg> <svg width="11" height="8" viewBox="0 0 16 12"><path d="M8 11.5l2.4-2.6a3.4 3.4 0 0 0-4.8 0z" fill="#f3eee4"/><path d="M3.8 7.1a6 6 0 0 1 8.4 0" fill="none" stroke="#f3eee4" stroke-width="1.7" stroke-linecap="round"/><path d="M1.3 4.4a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="#f3eee4" stroke-width="1.7" stroke-linecap="round"/></svg> <svg width="18" height="8" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" fill="none" stroke="#f3eee4" stroke-opacity="0.45"/><rect x="2.5" y="2.5" width="17" height="8" rx="2" fill="#f3eee4"/></svg></span></div>
+            <img src="/img/home-phone.jpg" width="640" height="1645" alt="">
+            <div class="glare"></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap addons" id="add-ons">
+      <div class="head center-head">
+        <p class="kicker">Add-ons</p>
+        <h2>Unlock extra tools for your team</h2>
+        <p>Add them on their own, or get them at a lower monthly price when you have the Tremcore app.</p>
+      </div>
+      <div class="grid g2">
+        <article class="addon">
+          <div class="addon-top"><div class="icon lg"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" stroke-width="2.6"/></svg></div><div><h3>Toolbox Talks</h3><p class="addon-sub">Short, ready-to-deliver safety briefings for your team, written for UK workplaces.</p></div></div>
+          <ul class="ticks">
+            <li>A library of 30 talks across Health &amp; Safety, Fire Safety, Wellbeing, Workplace Responsibilities and industry-specific topics</li>
+            <li>Each talk shows its running time, typically 6 to 15 minutes</li>
+            <li>Record who delivered it and who attended, so you have a dated record</li>
+            <li>Bespoke talks written for your business, your site and your tasks, at £1.99 each (allow up to 48 hours)</li>
+            <li>New talks added to the library as regulations change</li>
+          </ul>
+          <div class="pricing">
+            <div class="p-col"><small>On its own</small><div class="p-std">£4.99<span> pcm</span></div></div>
+            <div class="p-col best"><span class="badge">With the Tremcore app</span><div class="p-app">£2.99<span> pcm</span></div><small class="save">Save £2 a month</small></div>
+          </div>
+          <a href="/register/" class="btn btn-primary full">Register your interest</a>
+        </article>
+        <article class="addon">
+          <div class="addon-top"><div class="icon lg"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><h3>Staff Clock In / Out</h3><p class="addon-sub">Know who is on site at any moment, which matters for fire roll calls and payroll.</p></div></div>
+          <ul class="ticks">
+            <li>A printable A4 QR poster for your entrance. Staff scan it, tap their name, then clock in or out</li>
+            <li>Live attendance log showing who is on site right now</li>
+            <li>Manual clock in / out for staff without a phone</li>
+            <li>Shift rota, plus a staff hours report showing early and late times</li>
+            <li>A daily record you can check against timesheets</li>
+          </ul>
+          <div class="pricing">
+            <div class="p-col"><small>On its own</small><div class="p-std">£7.99<span> pcm</span></div></div>
+            <div class="p-col best"><span class="badge">With the Tremcore app</span><div class="p-app">£5.99<span> pcm</span></div><small class="save">Save £2 a month</small></div>
+          </div>
+          <a href="/register/" class="btn btn-primary full">Register your interest</a>
+        </article>
+      </div>
+    </div>
+
+    <div class="wrap features">
+      <div class="grid g4">
+        <div class="card"><div class="icon">●</div><h3>Clear at a glance</h3><p>Green, amber and red show what's fine, what's coming up and what needs action.</p></div>
+        <div class="card"><div class="icon">⌂</div><h3>Yours to run</h3><p>Your records belong to you, not your contractors.</p></div>
+        <div class="card"><div class="icon">?</div><h3>Honest about gaps</h3><p>Missing certificates and dates are shown plainly, never hidden.</p></div>
+        <div class="card"><div class="icon">▢</div><h3>Phone, tablet or desktop</h3><p>Check any site from wherever you are.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Sound familiar?</p>
+        <h2>Compliance has a way of getting scattered</h2>
+      </div>
+      <div class="grid g3">
+        <div class="card"><div class="icon">✉</div><h3>Certificates in inboxes</h3><p>Paperwork buried in old emails or sitting with whichever contractor did the job.</p></div>
+        <div class="card"><div class="icon">◷</div><h3>Dates in someone's head</h3><p>Renewals tracked from memory, until that person is off or moves on.</p></div>
+        <div class="card"><div class="icon">◎</div><h3>No clear picture</h3><p>No single place to see what's current across all your sites.</p></div>
+      </div>
+      <p class="closing">The Tremcore passport brings it all together in one place.</p>
+    </div>
+  </section>
+
+  <!-- PASSPORT -->
+  <section>
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">The passport</p>
+        <h2>Your premises, in your hands</h2>
+        <p>Each site gets its own passport: every record and every renewal, kept together.</p>
+      </div>
+      <div class="grid g2">
+        <a href="/passport/" class="card"><div class="icon">▤</div><h3>Your records</h3><p>Every certificate stored against the right site and check.</p><span class="more">Learn more →</span></a>
+        <a href="/passport/" class="card"><div class="icon">◷</div><h3>Your reminders</h3><p>Get a nudge before something falls due, not after.</p><span class="more">Learn more →</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSIDE THE APP -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Inside the app</p>
+        <h2>There's a lot more behind the passport</h2>
+        <p>Built for people who look after commercial premises, whether that's one site or a whole estate.</p>
+      </div>
+      <div class="grid g3">
+        <div class="card"><div class="icon">◫</div><h3>Your whole estate</h3><p>Every site's status side by side.</p></div>
+        <div class="card"><div class="icon">!</div><h3>What matters most</h3><p>Clearly labelled priorities, so you know where to start.</p></div>
+        <div class="card"><div class="icon">◷</div><h3>Reminders</h3><p>Timely alerts before renewals fall due.</p></div>
+        <div class="card"><div class="icon">⚿</div><h3>Protected records</h3><p>Private by default, with control over who sees what.</p></div>
+        <div class="card"><div class="icon">✎</div><h3>Tailored checks</h3><p>Add custom checks that suit your premises.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WARNING -->
+  <div class="wrap warn-wrap">
+    <div class="alarm">
+      <div class="al-bar"></div>
+      <div class="al-body">
+        <p class="al-kick"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg> Don't get caught out</p>
+        <h2 class="al-h">If the worst happens, your insurer will want proof. <span>Make sure you can give it.</span></h2>
+        <p class="al-p">An expired certificate or a missing record is all it takes to put a claim in doubt. Tremcore keeps your business’s compliance up to date and on file, so your paperwork stands up when it matters most.</p>
+        <ul class="risks">
+          <li><b>✕</b>A claim put in doubt</li>
+          <li><b>✕</b>Enforcement notices and fines</li>
+          <li><b>✕</b>Premises closed until it's put right</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEBSITE & MEDIA -->
+  <section id="websites">
+    <div class="wrap">
+      <div class="head center-head">
+        <p class="kicker">Websites &amp; media</p>
+        <h2>Get your business online and winning customers.</h2>
+        <p>A bespoke website, designed around your business.</p>
+      </div>
+
+      <div class="web-offer">
+        <span class="badge-l">Bespoke website design</span>
+        <div class="wo-price">
+          <div class="wo-num">£400</div>
+          <span class="pill-green">Fixed price</span>
+        </div>
+        <div class="wo-div"></div>
+        <ul class="wo-list">
+          <li><span class="tk"></span>Up to 4 pages, built from scratch</li>
+          <li><span class="tk"></span>Designed to bring in new customers</li>
+          <li><span class="tk"></span>One price. No surprises.</li>
+        </ul>
+      </div>
+
+      <div class="divider-title"><span></span><b>Then keep the customers coming</b><span></span></div>
+
+      <div class="grid g2 media">
+        <div class="mcard">
+          <h3>Social Media Management</h3>
+          <div class="m-price"><b>£99</b> per month</div>
+          <p>A ready-made post every day for your chosen platforms. Just click send, or edit.</p>
+          <small>Fixed price · 12-month rolling contract</small>
+        </div>
+        <div class="mcard">
+          <span class="free-tag">Free with Social</span>
+          <h3>Customer Review Management</h3>
+          <div class="m-price"><b>£9.99</b> per month</div>
+          <p>A QR code linked to Google and TripAdvisor. 4 and 5 star reviews go live; 1 to 3 star come to you first.</p>
+          <small>12-month rolling contract · or free with Social</small>
+        </div>
+      </div>
+      <div class="center" style="text-align:center;margin-top:34px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap"><a href="/contact/" class="btn btn-primary">Get started today</a> <a href="/media/" class="btn btn-ghost">See our work</a></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section>
+    <div class="wrap">
+      <div class="cta">
+        <h2>Ready to get your premises in order?</h2>
+        <p>Sign up, add your first site and start adding certificates.</p>
+        <div class="ctas">
+          <a href="/register/" class="btn btn-primary">Register your interest</a>
+          <a href="/contact/" class="btn btn-ghost">Ask a question</a>
+        </div>
+      </div>
+    </div>
+  </section></div>'''
 
 def cat(t, p, lis):
     ul = '<ul>' + ''.join(f'<li>{x}</li>' for x in lis) + '</ul>' if lis else ''
@@ -238,7 +426,7 @@ shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore p
 <div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
 <section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
 
-page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of every certificate, due date and reminder across your commercial properties.', home, '/')
+page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of certificates, due dates and reminders across your commercial properties.', home, '/', extra_css='home.css')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')
 page('/how-it-works/', 'How it works | Tremcore', 'Simple to start, easy to live with. Common questions answered.', how, '/how-it-works/')

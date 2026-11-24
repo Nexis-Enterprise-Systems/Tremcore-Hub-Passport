@@ -29,7 +29,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png',
-  '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8'
+  '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.ttf': 'font/ttf', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8'
 };
 
 function securityHeaders(area) {
@@ -792,7 +792,7 @@ const server = http.createServer((req, res) => {
     if (err || !st.isFile()) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' }, area);
     const ext = path.extname(file).toLowerCase();
     // The shell and service worker must always be fresh; images can be cached.
-    const cache = ['.png', '.jpg', '.jpeg', '.mp4'].includes(ext) ? 'public, max-age=86400' : area === 'clock' ? 'no-store' : 'no-cache';
+    const cache = ['.png', '.jpg', '.jpeg', '.mp4', '.ttf'].includes(ext) ? 'public, max-age=86400' : area === 'clock' ? 'no-store' : 'no-cache';
     const base = Object.assign(securityHeaders(area), { 'Content-Type': TYPES[ext] || 'application/octet-stream', 'Cache-Control': cache, 'Accept-Ranges': 'bytes' });
     // Video needs byte ranges (phones ask for the file in pieces).
     const rg = ext === '.mp4' && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
