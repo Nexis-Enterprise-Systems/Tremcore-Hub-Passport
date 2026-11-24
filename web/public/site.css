@@ -167,3 +167,5 @@ html.lock{overflow:hidden}
 @media (max-width:800px){.posters{grid-template-columns:1fr 1fr}}
 .devices{display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start}
 @media (max-width:600px){.devices{grid-template-columns:1fr}}
+.vidwrap{max-width:360px;margin:0 auto;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#000;box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 0 1px rgba(201,162,74,.12)}
+.vidwrap video{display:block;width:100%;height:auto;aspect-ratio:9/16}

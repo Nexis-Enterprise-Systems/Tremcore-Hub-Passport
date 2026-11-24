@@ -29,7 +29,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png',
-  '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8'
+  '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8'
 };
 
 function securityHeaders(area) {
@@ -792,10 +792,18 @@ const server = http.createServer((req, res) => {
     if (err || !st.isFile()) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' }, area);
     const ext = path.extname(file).toLowerCase();
     // The shell and service worker must always be fresh; images can be cached.
-    const cache = ext === '.png' ? 'public, max-age=86400' : area === 'clock' ? 'no-store' : 'no-cache';
-    res.writeHead(200, Object.assign(securityHeaders(area), {
-      'Content-Type': TYPES[ext] || 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': cache
-    }));
+    const cache = ['.png', '.jpg', '.jpeg', '.mp4'].includes(ext) ? 'public, max-age=86400' : area === 'clock' ? 'no-store' : 'no-cache';
+    const base = Object.assign(securityHeaders(area), { 'Content-Type': TYPES[ext] || 'application/octet-stream', 'Cache-Control': cache, 'Accept-Ranges': 'bytes' });
+    // Video needs byte ranges (phones ask for the file in pieces).
+    const rg = ext === '.mp4' && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (rg) {
+      let a = rg[1] === '' ? Math.max(0, st.size - Number(rg[2])) : Number(rg[1]), z = rg[1] === '' || rg[2] === '' ? st.size - 1 : Math.min(Number(rg[2]), st.size - 1);
+      if (!(a <= z) || a >= st.size) { res.writeHead(416, Object.assign(base, { 'Content-Range': 'bytes */' + st.size })); return res.end(); }
+      res.writeHead(206, Object.assign(base, { 'Content-Range': 'bytes ' + a + '-' + z + '/' + st.size, 'Content-Length': z - a + 1 }));
+      if (req.method === 'HEAD') return res.end();
+      return fs.createReadStream(file, { start: a, end: z }).pipe(res);
+    }
+    res.writeHead(200, Object.assign(base, { 'Content-Length': st.size }));
     if (req.method === 'HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
   });
