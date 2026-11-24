@@ -446,7 +446,7 @@
           h('button', { class: 'btn small ghost', type: 'button', 'data-rm-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').delete().eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh('Person removed.'); } }, 'Remove')) : null);
       const sitePick = props.length > 1 ? [h('label', { for: 's-site' }, 'Site'), h('select', { id: 's-site', onchange: (ev) => viewClock(null, ev.target.value, from) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
       const fromTalks = from === 'toolbox';
-      page('form', h('div', { class: 'card form' }, fromTalks ? backBtn('Back to Toolbox Talks', () => viewExtra('toolbox_talks')) : backTo('Back to home'), h('h1', {}, fromTalks ? 'People at this site' : 'Staff Clock In / Out'),
+      page('form', h('div', { class: fromTalks ? '' : 'clockpage' }, h('div', { class: 'card form' }, fromTalks ? backBtn('Back to Toolbox Talks', () => viewExtra('toolbox_talks')) : backTo('Back to home'), h('h1', {}, fromTalks ? 'People at this site' : 'Staff Clock In / Out'),
         note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, sitePick,
         h('h2', {}, (fromTalks ? 'People you can choose for talks at ' : 'People who use it at ') + siteName(pid)),
         ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, fromTalks ? 'Nobody added yet. Add the people who will attend talks at this site.' : 'Nobody added yet. Add the people who need to clock in and out at this site.')]),
@@ -454,7 +454,7 @@
         box),
         fromTalks ? null : h('div', { class: 'card', id: 'shift-report-card' }, h('h2', {}, 'Shift report'), h('p', { class: 'muted' }, 'Set each person\u2019s weekly shifts with the Shifts button above, then see how their clock-in and clock-out times compare, day by day.'), h('button', { class: 'btn', type: 'button', id: 'shift-report', onclick: () => viewShiftReport(pid, from) }, 'Open the shift report')),
         fromTalks ? null : clockCards(pid),
-        fromTalks ? null : h('div', { class: 'card', id: 'clock-more' }, h('p', { class: 'muted small' }, 'Anyone who has seen the QR code could clock in as any name on the list, so only put the poster somewhere your team can see it, and replace the code if it is ever taken away or photographed.')));
+        fromTalks ? null : h('div', { class: 'card', id: 'clock-more' }, h('p', { class: 'muted small' }, 'Anyone who has seen the QR code could clock in as any name on the list, so only put the poster somewhere your team can see it, and replace the code if it is ever taken away or photographed.'))));
     }
 
 
