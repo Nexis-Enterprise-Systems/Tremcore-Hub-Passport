@@ -493,3 +493,22 @@ body{overscroll-behavior-y:contain}
 .t-late{color:var(--red);font-weight:700}
 .t-early{color:var(--green);font-weight:700}
 .rcell small{font-weight:400}
+
+/* ---- Computer screens: more breathing room between sections (phones keep the tighter spacing) ---- */
+@media (min-width:960px){
+  .appbody>.card,.appbody>.sitesgrid,.appbody>div{margin-bottom:24px}
+  .appshell-home{row-gap:24px}
+  .titlerow{margin-bottom:18px}
+  .thead{margin-top:4px;margin-bottom:12px}
+  .card.attention .item,.item+.item{margin-top:10px}
+  .card h2{margin-bottom:14px}
+  .card .summary{margin:6px 0 18px}
+  .tiles5,.qtiles{margin-top:6px;margin-bottom:6px}
+  .sitesgrid{gap:16px}
+}
+@media (min-width:1100px){.appbody.view-settings>*{margin-bottom:0}.appbody.view-settings{gap:24px}}
+@media (min-width:1100px){
+  .appshell-home .appleft{gap:24px}
+  .appshell-home .appbody>.card,.appshell-home .appbody>.sitepick,.appshell-home .appbody>.sitesgrid{margin-bottom:24px}
+  .appshell{gap:28px}
+}
