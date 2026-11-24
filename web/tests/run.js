@@ -1070,6 +1070,18 @@ const USERS = {
       if (rights) window.__mock.rights = rights;
       if (level) window.__mock.users['site@t'].profile.level = level;
     };
+    // ---- shift rules (UK time, no grace for late, green only from 5 minutes early, red if left early)
+    { const S = require('../public/app/shifts.js'), sh = { start_time: '09:00', end_time: '17:00' };
+      const j = (i, o, s) => S.judge({ clocked_in: i, clocked_out: o }, s || sh);
+      check('shifts: on the minute is plain, one minute late is red', j('2026-12-01T09:00:40Z', null).inState === 'ontime' && j('2026-12-01T09:01:00Z', null).inState === 'late' && j('2026-12-01T09:01:00Z', null).inNote === '1 min late');
+      check('shifts: 5 or more minutes early is green, 4 minutes early is plain', j('2026-12-01T08:55:00Z', null).inState === 'early' && j('2026-12-01T08:56:00Z', null).inState === 'ontime');
+      check('shifts: leaving before the end is red with how early, on time or later is plain', j('2026-12-01T09:00:00Z', '2026-12-01T16:59:00Z').outState === 'early' && j('2026-12-01T09:00:00Z', '2026-12-01T16:59:00Z').outNote === 'left 1 min early' && j('2026-12-01T09:00:00Z', '2026-12-01T17:00:00Z').outState === 'ok' && j('2026-12-01T09:00:00Z', '2026-12-01T18:30:00Z').outState === 'ok');
+      check('shifts: summer time is handled (08:10 UTC in July is 09:10 UK, so 10 minutes late)', j('2026-07-01T08:10:00Z', null).inNote === '10 mins late');
+      const nt = { start_time: '22:00', end_time: '06:00' };
+      check('shifts: a night shift that runs past midnight is judged correctly', j('2026-12-01T22:00:00Z', '2026-12-02T06:00:00Z', nt).outState === 'ok' && j('2026-12-01T22:00:00Z', '2026-12-02T05:00:00Z', nt).outState === 'early');
+      check('shifts: with no shift set nothing is coloured', S.judge({ clocked_in: '2026-12-01T12:00:00Z', clocked_out: '2026-12-01T13:00:00Z' }, null).inState === 'none');
+      const rows = S.buildRows([{ id: 'x', member_id: 'm1', member_name: 'Jo', clocked_in: '2026-11-23T09:20:00Z', clocked_out: null, no_clock_out: false }], [{ member_id: 'm1', weekday: 1, start_time: '09:00', end_time: '17:00' }, { member_id: 'm1', weekday: 2, start_time: '09:00', end_time: '17:00' }], [{ id: 'm1', full_name: 'Jo', active: true }], '2026-11-23', '2026-11-29', '2026-11-26');
+      check('shifts: the report has the clock-in row, a "no clock-in" row for a missed shift day, and nothing for days off or days not yet over', rows.length === 2 && rows[0].kind === 'clocked' && rows[1].kind === 'none' && rows[1].date === '2026-11-24'); }
     // ---- bulk upload of certificates (reads the text of PDFs in the browser; here the PDF reader is replaced by a stand-in that returns the file's own text)
     const certRead = require('../public/app/certread.js');
     const rd = certRead.parse('Landlord Gas Safety Certificate CP12 Certificate No: GS123456 Date of inspection: 14/03/2026 Next inspection due by: 13/03/2027', 'x.pdf');
@@ -1413,6 +1425,36 @@ const USERS = {
     await t.page.click('#s-add'); check('staff: a person needs a name', (await t.page.locator('.msg.err').innerText()).includes('name'));
     await t.page.fill('#s-name', 'Al Smith'); await t.page.fill('#s-title', 'Manager'); await t.page.click('#s-add'); await t.page.waitForSelector('text=Person added.');
     check('staff: a person can be added and appears in the list', (await t.page.locator('[data-staff]').count()) === 2);
+    // shifts and the shift report (this page already has the Staff Clock In / Out add-on, one person and attendance records)
+    { const day0 = new Date(); const uk = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(d);
+      await t.page.evaluate(() => { const w = window.__mock.tables; const mon = new Date(); const wd = (mon.getUTCDay() + 6) % 7; mon.setUTCDate(mon.getUTCDate() - wd - 7);   // Monday of LAST week, in UTC
+        const at = (dd, hh, mm) => { const x = new Date(Date.UTC(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate() + dd, hh, mm)); return x.toISOString(); };
+        w.staff_shifts = []; w.staff_attendance = [
+          { id: 'r1', property_id: 's1', member_id: 'm1', member_name: 'Jo Bloggs', clocked_in: at(0, 9, 20), clocked_out: at(0, 16, 30), no_clock_out: false, closed_by: 'person' },
+          { id: 'r2', property_id: 's1', member_id: 'm1', member_name: 'Jo Bloggs', clocked_in: at(1, 8, 40), clocked_out: at(1, 17, 5), no_clock_out: false, closed_by: 'person' }]; window.__lastMonday = at(0, 0, 0).slice(0, 10); }); }
+    await t.page.click('[data-shifts=m1]'); await t.page.waitForSelector('#shift-save');
+    check('shifts: each person has a Monday to Sunday grid with a start and finish time', (await t.page.locator('.shiftgrid .s-start').count()) === 7 && (await t.page.locator('.shiftgrid .sg-day').first().innerText()) === 'Monday');
+    await t.page.fill('.s-start[data-day="1"]', '09:00'); await t.page.click('#shift-save');
+    check('shifts: a start without a finish is refused in plain words', (await t.page.locator('#shift-msg').innerText()).includes('both a start and a finish'));
+    await t.page.fill('.s-end[data-day="1"]', '17:00'); await t.page.click('#shift-copy');
+    check('shifts: copy Monday fills Tuesday to Friday', (await t.page.inputValue('.s-start[data-day="5"]')) === '09:00' && (await t.page.inputValue('.s-end[data-day="5"]')) === '17:00' && (await t.page.inputValue('.s-start[data-day="6"]')) === '');
+    await t.page.click('#shift-save'); await t.page.waitForSelector('text=Shifts saved for Jo Bloggs');
+    check('shifts: saving stores five weekday shifts and leaves the weekend as days off', (await t.page.evaluate(() => window.__mock.tables.staff_shifts.length)) === 5 && (await t.page.evaluate(() => window.__mock.tables.staff_shifts.every((x) => x.member_id === 'm1' && x.start_time === '09:00' && x.end_time === '17:00'))));
+    await t.page.click('#shift-report'); await t.page.waitForSelector('#rep-from');
+    await t.page.evaluate(() => { document.getElementById('rep-from').value = window.__lastMonday; });
+    await t.page.click('#rep-prev'); await t.page.waitForTimeout(100); await t.page.click('#rep-next'); await t.page.waitForSelector('#rep-from');
+    await t.page.click('#rep-prev'); await t.page.waitForSelector('#shift-table');
+    const rowTxt = async (n) => (await t.page.locator('#shift-table tbody tr').nth(n).innerText()).replace(/\s+/g, ' ');
+    const r0 = await rowTxt(0);
+    check('report: shows the person, the shift and the clock-in and clock-out for the day', r0.includes('Jo Bloggs') && r0.includes('09:00 to 17:00'));
+    check('report: a late start is red and says how late (words as well as colour)', (await t.page.locator('#shift-table tbody tr').nth(0).locator('.in-late .t-late').count()) === 1 && /min(s)? late/.test(r0));
+    check('report: leaving before the end is red and says how early', (await t.page.locator('#shift-table tbody tr').nth(0).locator('.out-early .t-late').count()) === 1 && /left \d+ mins? early/.test(r0));
+    check('report: an early start is green', (await t.page.locator('#shift-table tbody tr').nth(1).locator('.in-early .t-early').count()) === 1 && (await rowTxt(1)).includes('early'));
+    check('report: a shift day with nothing recorded shows a muted "No clock-in recorded" row', (await t.page.locator('#shift-table .rep-none').count()) >= 1 && (await t.page.locator('#shift-table .rep-none').first().innerText()).includes('No clock-in recorded'));
+    check('report: shows the summary of late and early starts and a colour key', (await t.page.locator('#rep-sum').innerText()).includes('1 late start') && (await t.page.locator('#rep-key').innerText()).includes('Red'));
+    const dlP = t.page.waitForEvent('download'); await t.page.click('#rep-csv'); const dlf = await dlP;
+    check('report: can be downloaded as a spreadsheet', /shift-report-.*\.csv$/.test(dlf.suggestedFilename()));
+    await t.page.click('[data-back]'); await t.page.waitForSelector('#s-add');
     await t.page.click('[data-toggle-staff=m1]'); await t.page.waitForSelector('text=Marked as not active.');
     check('staff: a person can be marked not active without losing them', (await t.page.locator('[data-staff=m1] .tag').innerText()) === 'Not active');
     await t.page.click('[data-rm-staff=m1]'); await t.page.waitForSelector('text=Person removed.');

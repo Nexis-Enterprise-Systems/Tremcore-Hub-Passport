@@ -54,11 +54,12 @@
       const errs = M().dbError || {};
       const err = errs[table + ':' + st.op] || errs[table];
       if (err) return { data: null, error: { message: err } };
-      const match = (r) => st.filters.every(([k, col, v]) => (k === 'eq' ? r[col] === v : v.includes(r[col])));
+      const match = (r) => st.filters.every(([k, col, v]) => (k === 'eq' ? r[col] === v : k === 'gte' ? r[col] >= v : k === 'lt' ? r[col] < v : v.includes(r[col])));
       let out;
       if (st.op === 'insert') {
         const list = db()[table] = db()[table] || [];
         out = (Array.isArray(st.payload) ? st.payload : [st.payload]).map((p) => Object.assign({ id: uuid(), created_at: new Date().toISOString() }, (DEFAULTS[table] || (() => ({})))(), p));
+        if (table === 'staff_shifts') out.forEach((r) => { const m = (db().staff_members || []).find((x) => x.id === r.member_id); r.property_id = m ? m.property_id : null; });   // the database does this with a trigger
         list.push(...out);
       } else if (st.op === 'update') {
         out = (db()[table] || []).filter(match); out.forEach((r) => Object.assign(r, st.payload));
@@ -79,6 +80,8 @@
       delete() { st.op = 'delete'; return qb; },
       eq(col, v) { st.filters.push(['eq', col, v]); return qb; },
       in(col, v) { st.filters.push(['in', col, v]); return qb; },
+      gte(col, v) { st.filters.push(['gte', col, v]); return qb; },
+      lt(col, v) { st.filters.push(['lt', col, v]); return qb; },
       order(col, o) { st.order = { col, asc: !o || o.ascending !== false }; return qb; },
       limit(n) { st.lim = n; return qb; },
       single() { st.single = 'single'; return qb; },

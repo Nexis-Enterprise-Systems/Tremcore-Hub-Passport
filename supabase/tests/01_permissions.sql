@@ -1267,3 +1267,34 @@ select 'reminders: the log table is not readable from the app' as test, true as 
 update companies set subscription = 'cancelled', access_ends_at = now() - interval '1 day' where id = '10000000-0000-0000-0000-00000000000a';
 select 'reminders: an ended account gets nothing' as test, not exists (select 1 from jsonb_array_elements(reminders_pending()) p where p ->> 'company' = 'Company A (L1)') as ok;
 rollback;
+
+-- Staff shifts (migration 0034) -----------------------------------------------------------------------------
+begin;
+insert into company_extras(company_id, extra_code, status, price_pence, quantity) values ('10000000-0000-0000-0000-00000000000a','staff_signin','active',699,2) on conflict (company_id, extra_code) do update set status = 'active';
+insert into staff_members(id,property_id,full_name) values ('50000000-0000-0000-0000-0000000000a1','20000000-0000-0000-0000-0000000000a1','Jo Shift');
+select * from chk('shifts: a user who can edit the site can set a shift (site is copied from the person)', :'siteAu', 'aal2',
+  $$with i as (insert into staff_shifts(member_id,weekday,start_time,end_time,property_id) values ('50000000-0000-0000-0000-0000000000a1',1,'09:00','17:00','20000000-0000-0000-0000-0000000000a2') returning property_id) select property_id = '20000000-0000-0000-0000-0000000000a1' from i$$);
+select * from chk('shifts: a view-only site user can read but not add', :'siteAv', 'aal2',
+  $$select count(*) = 1 from staff_shifts$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a4', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin insert into staff_shifts(member_id,weekday,start_time,end_time) values ('50000000-0000-0000-0000-0000000000a1',2,'09:00','17:00'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e not in ('42501') then raise exception 'view-only user added a shift: %', e; end if; end $$;
+select 'shifts: a view-only user cannot add one' as test, true as ok;
+select * from chk('shifts: another company cannot see them', :'superB', 'aal2', $$select count(*) = 0 from staff_shifts$$);
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000b1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin insert into staff_shifts(member_id,weekday,start_time,end_time) values ('50000000-0000-0000-0000-0000000000a1',3,'09:00','17:00'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e not in ('42501') then raise exception 'another company added a shift: %', e; end if; end $$;
+select 'shifts: another company cannot add one to this person' as test, true as ok;
+do $$ declare e text; begin
+  begin insert into staff_shifts(member_id,weekday,start_time,end_time) values ('50000000-0000-0000-0000-0000000000a1',1,'10:00','18:00'); e := 'allowed'; exception when unique_violation then e := 'unique'; end;
+  if e <> 'unique' then raise exception 'two shifts on one day: %', e; end if; end $$;
+select 'shifts: only one shift per person per weekday' as test, true as ok;
+do $$ declare e text; begin
+  begin insert into staff_shifts(member_id,weekday,start_time,end_time) values ('50000000-0000-0000-0000-0000000000a1',9,'10:00','18:00'); e := 'allowed'; exception when check_violation then e := 'check'; end;
+  if e <> 'check' then raise exception 'bad weekday accepted: %', e; end if; end $$;
+select 'shifts: weekday must be 1 to 7' as test, true as ok;
+rollback;

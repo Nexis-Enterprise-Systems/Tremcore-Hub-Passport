@@ -442,6 +442,7 @@
         h('span', {}, h('strong', {}, m.full_name), m.job_title ? h('span', { class: 'muted small' }, ' · ' + m.job_title) : null, m.active ? null : h('span', { class: 'tag missing' }, 'Not active')),
         can ? h('span', { class: 'rowtools' },
           h('button', { class: 'btn small ghost', type: 'button', 'data-toggle-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').update({ active: !m.active }).eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh(m.active ? 'Marked as not active.' : 'Marked as active.'); } }, m.active ? 'Stop' : 'Restore'),
+          h('button', { class: 'btn small ghost', type: 'button', 'data-shifts': m.id, onclick: () => viewShifts(pid, m, from) }, 'Shifts'),
           h('button', { class: 'btn small ghost', type: 'button', 'data-rm-staff': m.id, onclick: async () => { const x = await sb.from('staff_members').delete().eq('id', m.id); if (x.error) return ctx.message(box, 'err', 'Sorry, that did not work.'); refresh('Person removed.'); } }, 'Remove')) : null);
       const sitePick = props.length > 1 ? [h('label', { for: 's-site' }, 'Site'), h('select', { id: 's-site', onchange: (ev) => viewClock(null, ev.target.value, from) }, ...props.map((p) => h('option', { value: p.id, selected: p.id === pid }, p.name)))] : null;
       const fromTalks = from === 'toolbox';
@@ -451,8 +452,92 @@
         ...(staff.length ? staff.map(row) : [h('p', { class: 'muted' }, fromTalks ? 'Nobody added yet. Add the people who will attend talks at this site.' : 'Nobody added yet. Add the people who need to clock in and out at this site.')]),
         can ? [h('label', { for: 's-name' }, 'Name'), name, h('label', { for: 's-title' }, 'Job title (optional)'), title, add] : h('p', { class: 'muted' }, 'You can see this list but not change it.'),
         box),
+        fromTalks ? null : h('div', { class: 'card', id: 'shift-report-card' }, h('h2', {}, 'Shift report'), h('p', { class: 'muted' }, 'Set each person\u2019s weekly shifts with the Shifts button above, then see how their clock-in and clock-out times compare, day by day.'), h('button', { class: 'btn', type: 'button', id: 'shift-report', onclick: () => viewShiftReport(pid, from) }, 'Open the shift report')),
         fromTalks ? null : clockCards(pid),
         fromTalks ? null : h('div', { class: 'card', id: 'clock-more' }, h('p', { class: 'muted small' }, 'Anyone who has seen the QR code could clock in as any name on the list, so only put the poster somewhere your team can see it, and replace the code if it is ever taken away or photographed.')));
+    }
+
+
+    // ---------- Staff shifts and the shift report ----------
+    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
+
+    async function viewShifts(pid, m, from) {
+      const msg = h('div', { id: 'shift-msg' });
+      const r = await sb.from('staff_shifts').select('weekday,start_time,end_time').eq('member_id', m.id);
+      const cur = {}; ((r && r.data) || []).forEach((x) => { cur[x.weekday] = x; });
+      const inputs = DAYS.map((d, i) => ({
+        day: i + 1,
+        start: h('input', { type: 'time', class: 's-start', 'data-day': String(i + 1), 'aria-label': d + ' start', value: hhmm(cur[i + 1] && cur[i + 1].start_time), disabled: !rights.can_edit }),
+        end: h('input', { type: 'time', class: 's-end', 'data-day': String(i + 1), 'aria-label': d + ' finish', value: hhmm(cur[i + 1] && cur[i + 1].end_time), disabled: !rights.can_edit })
+      }));
+      const copy = h('button', { class: 'btn small ghost', type: 'button', id: 'shift-copy', onclick: () => { for (let i = 1; i < 5; i++) { inputs[i].start.value = inputs[0].start.value; inputs[i].end.value = inputs[0].end.value; } } }, 'Copy Monday to Tuesday-Friday');
+      const clear = h('button', { class: 'btn small ghost', type: 'button', id: 'shift-clear', onclick: () => inputs.forEach((x) => { x.start.value = ''; x.end.value = ''; }) }, 'Clear all');
+      const save = h('button', { class: 'btn', type: 'button', id: 'shift-save', onclick: () => ctx.busy(save, async () => {
+        const rows = [];
+        for (const x of inputs) {
+          const a = x.start.value, b = x.end.value;
+          if (!a && !b) continue;
+          if (!a || !b) return ctx.message(msg, 'err', DAYS[x.day - 1] + ': please enter both a start and a finish time, or leave both empty for a day off.');
+          if (a === b) return ctx.message(msg, 'err', DAYS[x.day - 1] + ': the start and finish times cannot be the same.');
+          rows.push({ member_id: m.id, weekday: x.day, start_time: a, end_time: b });
+        }
+        const d = await sb.from('staff_shifts').delete().eq('member_id', m.id);
+        if (d.error) return ctx.message(msg, 'err', 'Sorry, the shifts could not be saved. You may not have permission to change them.');
+        if (rows.length) { const i = await sb.from('staff_shifts').insert(rows); if (i.error) return ctx.message(msg, 'err', 'Sorry, the shifts could not be saved. Please try again.'); }
+        viewClock('Shifts saved for ' + m.full_name + '.', pid, from);
+      }) }, 'Save shifts');
+      page('form', h('div', { class: 'card form' }, backBtn('Back to people', () => viewClock(null, pid, from)), h('h1', {}, 'Shifts for ' + m.full_name),
+        h('p', { class: 'muted' }, 'Enter the start and finish time for each day this person works. Leave a day empty if it is a day off. A finish time earlier than the start time means the shift runs past midnight. All times are UK time.'),
+        h('div', { class: 'shiftgrid', role: 'group', 'aria-label': 'Weekly shifts' }, h('span', { class: 'sg-h' }, 'Day'), h('span', { class: 'sg-h' }, 'Start'), h('span', { class: 'sg-h' }, 'Finish'),
+          ...inputs.flatMap((x) => [h('span', { class: 'sg-day' }, DAYS[x.day - 1]), x.start, x.end])),
+        rights.can_edit ? h('div', { class: 'btnrow' }, copy, clear) : h('p', { class: 'muted' }, 'You can see these shifts but not change them.'),
+        rights.can_edit ? save : null, msg));
+    }
+
+    async function viewShiftReport(pid, from, range, who) {
+      const SH = window.TCShifts;
+      const today = SH.ukParts(new Date().toISOString()).date;
+      const rg = range || SH.weekOf(today);
+      page('form', h('div', { class: 'card' }, h('p', { class: 'muted center' }, 'Loading…')));
+      const lo = SH.addDays(rg.from, -1) + 'T00:00:00Z', hi = SH.addDays(rg.to, 2) + 'T00:00:00Z';
+      const [mr, sr, ar] = await Promise.all([
+        sb.from('staff_members').select('id,full_name,active').eq('property_id', pid).order('full_name'),
+        sb.from('staff_shifts').select('member_id,weekday,start_time,end_time').eq('property_id', pid),
+        sb.from('staff_attendance').select('id,member_id,member_name,clocked_in,clocked_out,no_clock_out').eq('property_id', pid).gte('clocked_in', lo).lt('clocked_in', hi).order('clocked_in')]);
+      const members = (mr && mr.data) || [], shifts = ((sr && sr.data) || []).map((x) => Object.assign({}, x, { start_time: hhmm(x.start_time), end_time: hhmm(x.end_time) })), atts = (ar && ar.data) || [];
+      const rows = SH.buildRows(atts, shifts, members, rg.from, rg.to, today, who || '');
+      const dlabel = (d) => new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(d + 'T00:00:00Z'));
+      const go = (r2, w2) => viewShiftReport(pid, from, r2, w2 === undefined ? who : w2);
+      const fromIn = h('input', { type: 'date', id: 'rep-from', value: rg.from, 'aria-label': 'From' }), toIn = h('input', { type: 'date', id: 'rep-to', value: rg.to, 'aria-label': 'To' });
+      const whoSel = h('select', { id: 'rep-who', 'aria-label': 'Person' }, h('option', { value: '' }, 'Everyone'), ...members.map((m) => h('option', { value: m.id, selected: m.id === who }, m.full_name)));
+      const apply = () => { if (!fromIn.value || !toIn.value || fromIn.value > toIn.value) return; const days = (new Date(toIn.value) - new Date(fromIn.value)) / 864e5; if (days > 92) return; go({ from: fromIn.value, to: toIn.value }, whoSel.value); };
+      fromIn.addEventListener('change', apply); toIn.addEventListener('change', apply); whoSel.addEventListener('change', apply);
+      const cell = (cls, time, note) => h('span', { class: 'rcell ' + cls }, time, note ? h('small', {}, ' ' + note) : null);
+      const trs = rows.map((r) => {
+        const sh = r.shift ? r.shift.start_time + ' to ' + r.shift.end_time : 'No shift set';
+        if (r.kind === 'none') return h('tr', { class: 'rep-none', 'data-name': r.name }, h('td', {}, dlabel(r.date)), h('td', {}, r.name), h('td', {}, sh), h('td', { colspan: '2', class: 'muted' }, 'No clock-in recorded'));
+        const j = r.judged, a = r.att;
+        const outTime = a.clocked_out ? londonTime(a.clocked_out) : a.no_clock_out ? 'No clock-out' : 'Still in';
+        return h('tr', { 'data-name': r.name }, h('td', {}, dlabel(r.date)), h('td', {}, r.name), h('td', {}, sh),
+          h('td', { class: 'in-' + j.inState }, cell(j.inState === 'late' ? 't-late' : j.inState === 'early' ? 't-early' : '', londonTime(a.clocked_in), j.inNote)),
+          h('td', { class: 'out-' + j.outState }, cell(j.outState === 'early' ? 't-late' : '', outTime, j.outNote)));
+      });
+      const late = rows.filter((r) => r.judged && r.judged.inState === 'late').length, early = rows.filter((r) => r.judged && r.judged.inState === 'early').length;
+      const csv = () => { const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        const lines = [['Site', 'Date', 'Name', 'Shift', 'In', 'In note', 'Out', 'Out note'].map(q).join(',')].concat(rows.map((r) => [siteName(pid), r.date, r.name, r.shift ? r.shift.start_time + ' to ' + r.shift.end_time : 'No shift set',
+          r.att ? londonTime(r.att.clocked_in) : 'No clock-in', r.judged ? r.judged.inNote || (r.judged.inState === 'ontime' ? 'on time' : '') : '', r.att ? (r.att.clocked_out ? londonTime(r.att.clocked_out) : r.att.no_clock_out ? 'No clock-out' : 'Still in') : '', r.judged ? r.judged.outNote : ''].map(q).join(',')));
+        const a = h('a', { href: URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' })), download: 'shift-report-' + rg.from + '-to-' + rg.to + '.csv' }); document.body.appendChild(a); a.click(); a.remove(); };
+      page('form', h('div', { class: 'card form' }, backBtn('Back to people', () => viewClock(null, pid, from)), h('h1', {}, 'Shift report'), h('p', { class: 'muted' }, siteName(pid) + ' · UK times'),
+        h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', type: 'button', id: 'rep-prev', onclick: () => go({ from: SH.addDays(rg.from, -7), to: SH.addDays(rg.to, -7) }) }, '← Previous week'),
+          h('button', { class: 'btn small ghost', type: 'button', id: 'rep-this', onclick: () => go(SH.weekOf(today)) }, 'This week'),
+          h('button', { class: 'btn small ghost', type: 'button', id: 'rep-next', onclick: () => go({ from: SH.addDays(rg.from, 7), to: SH.addDays(rg.to, 7) }) }, 'Next week →')),
+        h('label', { for: 'rep-from' }, 'From'), fromIn, h('label', { for: 'rep-to' }, 'To'), toIn, h('label', { for: 'rep-who' }, 'Person'), whoSel,
+        h('p', { class: 'small muted', id: 'rep-key' }, h('span', { class: 't-late' }, 'Red'), ' = clocked in late, or left before the end of the shift. ', h('span', { class: 't-early' }, 'Green'), ' = clocked in ' + SH.EARLY_MINUTES + ' or more minutes early. Anything else is shown plain.'),
+        rows.length ? h('p', { class: 'small', id: 'rep-sum' }, late + (late === 1 ? ' late start' : ' late starts') + ', ' + early + (early === 1 ? ' early start' : ' early starts') + '.') : null,
+        rows.length ? h('div', { class: 'tablewrap' }, h('table', { class: 'shiftrep', id: 'shift-table' }, h('thead', {}, h('tr', {}, ...['Day', 'Person', 'Shift', 'In', 'Out'].map((x) => h('th', {}, x)))), h('tbody', {}, ...trs)))
+          : h('p', { class: 'muted' }, 'Nothing to show for these dates. Set up shifts with the Shifts button, and the report fills in as people clock in.'),
+        rows.length ? h('button', { class: 'btn ghost', type: 'button', id: 'rep-csv', onclick: csv }, 'Download as a spreadsheet (CSV)') : null));
     }
 
     // ---------- Staff Clock In / Out: the QR code, who is on site now, and the attendance record ----------

@@ -164,3 +164,9 @@
 - **Who:** the head-office user, plus site users who can update their site (their own sites only). View-only users are never emailed.
 - **Levels 2 and 3:** one notice per item as it comes within 30 days: "Tremcore is managing the renewal and will be in touch", to the head-office user only. No overdue chasing.
 - **How:** the database (`reminders_pending` / `reminders_mark`, migration 0033, service key only) decides and records, so nobody gets the same reminder twice. The server sends the emails once a day from 8am UK time when `REMINDERS_ON=1` (set on LIVE only). `POST /api/send-reminders` with `Authorization: Bearer <REMINDER_SECRET>` runs it by hand. Needs the Resend email set-up.
+
+## Staff shifts and the shift report (24 Nov 2026)
+- Part of the Staff Clock In / Out add-on (Level 1). Each person on a site's list gets weekly shifts: one start and finish time per weekday, Monday to Sunday; an empty day is a day off; a finish earlier than the start means the shift runs past midnight. Table `staff_shifts` (migration 0034), same permissions as the people list (site editors only, only where the add-on is on).
+- **Shift report** (People page > "Open the shift report"): by day and person, with the shift, the clock-in and the clock-out, UK time, by week (previous/next), custom dates, one person or everyone, and a CSV download.
+- **Colours (Aaron's choices):** start time is **red if even one minute late** (no grace period), **green if 5 or more minutes early**, plain otherwise. Finish time is **red if they left before the end of the shift**, plain otherwise. Words ("12 mins late", "left 30 mins early") are shown next to the colour so it never relies on colour alone. Times are compared to the minute (seconds ignored).
+- A past shift day with no clock-in shows a muted "No clock-in recorded" row (not red, as it may be leave or sickness). Days off and days not yet over show nothing.
