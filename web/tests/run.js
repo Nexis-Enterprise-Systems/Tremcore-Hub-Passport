@@ -1575,7 +1575,9 @@ const USERS = {
     signupOpen = false;
     for (const u of ['/terms/', '/privacy/']) { await pg.goto(base + u); check('draft legal page loads and says it is a draft: ' + u, (await pg.locator('.quote').innerText()).includes('Draft for review') && (await pg.locator('meta[name=robots]').getAttribute('content')) === 'noindex'); }
     await pg.goto(base + '/');
-    check('hero donut is painted', (await pg.locator('[data-donut]').first().evaluate((e) => e.style.background)).includes('conic-gradient'));
+    check('new home page: phone picture, both add-ons, the websites and media section and the "winning customers" wording', (await pg.locator('.hm .phone img').count()) === 1 && (await pg.locator('.hm .addon').count()) === 2 && (await pg.locator('#websites').innerText()).includes('winning customers.') && (await pg.locator('#websites a[href="/media/"]').count()) === 1);
+    check('every page shares the logo banner, centred menu and footer: home, passport, contact, media', await (async () => { for (const u of ['/', '/passport/', '/contact/', '/media/']) { await pg.goto(base + u); if ((await pg.locator('.masthead .mast-logo').count()) !== 1 || (await pg.locator('header.top nav.main a').count()) !== 6 || (await pg.locator('footer .f-nav').count()) !== 1) return false; } return true; })());
+    await pg.goto(base + '/');
     // demo
     await pg.goto(base + '/what-you-get/');
     check('demo dashboard is complete before play: donut painted and 80%', (await pg.locator('#d-donut').evaluate((e) => e.style.background)).includes('conic-gradient') && (await pg.locator('#d-pct').innerText()) === '80');
