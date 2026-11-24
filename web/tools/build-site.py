@@ -15,7 +15,7 @@ HOURS_DT = f'<div><dt>Opening hours</dt><dd>{HOURS}</dd></div>' if HOURS else ''
 ARROW = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>'
 LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="#d4af55" stroke-width="1.4"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="#d4af55" stroke-width="1.4"/></svg>'
-NAV = [('/', 'Home'), ('/passport/', 'The passport'), ('/what-you-get/', 'What you get'), ('/how-it-works/', 'How it works'), ('/contact/', 'Contact')]
+NAV = [('/', 'Home'), ('/passport/', 'The passport'), ('/what-you-get/', 'What you get'), ('/how-it-works/', 'How it works'), ('/media/', 'Media'), ('/contact/', 'Contact')]
 
 # The passport is not open to the public yet (Nov 2026): every "Sign up" button becomes "Register your interest", which opens the interest-list form.
 # When the passport goes live, set PASSPORT_OPEN = True and rebuild: the buttons go back to the real sign-up.
@@ -196,12 +196,52 @@ terms = f'''<section class="sec"><div class="wrap narrow"><div class="eyebrow">T
 <h3>13. Changes and law</h3><p>We may update these terms and will tell you in advance of any material change. These terms are governed by the law of England and Wales. [GOVERNING LAW AND COURTS TO BE CONFIRMED.]</p>
 </div></section>'''
 
+
+def shot(src, alt, w, h, cap=''):
+    c = f'<figcaption>{cap}</figcaption>' if cap else ''
+    return f'<figure class="shot"><img src="/media/img/{src}" alt="{alt}" width="{w}" height="{h}" loading="lazy">{c}</figure>'
+def feat(eyebrow, title, lead, bullets, fig, flip=False):
+    ul = '<ul class="ticks">' + ''.join(f'<li>{b}</li>' for b in bullets) + '</ul>'
+    txt = f'<div><div class="eyebrow">{eyebrow}</div><h2 class="h2">{title}</h2><p class="lead">{lead}</p>{ul}</div>'
+    return f'<div class="feat{" flip" if flip else ""}">{txt}<div>{fig}</div></div>'
+posters4 = ''.join(f'<img src="/media/img/{n}.jpg" alt="{a}" width="346" height="346" loading="lazy">' for n, a in [('poster-happy-hour','Example Happy Hour poster'),('poster-live-music','Example Live Music poster'),('poster-sunday-roast','Example Sunday Roast poster'),('poster-live-sport','Example Live Sport poster')])
+media = f'''<section class="sec hero"><div class="wrap">
+<div><div class="eyebrow">Tremcore Media</div>
+<h1 class="h1">Websites, posters and reviews, <span class="gold">looked after.</span></h1>
+<p class="lead">For pubs, restaurants, shops and other local businesses: a website that looks the part, posters you can change in minutes, and a calm way to answer your customers&rsquo; reviews.</p>
+<div class="row" style="margin-top:32px"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/media/red-lion/">See an example website {ARROW}</a></div>
+<p class="small" style="margin-top:24px">Websites &middot; Social media &middot; Poster design &middot; Review replies</p></div>
+{shot('builder-preview.jpg','A new website for an example pub, The Red Lion, shown in the Tremcore website builder',1400,875)}
+</div></section>
+<div class="strip"><div class="wrap"><div><b>Made for you</b><p>Your name, your colours, your words.</p></div><div><b>Quick to change</b><p>New offer? New poster in minutes.</p></div><div><b>Easy to look at</b><p>Clear on a phone, a tablet and a computer.</p></div><div><b>Looked after</b><p>We keep it up to date, so you don&rsquo;t have to.</p></div></div></div>
+<section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What we do</div><h2 class="h2">Everything your business shows the world</h2><p class="lead">Four things, one team, one look.</p></div>
+<div class="grid4"><div class="tile"><span class="rule"></span><div class="h3">Your website</div><p>A site built around your business: who you are, what you offer and how to book or get in touch.</p></div><div class="tile"><span class="rule"></span><div class="h3">Social media</div><p>Posts and stories that match your brand, planned ahead so your pages never go quiet.</p></div><div class="tile"><span class="rule"></span><div class="h3">Posters</div><p>Event and offer posters from a set of ready-made designs, with your branding and a QR code on every one.</p></div><div class="tile"><span class="rule"></span><div class="h3">Customer reviews</div><p>Every review in one place, with a suggested reply in the tone you choose, ready for you to check and send.</p></div></div></div></section>
+<section class="sec alt"><div class="wrap">{feat('Your website','A few questions, then you see your new site',
+'We ask about your business, show you a first design to look at on a computer and on a phone, and take your feedback section by section until you are happy.',
+['Answer a few simple questions about your business','See the design on a desktop and on a phone before anything goes live','Tell us what you love and what to change, part by part'],
+shot('builder-start.jpg','The start screen of the Tremcore website builder',1400,875))}</div></section>
+<section class="sec"><div class="wrap">{feat('Posters','Event posters, ready when you are',
+'Pick a design, fill in the details and download it. Your branding is already in place, and each poster can carry a QR code that links to your booking page or menu.',
+['Ready-made designs for quiz nights, happy hours, roasts, live music and more','Change the headline, the date and the details as you type','Download and print, or share it online'],
+shot('posters-choose.jpg','Choosing a poster design in the Tremcore poster studio',1400,875), flip=True)}
+<div class="posters" role="group" aria-label="Example posters">{posters4}</div>
+<p class="small" style="margin-top:14px">Example posters for a made-up pub. Names, prices and phone numbers are illustrative.</p></div></section>
+<section class="sec alt"><div class="wrap">{feat('Reviews and social','Keep up with what people say about you',
+'Reviews from your listings arrive in one inbox. Each one comes with a suggested reply written in the tone you pick, which you can edit before you send it. Social posts and stories follow the same look as your website and posters.',
+['One inbox for your reviews, with the lowest ratings at the top','A suggested reply for every review, in a friendly, apologetic or formal tone','A QR code on a poster or table card that asks happy customers to leave a review'],
+shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore poster studio',1400,875))}</div></section>
+<section class="sec"><div class="wrap"><div class="grid2" style="align-items:center"><div><div class="eyebrow">An example</div><h2 class="h2">The Red Lion, Rochester</h2><p class="lead">This is the kind of website we build. The Red Lion is a made-up pub, so the menu, prices and reviews are only an illustration, but you can open it and scroll around it like any other site.</p>
+<div class="row" style="margin-top:28px"><a class="btn solid" href="/media/red-lion/">Open the example website {ARROW}</a></div></div>
+<div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
+<section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
+
 page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of every certificate, due date and reminder across your commercial properties.', home, '/')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')
 page('/how-it-works/', 'How it works | Tremcore', 'Simple to start, easy to live with. Common questions answered.', how, '/how-it-works/')
 page('/contact/', 'Contact us | Tremcore', 'Ask us a question about the Compliance Passport.', contact, '/contact/')
-print('built 5 pages')
+page('/media/', 'Tremcore Media | Websites, posters and reviews', 'Websites, event posters and customer review replies for pubs, restaurants and local businesses, from Tremcore Media.', media, '/media/')
+print('built 6 pages')
 page('/privacy/', 'Privacy notice (draft) | Tremcore', 'How Tremcore uses your information.', privacy, '/privacy/', noindex=True)
 page('/register/', 'Register your interest | Tremcore', 'Be first to know when the Tremcore Compliance Passport opens.', register, '/register/')
 page('/terms/', 'Terms of use (draft) | Tremcore', 'Terms for the Self-Managed Compliance Passport.', terms, '/terms/', noindex=True)
