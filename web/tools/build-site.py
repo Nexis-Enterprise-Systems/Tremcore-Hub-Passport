@@ -89,6 +89,14 @@ home = '''<div class="hm"><!-- HERO -->
         <p class="cats">Fire safety · Electrical · Water hygiene · Building services · and more</p>
       </div>
 
+      <div class="hero-right">
+      <div class="pricecard">
+        <p class="pc-kick">Compliance Passport</p>
+        <div class="pc-main"><span class="pc-num">&pound;14.99</span><span class="pc-per">per month<br>+ VAT</span></div>
+        <p class="pc-line">Your first site, with a head-office user and one manager.</p>
+        <div class="pc-multi"><b>More than one site?</b> Each extra site is only <b>&pound;7.99</b> a month.</div>
+        <p class="pc-small">Pay yearly and save 15%.</p>
+      </div>
       <div class="phone-wrap">
         <div class="phone" role="img" aria-label="Tremcore app home screen showing 80% core compliance, quick access and add-ons">
           <span class="btn-side l1"></span><span class="btn-side l2"></span><span class="btn-side l3"></span><span class="btn-side r1"></span>
@@ -98,6 +106,7 @@ home = '''<div class="hm"><!-- HERO -->
             <div class="glare"></div>
           </div></div>
         </div>
+      </div>
       </div>
     </div>
 
