@@ -29,7 +29,8 @@ def ask_menu(cls=''):
     return ('<details class="askdd %s"><summary class="btn ghost btn-ghost">Ask us a question <span class="car" aria-hidden="true">&#9662;</span></summary>'
             '<ul class="askmenu"><li><a href="/contact/?topic=multisite">Free multi-site hub</a></li>'
             '<li><a href="/contact/?topic=website">Website</a></li>'
-            '<li><a href="/contact/?topic=social">Social media management</a></li></ul></details>') % cls
+            '<li><a href="/contact/?topic=social">Social media management</a></li>'
+            '<li><a href="/contact/?topic=other">Other</a></li></ul></details>') % cls
 
 def page(path, title, desc, body, current, noindex=False, extra_css=''):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)
