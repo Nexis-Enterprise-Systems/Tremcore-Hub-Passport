@@ -79,8 +79,7 @@ home = '''<div class="hm"><!-- HERO -->
   <div class="hero">
     <div class="wrap hero-grid">
       <div>
-        <p class="eyebrow">Commercial property compliance at your fingertips</p>
-        <h1>Every certificate. Every site. One calm view.</h1>
+        <h1>Commercial property compliance at your fingertips</h1>
         <p class="lead">Tremcore gives every commercial property a compliance passport, so you can see exactly where each site stands.</p>
         <div class="ctas">
           <a href="/register/" class="btn btn-primary">Register your interest</a>
