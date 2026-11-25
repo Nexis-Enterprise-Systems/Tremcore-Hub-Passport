@@ -203,3 +203,7 @@
 - The score ring and percentage on the passport app (Home, Compliance, site cards) count **Core items only**. Missing dates still count against the total and are never green. The hub's own scoring is unchanged.
 - Who can move an item between Core and Other is the same as who can edit it: Self-Managed clients and Tremcore staff. Level 2 and 3 clients stay view-only (proved in `supabase/tests/01_permissions.sql`).
 - Tasks has a List / Calendar toggle; Settings gained Reminder Emails (information only) and Log Out rows; Home gained Core/Other buttons and Quick Access.
+
+## 25 Nov 2026 — Website tweaks
+- "What you get": the "Call Tremcore button" bullet is removed from the Self-Managed list (Self-Managed uses Email Tremcore).
+- Home: gold "Explore the app" heading above the video. In the video's first scene the headline "Every site. One calm view." is replaced with "The smart way to stay compliant." (re-encoded; poster updated).

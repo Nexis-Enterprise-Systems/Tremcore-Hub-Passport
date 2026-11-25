@@ -106,7 +106,7 @@ home = '''<div class="hm"><!-- HERO -->
           </div></div>
         </div>
       </div>
-      <div class="hero-video"><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div>
+      <div class="hero-video"><p class="explore">Explore the app</p><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div>
       </div>
     </div>
 
@@ -343,7 +343,7 @@ row_open = '<div class="plan-row">' if SHOW_MANAGED else ''
 row_close = '</div>' if SHOW_MANAGED else ''
 what = f'''<section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What you get</div><h2 class="h2">One passport, quoted to suit your premises</h2><p class="lead">Tell us about your sites and we&rsquo;ll put together a quote that fits.</p></div>
 {row_open}<article class="plan-card"><div class="eyebrow">The Compliance Passport</div><h3 class="h3" style="font-size:36px">Self-Managed</h3><p style="color:var(--mute)">For businesses that want to keep their own records and arrange their own inspections.</p>
-<ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li><li>A Call Tremcore button whenever you need help</li></ul>
+<ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li></ul>
 <div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px">{SIGNUP}<a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn ghost" href="/contact/?package=1">Ask a question</a></div></div></article>
 {managed_html if SHOW_MANAGED else ""}{row_close}<div id="demo" class="demo-video"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">The passport, start to finish</h2></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>''' + cta('Want to see it around your premises?','Tell us about your premises and we&rsquo;ll show you how it would work.')
 how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it works</div><h2 class="h2">Simple to start. Easy to live with.</h2>
