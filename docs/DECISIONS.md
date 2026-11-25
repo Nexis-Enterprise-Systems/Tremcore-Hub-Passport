@@ -215,3 +215,4 @@
 - 25 Nov 2026: contact form's Package box replaced by a Subject box (Free multi-site hub / Website / Social media management); the bottom call-to-action 'Ask a question' on the home page is now the drop-down.
 - 25 Nov 2026: sign-up now has Yearly (save 15%) ticked by default; with an introductory-offer code (link or typed) it switches to Monthly because the offer is monthly only. Media video on the home page centred.
 - 25 Nov 2026: the gold line under the masthead logo on every website page is now a skyline that copies the buildings inside the logo (SVG, web/tools/build-site.py + site.css .skyline). The line above the footer is unchanged.
+- 25 Nov 2026: removed the gold line under the masthead logo; the two logo skylines now sit separately, bigger, either side of the logo, with no line joining them.
