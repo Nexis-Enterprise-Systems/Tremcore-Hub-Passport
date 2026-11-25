@@ -91,7 +91,6 @@ home = '''<div class="hm"><!-- HERO -->
         <div class="ctas">
           <a href="/register/" class="btn btn-primary">Register your interest</a>
           <a href="#passport-video" class="btn btn-ghost">▶ Watch the video</a>
-          @@ASK@@
         </div>
         <p class="cats">Fire safety · Electrical · Water hygiene · Building services · and more</p>
       </div>
@@ -465,7 +464,7 @@ shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore p
 <div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
 <section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
 
-home = home.replace('@@ASK@@', ask_menu('inhero')).replace('@@ASKUP@@', ask_menu('up'))
+home = home.replace('@@ASKUP@@', ask_menu('up'))
 page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of certificates, due dates and reminders across your commercial properties.', home, '/', extra_css='home.css')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')
