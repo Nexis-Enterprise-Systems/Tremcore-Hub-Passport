@@ -223,3 +223,4 @@
 - 25 Nov 2026: masthead divider reworked: no line joining the two skylines and none under the buildings; the line only runs outward from each skyline to the page edges, tapering to a point; buildings taller and further apart.
 - 25 Nov 2026: masthead skyline divider made subtle: buildings back to the logo's own proportions (smaller), thinner line.
 - 25 Nov 2026: gold diamond added in the centre of the skyline divider line.
+- 25 Nov 2026: the line between the skylines now tapers to a point at each side of the centre diamond, like the outer ends do.
