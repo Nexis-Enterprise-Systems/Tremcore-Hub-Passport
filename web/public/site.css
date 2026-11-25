@@ -203,3 +203,6 @@ html.lock{overflow:hidden}
 .pcard p{color:var(--mute);margin:0}.pcard .pfoot{margin-top:auto;padding-top:18px;font-size:.85rem}
 .freebadge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#3fbf5a;color:#06210f;font:800 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;padding:7px 14px;border-radius:999px;white-space:nowrap}
 @media (max-width:900px){.pgrid{grid-template-columns:1fr;gap:28px}.bespoke{grid-template-columns:1fr;gap:22px;padding:34px 24px 26px}.bprice b{font-size:60px}}
+/* gold gradient headings: leave room below the line so the tails of g, y, p and j are not clipped */
+.gt,.h1,.h2,.hm h1,.hm h2,.hm .gt,.hm .p-app,.hm .pc-num,.bprice b,.pprice b{padding-bottom:.16em}
+.hm h1{line-height:1.14}

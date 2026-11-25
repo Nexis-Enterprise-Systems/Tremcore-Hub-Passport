@@ -577,3 +577,4 @@ body{overscroll-behavior-y:contain}
   .appshell .item.taskrow .rowtools .btn.small{flex:1;margin-top:0}
 }
 @media (min-width:960px){.appshell .item .dot{width:22px;height:22px;font-size:12px}}
+.promo-name,.tile .tv{padding-bottom:.16em}

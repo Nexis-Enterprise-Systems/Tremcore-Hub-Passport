@@ -193,3 +193,5 @@
 - 25 Nov 2026: Home hero on a computer: phone beside the headline; the price card and the video side by side underneath. Phone view unchanged (headline, price, phone, video in a column).
 
 - 25 Nov 2026: Home hero on a computer: video bottom-left, price card bottom-right (so the phone and video are not stacked), and the hero phone made smaller (230px).
+
+- 25 Nov 2026: Fixed the tail of the 'g' (and y, p, j) being clipped on gold gradient headings, on the website and in the app, by giving those headings room underneath.
