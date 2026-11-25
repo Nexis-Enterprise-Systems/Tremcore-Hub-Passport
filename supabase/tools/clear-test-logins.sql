@@ -26,8 +26,8 @@ begin
   select count(*) into n_comp from public.companies;
   delete from public.companies;
 
-  -- 2) offer codes remember who made them; unlink so the logins can be removed
-  update public.offer_codes set created_by = null where created_by is not null;
+  -- 2) offer codes (free access and discount codes) are all removed, which also frees the logins that made them
+  delete from public.offer_codes;
 
   -- 3) every other login (profiles go with them)
   select count(*) into n_users from auth.users where lower(email) <> all (keep_emails) or email is null;
