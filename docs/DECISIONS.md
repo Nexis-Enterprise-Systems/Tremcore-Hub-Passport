@@ -224,3 +224,4 @@
 - 25 Nov 2026: masthead skyline divider made subtle: buildings back to the logo's own proportions (smaller), thinner line.
 - 25 Nov 2026: gold diamond added in the centre of the skyline divider line.
 - 25 Nov 2026: the line between the skylines now tapers to a point at each side of the centre diamond, like the outer ends do.
+- 25 Nov 2026: new phone picture (Aaron's supplied render of the app home screen, cut out on a transparent background, /img/app-phone.webp) replaces the old phone on the Home page and is added as a new 'On your phone' section at the bottom of the passport page. Also fixed the call-to-action buttons being pushed apart (class name clash with .up).

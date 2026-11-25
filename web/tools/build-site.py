@@ -79,7 +79,7 @@ def page(path, title, desc, body, current, noindex=False, extra_css=''):
     open(os.path.join(d, 'index.html'), 'w').write(html)
 
 def cta(h, p):
-    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}{ask_menu("up")}{OR_CALL}</div></div></section>'
+    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}{ask_menu("cband")}{OR_CALL}</div></div></section>'
 
 ITEMS = [('g','Fire risk assessment','Mar 2027','In date'),('a','Fire alarm service and test','in 12 days','Due in 12d'),('r','Portable appliance testing','4 days ago','Overdue 4d'),('m','Kitchen extract cleaning','Not entered','No date'),('g','Legionella risk assessment','Jan 2027','In date'),('g','Emergency lighting test','Feb 2027','In date')]
 items = ''.join(f'<li{" class=fade" if i==5 else ""}><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></li>' for i,(c,t,d,l) in enumerate(ITEMS))
@@ -105,14 +105,7 @@ home = '''<div class="hm"><!-- HERO -->
         <p class="pc-small">Pay yearly and save 15%.</p>
       </div>
       <div class="phone-wrap">
-        <div class="phone" role="img" aria-label="Tremcore app home screen showing core compliance, site scores and items needing attention">
-          <span class="btn-side l1"></span><span class="btn-side l2"></span><span class="btn-side l3"></span><span class="btn-side r1"></span>
-          <div class="bezel"><div class="screen">
-            <div class="status"><span>9:41</span><span class="punch"></span><span class="icons"><svg width="12" height="8" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#f3eee4"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="#f3eee4"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#f3eee4"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#f3eee4"/></svg> <svg width="11" height="8" viewBox="0 0 16 12"><path d="M8 11.5l2.4-2.6a3.4 3.4 0 0 0-4.8 0z" fill="#f3eee4"/><path d="M3.8 7.1a6 6 0 0 1 8.4 0" fill="none" stroke="#f3eee4" stroke-width="1.7" stroke-linecap="round"/><path d="M1.3 4.4a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="#f3eee4" stroke-width="1.7" stroke-linecap="round"/></svg> <svg width="18" height="8" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" fill="none" stroke="#f3eee4" stroke-opacity="0.45"/><rect x="2.5" y="2.5" width="17" height="8" rx="2" fill="#f3eee4"/></svg></span></div>
-            <img src="/img/home-phone-2.jpg" width="640" height="1385" alt="">
-            <div class="glare"></div>
-          </div></div>
-        </div>
+        <img class="appphone" src="/img/app-phone.webp" width="712" height="1761" alt="Tremcore app home screen showing core compliance at 80%, quick access to tasks and emergency information, and add-ons">
       </div>
       <div class="hero-video"><p class="explore">Explore the app</p><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div>
       </div>
@@ -321,7 +314,7 @@ passport = f'''<section class="sec alt"><div class="wrap"><div class="center-hea
 <section class="sec alt"><div class="wrap"><div class="grid2" style="align-items:center"><div><div class="eyebrow">Traffic lights</div><h2 class="h2">See where you stand in a second</h2><p class="lead">Every check has a due date and a colour. If a date hasn&rsquo;t been recorded, the passport says so rather than showing green.</p>
 <div class="lights"><div><span class="dot g"></span><span><b>In date.</b> More than 30 days to go.</span></div><div><span class="dot a"></span><span><b>Due soon.</b> Due within 30 days.</span></div><div><span class="dot r"></span><span><b>Overdue.</b> Past the due date.</span></div><div><span class="dot m"></span><span><b>No date.</b> Never shown as green.</span></div></div></div>
 <div class="card"><div class="bar" aria-hidden="true"></div><div style="margin-top:20px"><b>Your score, across every site</b><p style="color:var(--mute);margin:6px 0 14px">We&rsquo;ll show you how your own properties would look.</p>{SIGNUP}</div></div></div></div></section>
-<section class="sec alt"><div class="wrap"><div class="eyebrow">Privacy and control</div><h2 class="h2">Your records stay yours</h2><div class="grid2">''' + ''.join(f'<div class="tile"><span class="rule"></span><div class="h3">{a}</div><p>{b}</p></div>' for a,b in [('Only your company&rsquo;s records','Each client sees their own properties and records, and nothing belonging to anyone else.'),('Rules enforced by the system','What each person can see and do is controlled by the system itself, not just hidden on screen.'),('Private document storage','Certificates, documents and uploaded photos are stored privately.'),('A record of changes','Changes to compliance records are logged, so there is always a clear trail.')]) + '</div></div></section>' + cta('Ready to see your own sites scored?','Sign up and add your first site. It takes a few minutes.')
+<section class="sec alt"><div class="wrap"><div class="eyebrow">Privacy and control</div><h2 class="h2">Your records stay yours</h2><div class="grid2">''' + ''.join(f'<div class="tile"><span class="rule"></span><div class="h3">{a}</div><p>{b}</p></div>' for a,b in [('Only your company&rsquo;s records','Each client sees their own properties and records, and nothing belonging to anyone else.'),('Rules enforced by the system','What each person can see and do is controlled by the system itself, not just hidden on screen.'),('Private document storage','Certificates, documents and uploaded photos are stored privately.'),('A record of changes','Changes to compliance records are logged, so there is always a clear trail.')]) + '</div></div></section>' + """<section class="sec"><div class="wrap center-head"><div class="eyebrow">On your phone</div><h2 class="h2">Your whole passport in your pocket</h2><p class="lead">Your score, your checks and your tasks, wherever you are.</p><img class="appphone big" src="/img/app-phone.webp" width="712" height="1761" alt="Tremcore app home screen showing core compliance at 80%, quick access to tasks and emergency information, and add-ons" loading="lazy"></div></section>""" + cta('Ready to see your own sites scored?','Sign up and add your first site. It takes a few minutes.')
 
 def faq(q, a): return f'<details><summary><span>{q}</span><span class="plus" aria-hidden="true">+</span></summary><p>{a}</p></details>'
 rows = ''.join(f'<div class="drow"><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></div>' for c,t,l in [('g','Fire risk assessment','In date'),('a','Fire alarm service and test','Due in 12d'),('r','Portable appliance testing','Overdue 4d'),('m','Kitchen extract cleaning','No date'),('g','Legionella risk assessment','In date')])
@@ -465,7 +458,7 @@ shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore p
 <div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
 <section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
 
-home = home.replace('@@ASKUP@@', ask_menu('up'))
+home = home.replace('@@ASKUP@@', ask_menu('cband'))
 page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of certificates, due dates and reminders across your commercial properties.', home, '/', extra_css='home.css')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')
