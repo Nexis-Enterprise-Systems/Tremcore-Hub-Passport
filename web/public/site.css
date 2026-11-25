@@ -222,3 +222,7 @@ html.lock{overflow:hidden}
 
 details.askdd,details.askdd:first-of-type{border:0}
 details.askdd>summary{padding:0 22px;margin:0;display:inline-flex;align-items:center;justify-content:center;min-height:48px;width:auto;font-size:inherit}
+/* skyline line under the masthead (same buildings as inside the logo) */
+.skyline{position:relative;height:70px;margin-top:0}
+.skyline::before{content:"";position:absolute;left:0;right:0;bottom:3.5px;height:2px;background:linear-gradient(90deg,#94701F,#F2DC93 30%,#CDA64C 60%,#94701F)}
+.skyline .sky{position:absolute;left:50%;bottom:0;transform:translateX(-50%);height:70px;width:auto;max-width:96vw}
