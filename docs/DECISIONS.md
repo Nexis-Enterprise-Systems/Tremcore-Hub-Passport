@@ -191,3 +191,5 @@
 - 25 Nov 2026: info@tremcore.co.uk is copied (Cc) on every offer email (discount and free access, including Resend) and on the registration thank-you. Not copied: the launch-link emails to the waiting list, payment receipts, reminders.
 
 - 25 Nov 2026: Home hero on a computer: phone beside the headline; the price card and the video side by side underneath. Phone view unchanged (headline, price, phone, video in a column).
+
+- 25 Nov 2026: Home hero on a computer: video bottom-left, price card bottom-right (so the phone and video are not stacked), and the hero phone made smaller (230px).
