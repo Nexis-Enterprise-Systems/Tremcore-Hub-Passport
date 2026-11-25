@@ -187,3 +187,5 @@
 - 25 Nov 2026: The 90-second Tremcore Media video now also sits on the home page, under the media prices.
 
 - 25 Nov 2026: The Self-Managed showcase video (97 seconds, web version 720x1280) replaces the old 20-second walkthrough. It is on the home page under the phone picture, at the top of the passport page, and on What you get. The home button now reads 'Watch the video'.
+
+- 25 Nov 2026: info@tremcore.co.uk is copied (Cc) on every offer email (discount and free access, including Resend) and on the registration thank-you. Not copied: the launch-link emails to the waiting list, payment receipts, reminders.

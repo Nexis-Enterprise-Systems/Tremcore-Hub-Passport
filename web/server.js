@@ -142,7 +142,7 @@ async function handleInterest(req, res) {
       const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
       const mail = interestThanks(row, proto + '://' + req.headers.host);
       const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: EMAIL_FROM, to: [row.email], reply_to: COMPANY.email, subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(8000) });
+        body: JSON.stringify({ from: EMAIL_FROM, to: [row.email], cc: [COMPANY.email], reply_to: COMPANY.email, subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(8000) });
       if (!er.ok) console.error('interest thank-you email failed', er.status);
     } catch (e) { console.error('interest thank-you email error', e.message); }
   }
@@ -661,7 +661,7 @@ async function handleSendOffer(req, res) {
     if (!EMAIL_API_KEY || !EMAIL_FROM) { result.note = 'The email service is not set up yet, so nothing was sent. Copy the link and send it yourself.'; return out(200, result); }
     const mail = offerEmail(row, link, proto + '://' + req.headers.host);
     const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: EMAIL_FROM, reply_to: COMPANY.email, to: [row.prospect_email], subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
+      body: JSON.stringify({ from: EMAIL_FROM, reply_to: COMPANY.email, to: [row.prospect_email], cc: [COMPANY.email], subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
     if (!er.ok) { console.error('offer email failed', er.status); result.note = 'The code was made but the email could not be sent (' + er.status + '). Copy the link and send it yourself.'; return out(200, result); }
     result.sent = true;
     await fetch(SUPABASE_URL + '/rest/v1/rpc/mark_offer_sent', { method: 'POST', headers: mine, body: JSON.stringify({ p_id: row.id }), signal: AbortSignal.timeout(8000) }).catch(() => {});
