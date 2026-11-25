@@ -208,3 +208,4 @@
 - "What you get": the "Call Tremcore button" bullet is removed from the Self-Managed list (Self-Managed uses Email Tremcore).
 - Home: gold "Explore the app" heading above the video. In the video's first scene the headline "Every site. One calm view." is replaced with "The smart way to stay compliant." (re-encoded; poster updated).
 - 25 Nov 2026: home 'Explore the app' heading made larger; video now opens with a 3-second still title card 'The smart way to stay compliant.' (also the poster).
+- 25 Nov 2026: Explore the app now uses the hero serif font and sits above the video (stacked); video and poster files renamed (-2) so browsers drop the cached old poster.

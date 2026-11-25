@@ -1595,15 +1595,15 @@ const USERS = {
     // Self-Managed showcase video: home (under the phone), passport page and what-you-get; the old 20-second walkthrough is gone
     for (const u of ['/', '/passport/', '/what-you-get/']) {
       await pg.goto(base + u);
-      check('showcase video is on ' + u, (await pg.locator('video#passport-video source[src="/media/tremcore-self-managed-showcase.mp4"]').count()) === 1);
+      check('showcase video is on ' + u, (await pg.locator('video#passport-video source[src="/media/tremcore-self-managed-showcase-2.mp4"]').count()) === 1);
       check('the old 20-second walkthrough is gone from ' + u, (await pg.locator('#demo-player').count()) === 0 && !(await pg.content()).includes('20-second'));
     }
     await pg.goto(base + '/');
     check('home video sits under the phone picture', await pg.evaluate(() => { const v = document.querySelector('#passport-video').getBoundingClientRect(), p = document.querySelector('.hm .phone').getBoundingClientRect(); return v.top >= p.bottom - 1; }));
     {
-      const r1 = await fetch(base + '/media/tremcore-self-managed-showcase.mp4', { headers: { Range: 'bytes=0-99' } });
+      const r1 = await fetch(base + '/media/tremcore-self-managed-showcase-2.mp4', { headers: { Range: 'bytes=0-99' } });
       check('showcase video is served in ranges so it can play and skip', r1.status === 206 && (await r1.arrayBuffer()).byteLength === 100);
-      check('showcase poster image is served', (await fetch(base + '/media/img/sm-poster.jpg')).status === 200);
+      check('showcase poster image is served', (await fetch(base + '/media/img/sm-poster-2.jpg')).status === 200);
     }
     // contact form, using a faked server reply
     await pg.goto(base + '/contact/');

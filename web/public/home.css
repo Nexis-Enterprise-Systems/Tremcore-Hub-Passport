@@ -178,7 +178,7 @@
 
 .hm .grid.media{grid-template-columns:repeat(3,1fr);max-width:1040px}
 @media (max-width:860px){.hm .grid.media{grid-template-columns:1fr;gap:28px}}
-.hm .hero-video{width:100%;display:flex;justify-content:center}
+.hm .hero-video{width:100%;display:flex;flex-direction:column;align-items:center}
 .hm .hero-video .vidwrap{width:100%;max-width:340px}
 /* computer view: phone beside the words; the price and the video side by side underneath */
 @media (min-width:961px){
@@ -190,4 +190,4 @@
   .hm .hero-right .hero-video{grid-column:1;grid-row:2}
   .hm .hero-right .phone{width:230px}
 }
-.hm .hero-video .explore{margin:0 0 14px;text-align:center;font-weight:700;font-size:clamp(1.9rem,4.2vw,2.8rem);line-height:1.15;letter-spacing:.02em;background:linear-gradient(180deg,#f1d98c,#c9a14a);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.16em}
+.hm .hero-video .explore{font-family:var(--serif);display:block;width:100%;margin:0 0 14px;text-align:center;font-weight:700;font-size:clamp(2rem,5vw,3.4rem);line-height:1.15;letter-spacing:.02em;background:linear-gradient(180deg,#f1d98c,#c9a14a);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.16em}
