@@ -177,3 +177,5 @@
 - 24 Nov 2026: Website home page shows the Compliance Passport price above the phone: £14.99 a month + VAT (first site), extra sites show "click here for a multi-site discount" (links to Contact) with no price shown; pay yearly and save 15%.
 
 - 24 Nov 2026: Passport app restyled to match the new prototype (Tremcore-Compliance, 24 Nov): bigger home logo, round status icons (tick, !, cross, dash) on every row, arrow on phone rows, segmented gold tabs, flat page titles, full-width Add New Task button. Look only: data, permissions, add-ons and the Email/Call Tremcore button are unchanged. Settings keeps all sections on one page (not separate menu screens). Not copied from the prototype: Core/Other split, document history, task calendar.
+
+- 25 Nov 2026: Media page now has a Prices section from the door-drop flyer: Bespoke website £400 fixed (up to 4 pages); Social Media Management £99/month; Customer Review Management £9.99/month and Poster Design Studio £4.99/month, both free with Social. Prices shown as on the flyer (no VAT wording; to be confirmed with Aaron).
