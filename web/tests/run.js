@@ -1577,7 +1577,7 @@ const USERS = {
     check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/what-you-get/');
     check('website does not offer the Managed Service for now (no card, no postcode box)', (await pg.locator('#managed').count()) === 0 && (await pg.locator('#area-check').count()) === 0 && !/Managed Service/i.test(await pg.locator('body').innerText()));
-    await pg.goto(base + '/contact/'); check('contact form offers only Self-Managed as a package', (await pg.locator('#f-pkg option').allInnerTexts()).join('|') === 'Not sure yet|Self-Managed');
+    await pg.goto(base + '/contact/?topic=social'); check('contact form subject offers the three subjects and the link preselects one', (await pg.locator('#f-topic option').allInnerTexts()).join('|') === 'Not sure yet|Free multi-site hub|Website|Social media management' && (await pg.locator('#f-topic').inputValue()) === 'social' && (await pg.locator('#f-pkg').count()) === 0);
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
     check('website has Register your interest buttons everywhere and no "Book a demo" anywhere', (await pg.locator('a.btn.solid[href="/register/"]:visible').count()) >= 2 && !/book (a|my) demo/i.test(await pg.locator('body').innerText()) && (await pg.locator('.hdr-actions a.btn.solid').innerText()) === 'Register your interest');
     check('website has a single "Login" button in the header and footer, both leading to the app', (await pg.locator('.hdr-actions a[href="/app/?login=1"]').innerText()) === 'Login' && (await pg.locator('footer a[href="/app/?login=1"]').innerText()) === 'Login' && (await pg.locator('text=Client login').count()) === 0);

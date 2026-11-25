@@ -305,7 +305,7 @@ home = '''<div class="hm"><!-- HERO -->
         <p>Sign up, add your first site and start adding certificates.</p>
         <div class="ctas">
           <a href="/register/" class="btn btn-primary">Register your interest</a>
-          <a href="/contact/" class="btn btn-ghost">Ask a question</a>
+          @@ASKUP@@
         </div>
       </div>
     </div>
@@ -368,8 +368,7 @@ contact = f'''<section class="sec"><div class="wrap contact"><div><div class="ey
 <dl class="cd">{PHONE_DT}<div><dt>Email</dt><dd>{EMAIL}</dd></div>{HOURS_DT}</dl></div>
 <form class="f card" id="enquiry" method="post" action="/api/enquiry"><div class="two"><div><label class="lbl" for="f-name">Your name</label><input class="fld" id="f-name" name="name" type="text" autocomplete="name" required maxlength="120"></div><div><label class="lbl" for="f-company">Company</label><input class="fld" id="f-company" name="company" type="text" autocomplete="organization" maxlength="160"></div></div>
 <div class="two"><div><label class="lbl" for="f-email">Email</label><input class="fld" id="f-email" name="email" type="email" autocomplete="email" required maxlength="200"></div><div><label class="lbl" for="f-phone">Phone</label><input class="fld" id="f-phone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div></div>
-<div class="two"><div><label class="lbl" for="f-sites">Number of properties</label><select class="fld" id="f-sites" name="sites"><option value="1">1</option><option value="2-5">2 to 5</option><option value="6-20">6 to 20</option><option value="20+">More than 20</option></select></div><div><label class="lbl" for="f-pkg">Package</label><select class="fld" id="f-pkg" name="package"><option value="">Not sure yet</option><option value="1">Self-Managed</option>''' + ('<option value="2">Managed Service (near Medway)</option>' if SHOW_MANAGED else '') + '''</select></div></div>
-<div><label class="lbl" for="f-topic">What is your question about?</label><select class="fld" id="f-topic" name="topic"><option value="">Something else</option><option value="multisite">Free multi-site hub</option><option value="website">Website</option><option value="social">Social media management</option></select></div>
+<div class="two"><div><label class="lbl" for="f-sites">Number of properties</label><select class="fld" id="f-sites" name="sites"><option value="1">1</option><option value="2-5">2 to 5</option><option value="6-20">6 to 20</option><option value="20+">More than 20</option></select></div><div><label class="lbl" for="f-topic">Subject</label><select class="fld" id="f-topic" name="topic"><option value="">Not sure yet</option><option value="multisite">Free multi-site hub</option><option value="website">Website</option><option value="social">Social media management</option></select></div></div>
 <div><label class="lbl" for="f-msg">What would you most like to see?</label><textarea class="fld" id="f-msg" name="message" rows="4" maxlength="2000"></textarea></div>
 <div class="hp" aria-hidden="true"><label>Leave this empty <input name="website" type="text" tabindex="-1" autocomplete="off"></label></div>
 <button class="btn solid" id="f-go" type="submit">Send my question</button><div id="f-out" role="status"></div>
@@ -466,7 +465,7 @@ shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore p
 <div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
 <section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
 
-home = home.replace('@@ASK@@', ask_menu('inhero'))
+home = home.replace('@@ASK@@', ask_menu('inhero')).replace('@@ASKUP@@', ask_menu('up'))
 page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of certificates, due dates and reminders across your commercial properties.', home, '/', extra_css='home.css')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')
