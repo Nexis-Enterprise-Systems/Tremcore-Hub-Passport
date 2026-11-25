@@ -484,7 +484,7 @@
     const offerNote = h('p', { class: 'muted small', id: 'su-code-note' });
     const codeValue = () => offerBox.value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
     const showOfferNote = () => { offerNote.textContent = codeValue() ? 'The introductory offer is for monthly billing, so you will be charged monthly. We check your code when you press the button.' : ''; };
-    offerBox.addEventListener('input', showOfferNote); showOfferNote();
+    offerBox.addEventListener('input', () => { showOfferNote(); if (codeValue()) { const m = document.querySelector('input[name=su-billing][value=monthly]'); if (m) m.checked = true; } }); showOfferNote();
     const count = () => { const n = Math.floor(Number(sites.value)); return n >= 1 && n <= 100 ? n : 0; };
     const monthlyTxt = h('span', { id: 'su-monthly' }), annualTxt = h('span', { id: 'su-annual' });
     const refresh = () => { const n = count();
@@ -493,8 +493,8 @@
     sites.addEventListener('input', refresh); refresh();
     const bill = (val, checked, title, detail) => h('label', { class: 'check plan' }, h('input', { type: 'radio', name: 'su-billing', value: val, checked }), h('span', {}, h('strong', {}, title), ' ', detail));
     const billing = h('fieldset', { class: 'plans' }, h('legend', {}, 'How would you like to pay?'),
-      bill('monthly', true, 'Monthly', monthlyTxt),
-      bill('annual', false, 'Yearly, save 15%', annualTxt),
+      bill('monthly', !!linkCode, 'Monthly', monthlyTxt),
+      bill('annual', !linkCode, 'Yearly, save 15%', annualTxt),
       h('p', { class: 'muted small' }, '\u00a314.99 a month for your first site and \u00a37.99 a month for each extra site (yearly: \u00a3152.90 and \u00a381.50). Prices exclude VAT. Your first site includes a head-office user and one manager; each extra site includes one more user. Payment is taken when you sign up and your account opens as soon as it is confirmed.'));
     const btn = h('button', { class: 'btn', type: 'submit' }, 'Sign up and pay');
     const form = h('form', { novalidate: true, onsubmit: async (e) => {

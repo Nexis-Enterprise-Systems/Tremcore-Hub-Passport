@@ -213,3 +213,4 @@
 - 25 Nov 2026: hero phone picture retaken at a real phone shape (it looked stretched); big gold centred play button on every website video (web/public/site.js).
 - 25 Nov 2026: 'Ask us a question' drop-down (Free multi-site hub / Website / Social media management) on the home hero and the bottom call-to-action bands. Choosing a subject opens the contact form with that subject chosen; the subject is added to the start of the enquiry message (no database change).
 - 25 Nov 2026: contact form's Package box replaced by a Subject box (Free multi-site hub / Website / Social media management); the bottom call-to-action 'Ask a question' on the home page is now the drop-down.
+- 25 Nov 2026: sign-up now has Yearly (save 15%) ticked by default; with an introductory-offer code (link or typed) it switches to Monthly because the offer is monthly only. Media video on the home page centred.
