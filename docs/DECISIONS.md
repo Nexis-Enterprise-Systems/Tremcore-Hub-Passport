@@ -221,3 +221,4 @@
 - 25 Nov 2026: masthead line and skylines use the logo's gold; both ends of the line taper to a point like the logo.
 - 25 Nov 2026: the divider under the masthead logo is now the logo's own skyline drawn as one graphic: tapering gold line, taller buildings either side of a wide centre gap (where the T is), symmetrical. The old solid line is gone.
 - 25 Nov 2026: masthead divider reworked: no line joining the two skylines and none under the buildings; the line only runs outward from each skyline to the page edges, tapering to a point; buildings taller and further apart.
+- 25 Nov 2026: masthead skyline divider made subtle: buildings back to the logo's own proportions (smaller), thinner line.
