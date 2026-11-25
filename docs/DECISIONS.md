@@ -217,3 +217,4 @@
 - 25 Nov 2026: the gold line under the masthead logo on every website page is now a skyline that copies the buildings inside the logo (SVG, web/tools/build-site.py + site.css .skyline). The line above the footer is unchanged.
 - 25 Nov 2026: removed the gold line under the masthead logo; the two logo skylines now sit separately, bigger, either side of the logo, with no line joining them.
 - 25 Nov 2026: gold line put back under the masthead; the two skylines are further apart, raised, and stand on the line.
+- 25 Nov 2026: the gold line under the masthead is now the same thickness as the skyline outline and runs straight into both skylines so it reads as one piece.
