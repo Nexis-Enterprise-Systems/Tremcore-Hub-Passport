@@ -180,3 +180,12 @@
 @media (max-width:860px){.hm .grid.media{grid-template-columns:1fr;gap:28px}}
 .hm .hero-video{width:100%;display:flex;justify-content:center}
 .hm .hero-video .vidwrap{width:100%;max-width:340px}
+/* computer view: phone beside the words; the price and the video side by side underneath */
+@media (min-width:961px){
+  .hm .hero .hero-grid.wrap{align-items:center;row-gap:48px}
+  .hm .hero-right{display:contents}
+  .hm .hero .hero-grid>div:first-child{grid-column:1;grid-row:1;padding-top:0}
+  .hm .hero-right .phone-wrap{grid-column:2;grid-row:1;justify-self:center}
+  .hm .hero-right .pricecard{grid-column:1;grid-row:2;justify-self:center;align-self:center}
+  .hm .hero-right .hero-video{grid-column:2;grid-row:2}
+}
