@@ -183,3 +183,5 @@
 - 25 Nov 2026: Removed the 'Site plans / See your building, not just your records' section from the passport page of the website.
 
 - 25 Nov 2026: Home page 'Websites & media' section now shows all three monthly cards (Social £99, Customer Review £9.99, Poster Design Studio £4.99), matching the flyer and the Media page.
+
+- 25 Nov 2026: The 90-second Tremcore Media video now also sits on the home page, under the media prices.
