@@ -1297,4 +1297,14 @@ do $$ declare e text; begin
   begin insert into staff_shifts(member_id,weekday,start_time,end_time) values ('50000000-0000-0000-0000-0000000000a1',9,'10:00','18:00'); e := 'allowed'; exception when check_violation then e := 'check'; end;
   if e <> 'check' then raise exception 'bad weekday accepted: %', e; end if; end $$;
 select 'shifts: weekday must be 1 to 7' as test, true as ok;
+
+-- 0036: Core / Other
+select * from chk('core: every check starts as Core', :'staff', 'aal2', $$select bool_and(is_core) from compliance_items$$);
+select * from chk('core: a Self-Managed client who can edit can move a check to Other', :'siteAu', 'aal1',
+  $$with u as (update compliance_items set is_core=false where id='30000000-0000-0000-0000-000000000002' returning 1) select count(*)=1 from u$$);
+select * from chk('core: a view-only user cannot move a check', :'siteAv', 'aal1',
+  $$with u as (update compliance_items set is_core=false where id='30000000-0000-0000-0000-000000000002' returning 1) select count(*)=0 from u$$);
+select * from chk('core: a Level 2 client cannot move a check', :'superB', 'aal2',
+  $$with u as (update compliance_items set is_core=false where id='30000000-0000-0000-0000-000000000006' returning 1) select count(*)=0 from u$$);
+select * from chk('core: the new column shows in compliance_status', :'siteAu', 'aal1', $$select count(*)>=1 from compliance_status where is_core is not null$$);
 rollback;

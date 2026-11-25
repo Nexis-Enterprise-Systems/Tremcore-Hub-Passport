@@ -591,3 +591,24 @@ body{overscroll-behavior-y:contain}
   .appbody.view-settings>.setmenu,.appbody.view-settings>.setfoot,.appbody.view-settings>.card:not(.settitle):not(:first-child){grid-column:1/-1;width:100%;max-width:680px;margin-left:auto;margin-right:auto}
 }
 .appbody.view-settings .settitle ~ .card>h2:first-child{display:none}
+/* Core / Other buttons on Home */
+.countbtn{display:flex;align-items:center;justify-content:center;gap:10px}
+.countbtn .cnt{background:rgba(0,0,0,.28);border-radius:999px;padding:1px 9px;font-size:.8rem;font-weight:700}
+.btn.ghost.countbtn .cnt{background:rgba(212,175,85,.16);color:var(--gold)}
+.countbtn .arr{font-weight:800}
+/* Tasks: List / Calendar */
+.pills{display:flex;justify-content:center;gap:8px;margin:6px 0 4px}
+.pill{background:transparent;color:var(--muted);border:1px solid #3a3125;border-radius:999px;padding:8px 18px;font:inherit;font-size:.9rem;cursor:pointer}
+.pill[aria-pressed=true]{color:var(--gold);border-color:var(--gold);background:rgba(212,175,85,.1)}
+.calendar{margin-top:10px}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cal-head .linkbtn{font-size:1.8rem;line-height:1;padding:4px 14px;text-decoration:none}
+.cal-week,.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal-week span{color:var(--muted);font-size:.75rem;padding:4px 0}
+.cal-blank{min-height:46px}
+.cal-day{position:relative;min-height:46px;background:#0f0d0a;border:1px solid #2e271d;border-radius:10px;color:var(--text);font:inherit;font-size:.92rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.cal-day.today{border-color:var(--gold)}
+.cal-day.sel{background:rgba(212,175,85,.16);border-color:var(--gold)}
+.cal-day .dot{width:8px;height:8px}
+.cal-day-list{margin-top:14px}
+.cal-day-list h3{margin:0 0 8px}

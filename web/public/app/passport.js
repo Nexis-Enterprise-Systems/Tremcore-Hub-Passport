@@ -40,6 +40,8 @@
     c.pct = c.total ? Math.round(100 * (c.green + c.amber) / c.total) : null;
     return c;
   };
+  // Core checks count towards the score; Other checks are tracked but not counted.
+  const isCore = (r) => r.is_core !== false;
   // Add whole months to a YYYY-MM-DD date, keeping the day where possible (31 Jan + 1 month = 28/29 Feb).
   function addMonths(iso, n) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m || !(n > 0)) return '';
@@ -65,7 +67,7 @@
   async function mount(ctx) {
     const { sb, h, message, busy, fmtDate } = ctx;
     let props = [], items = [], core = [], tasks = [], extras = [], company = null, rights = { can_edit: false, can_manage: false }, loadError = false;
-    let site = 'all', filter = 'all', tab = 'home', ctab = 'overview', ttab = 'pending';
+    let site = 'all', filter = 'all', tab = 'home', ctab = 'overview', ttab = 'pending', cgroup = 'core', tview = 'list', calMonth = null, calDay = null;
     const isHead = !!(ctx.req && ctx.req.role_name === 'client_super');
     // 'dash' = the wide dashboard; 'form' = a medium-width page for one check or a form.
     // One clear back button (a chevron and the word Back, top left). The phone's own back button and the browser's back button do the same thing.
@@ -79,7 +81,7 @@
       try {
         const [p, i, r, cc, tk, ex, co] = await Promise.all([
           sb.from('properties').select('id,name,address,postcode').order('name'),
-          sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,certificate_number,provider,status,days_left').order('title'),
+          sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,certificate_number,provider,is_core,status,days_left').order('title'),
           sb.rpc('passport_rights'),
           sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
           sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
@@ -125,7 +127,7 @@
         const card = (id, name, cc) => h('button', { class: 'sitecard', type: 'button', 'data-site': id, 'aria-pressed': String(site === id), onclick: () => { site = id; refresh(); } },
           donut(cc, 'mini'), h('span', { class: 'sname' }, h('strong', {}, name), h('span', { class: 'muted small' },
             cc.total ? [cc.red + ' overdue', cc.amber + ' due soon', cc.missing + ' no date'].join(' · ') : 'No checks yet')));
-        return h('div', { class: 'sitesgrid' }, card('all', 'All sites', tally(items)), ...props.map((p) => card(p.id, p.name, tally(items.filter((i) => i.property_id === p.id)))));
+        return h('div', { class: 'sitesgrid' }, card('all', 'All sites', tally(items.filter(isCore))), ...props.map((p) => card(p.id, p.name, tally(items.filter((i) => i.property_id === p.id && isCore(i))))));
       }
       return h('div', {}, h('label', { for: 'site-pick' }, 'Site'), h('select', { id: 'site-pick', onchange: (e) => { site = e.target.value; refresh(); } },
         h('option', { value: 'all', selected: site === 'all' }, 'All sites'), ...props.map((p) => h('option', { value: p.id, selected: site === p.id }, p.name))));
@@ -144,7 +146,7 @@
     function viewHome(note) {
       tab = 'home';
       const rows = items.filter((r) => site === 'all' || r.property_id === site);
-      const c = tally(rows);
+      const c = tally(rows.filter(isCore)), cAll = tally(rows), nCore = rows.filter(isCore).length, nOther = rows.length - nCore;
       const pend = tasks.filter((t) => t.status === 'pending' && (site === 'all' || t.property_id === site)).length;
       const q = (code, label, sub, onclick, locked) => h('button', { class: 'qtile' + (locked ? ' locked' : ''), type: 'button', 'data-q': code, onclick },
         h('strong', {}, label), h('span', { class: 'muted small' }, sub), locked ? h('span', { class: 'tag add' }, 'Add') : null);
@@ -170,14 +172,15 @@
           h('span', { class: 'attcounts' }, nLate ? h('span', { class: 'tag red' }, nLate + ' overdue') : null, nSoon ? h('span', { class: 'tag amber' }, nSoon + ' due soon') : null)),
         ...(attRows.length ? attRows.slice(0, 8) : [h('p', { class: 'muted', id: 'att-none' }, rows.length || myTasks.length ? 'Nothing is overdue or due in the next 30 days. Well done.' : 'Add your checks in Compliance and enter the date each one is next due. Anything overdue or coming up will be listed here.')]),
         attRows.length > 8 ? h('button', { class: 'btn small ghost', id: 'att-all', type: 'button', onclick: () => { ctab = 'due'; go('compliance'); } }, 'See all ' + attRows.length) : null,
-        c.missing ? h('p', { class: 'muted small', id: 'att-missing' }, c.missing + (c.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (c.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
+        cAll.missing ? h('p', { class: 'muted small', id: 'att-missing' }, cAll.missing + (cAll.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (cAll.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
           h('button', { class: 'linkbtn', type: 'button', id: 'att-dates', onclick: () => { filter = 'missing'; ctab = 'overview'; go('compliance'); } }, 'Add the dates')) : null);
       const sideCards = [
-        promos.length ? h('div', { class: 'card addons' }, h('h2', {}, 'Add-ons'), h('div', { class: 'promos' }, ...promos)) : null
+        promos.length ? h('div', { class: 'card addons' }, h('div', { class: 'titlerow' }, h('h2', {}, 'Add-ons'), h('span', { class: 'muted small' }, 'Unlock extra tools')), h('div', { class: 'promos' }, ...promos)) : null
       ].filter(Boolean);
       const toolsCard =
-        h('div', { class: 'card tools' }, h('h2', {}, 'Your tools'),
+        h('div', { class: 'card tools' }, h('h2', {}, 'Quick Access'),
           h('div', { class: 'qtiles' },
+            q('mytasks', 'My Tasks', pend + ' Pending', () => go('tasks')),
             tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
             ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
             q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency())));
@@ -185,9 +188,10 @@
         h('div', { class: 'card overview' },
           h('div', { class: 'welcome' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
           ...heading(note),
-          h('h2', {}, 'Overall Compliance'),
+          h('h2', {}, 'Core Compliance'),
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
-          h('button', { class: 'btn', id: 'view-full', type: 'button', onclick: () => go('compliance') }, 'View Full Compliance')),
+          h('button', { class: 'btn countbtn', id: 'view-full', type: 'button', onclick: () => { cgroup = 'core'; ctab = 'overview'; go('compliance'); } }, h('span', {}, 'Core Compliance'), h('span', { class: 'cnt' }, String(nCore)), h('span', { class: 'arr', 'aria-hidden': 'true' }, '\u2192')),
+          h('button', { class: 'btn ghost countbtn', id: 'view-other', type: 'button', onclick: () => { cgroup = 'other'; ctab = 'overview'; go('compliance'); } }, h('span', {}, 'Other Compliance'), h('span', { class: 'cnt' }, String(nOther)), h('span', { class: 'arr', 'aria-hidden': 'true' }, '\u2192'))),
         sitePicker(viewHome),
         attention, toolsCard]);
     }
@@ -204,11 +208,14 @@
     function viewList(note) {
       tab = 'compliance';
       const rows = items.filter((r) => site === 'all' || r.property_id === site);
-      const c = tally(rows);
-      const shown = rows.filter((r) => filter === 'all' || r.status === filter);
+      const cCore = tally(rows.filter(isCore));   // the ring: Core checks only
+      const grows = rows.filter((r) => (cgroup === 'core') === isCore(r));   // the list: the chosen group
+      const c = tally(grows);
+      const nCore = rows.filter(isCore).length, nOther = rows.length - nCore;
+      const shown = grows.filter((r) => filter === 'all' || r.status === filter);
       const level = ctx.req && ctx.req.level;
       const multi = props.length > 1;
-      const tiles = [['all', 'All', rows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'Complete', c.green], ['missing', 'No date', c.missing]]
+      const tiles = [['all', 'All', grows.length], ['red', 'Overdue', c.red], ['amber', 'Due soon', c.amber], ['green', 'Complete', c.green], ['missing', 'No date', c.missing]]
         .map(([k, l, n]) => h('button', { class: 'stat ' + k, type: 'button', 'data-filter': k, 'aria-pressed': String(filter === k), onclick: () => { filter = k; viewList(); } },
           h('span', { class: 'num' }, String(n)), h('span', { class: 'lbl' }, l)));
       const subtabs = h('div', { class: 'subtabs', role: 'tablist' }, ...[['overview', 'Overview'], ['category', 'By Category'], ['due', 'Due Soon']].map(([k, l]) =>
@@ -218,10 +225,13 @@
         h('div', { class: 'welcome' }, h('h1', {}, 'Compliance'), h('p', { class: 'muted' }, 'Your compliance passport' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
         ...heading(note), subtabs,
         !rights.can_edit ? h('p', { class: 'muted' }, level > 1 ? 'Tremcore manages your compliance records for you. If anything looks wrong, use the contact button at the top.' : 'You can view the passport but not change it. Ask your head-office user if something needs updating.') : null,
-        ctab !== 'due' ? h('div', { class: 'summary' }, donut(c),
-          h('div', { class: 'legend' }, h('strong', { class: 'big' }, c.pct == null ? 'No checks yet' : c.pct + '% in date'),
-            h('div', { class: 'muted' }, c.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'))) : null,
-        ctab !== 'due' && rows.length ? h('div', { class: 'tiles5', role: 'group', 'aria-label': 'Show' }, ...tiles) : null);
+        ctab !== 'due' ? h('div', { class: 'summary' }, donut(cCore),
+          h('div', { class: 'legend' }, h('strong', { class: 'big' }, cCore.pct == null ? 'No checks yet' : cCore.pct + '% in date'),
+            h('div', { class: 'muted' }, cCore.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'))) : null,
+        ctab !== 'due' ? h('div', { class: 'subtabs groupswitch', role: 'tablist', 'aria-label': 'Core or Other' }, ...[['core', 'Core (' + nCore + ')'], ['other', 'Other (' + nOther + ')']].map(([k, l]) =>
+          h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-group': k, 'aria-selected': String(cgroup === k), onclick: () => { cgroup = k; filter = 'all'; viewList(); } }, l))) : null,
+        ctab !== 'due' ? h('p', { class: 'muted small', id: 'group-help' }, (cgroup === 'core' ? 'These items make up the score above.' : 'These items are tracked but not counted in the score.') + (rights.can_edit ? ' Open an item to move it between Core and Other.' : '')) : null,
+        ctab !== 'due' && grows.length ? h('div', { class: 'tiles5', role: 'group', 'aria-label': 'Show' }, ...tiles) : null);
 
       let body;
       if (ctab === 'category') {
@@ -233,9 +243,9 @@
         const due = rows.filter((r) => r.status !== 'green').sort(byUrgency);
         body = due.length ? due.map((r) => itemRow(r, multi)) : [];
       } else body = shown.slice().sort(byUrgency).map((r) => itemRow(r, multi));
-      const empty = ctab === 'due' ? 'Nothing is due soon, overdue or missing a date. Well done.' : rows.length ? 'Nothing here.' : rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.';
+      const empty = ctab === 'due' ? 'Nothing is due soon, overdue or missing a date. Well done.' : grows.length ? 'Nothing here.' : rows.length ? 'No ' + cgroup + ' compliance items here yet.' : rights.can_manage ? 'You have no checks yet. Add your first one with the button above.' : 'There are no checks to show yet.';
       const checksCard = h('div', { class: 'card' },
-        h('div', { class: 'titlerow' }, h('h2', {}, ctab === 'due' ? 'Due Soon' : ctab === 'category' ? 'By Category' : 'Core Compliance'),
+        h('div', { class: 'titlerow' }, h('h2', {}, ctab === 'due' ? 'Due Soon' : ctab === 'category' ? 'By Category' : (cgroup === 'core' ? 'Core Compliance' : 'Other Compliance')),
           (rights.can_edit || rights.can_manage) && props.length ? h('div', { class: 'btnrow' }, h('button', { class: 'btn small ghost', id: 'bulk-upload', type: 'button', onclick: () => viewBulk() }, 'Bulk upload'), rights.can_manage ? h('button', { class: 'btn small ghost', id: 'manage-sites', type: 'button', onclick: () => viewSites() }, multi ? 'Checks by site' : 'Choose checks') : null, rights.can_manage ? h('button', { class: 'btn small', id: 'add-check', type: 'button', onclick: () => viewAdd() }, 'Add a check') : null) : null),
         body.length && ctab !== 'category' ? h('div', { class: 'thead' + (multi ? '' : ' nosite'), 'aria-hidden': 'true' }, h('span', {}, ''), h('span', {}, 'Check'), multi ? h('span', {}, 'Site') : null, h('span', {}, 'Next due'), h('span', {}, 'Status')) : null,
         ...(body.length ? body : [h('p', { class: 'muted' }, empty)]));
@@ -288,11 +298,38 @@
       const tabs = h('div', { class: 'subtabs', role: 'tablist' },
         h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'pending', 'aria-selected': String(ttab === 'pending'), onclick: () => { ttab = 'pending'; viewTasks(); } }, 'Pending (' + pend.length + ')'),
         h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'done', 'aria-selected': String(ttab === 'done'), onclick: () => { ttab = 'done'; viewTasks(); } }, 'Completed'));
+      // List or Calendar (calendar shows pending tasks by their due date)
+      const viewSwitch = h('div', { class: 'pills', role: 'group', 'aria-label': 'View' },
+        h('button', { type: 'button', class: 'pill', 'data-tview': 'list', 'aria-pressed': String(tview === 'list'), onclick: () => { tview = 'list'; viewTasks(); } }, 'List'),
+        h('button', { type: 'button', class: 'pill', 'data-tview': 'calendar', 'aria-pressed': String(tview === 'calendar'), onclick: () => { tview = 'calendar'; viewTasks(); } }, 'Calendar'));
+      const calendar = () => {
+        const t0 = today(); const ym = calMonth || t0.slice(0, 7);
+        const y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1;
+        const first = new Date(Date.UTC(y, m, 1)), days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(), lead = (first.getUTCDay() + 6) % 7;   // week starts on Monday
+        const shift = (d) => { const n = new Date(Date.UTC(y, m + d, 1)); calMonth = n.toISOString().slice(0, 7); calDay = null; viewTasks(); };
+        const byDay = {}; pend.forEach((t) => { if (t.due_date && t.due_date.slice(0, 7) === ym) (byDay[t.due_date] = byDay[t.due_date] || []).push(t); });
+        const cells = []; for (let i = 0; i < lead; i++) cells.push(h('span', { class: 'cal-blank', 'aria-hidden': 'true' }));
+        for (let d = 1; d <= days; d++) {
+          const iso = ym + '-' + String(d).padStart(2, '0'), ts = byDay[iso] || [];
+          const st = ts.length ? (ts.some((x) => taskState(x) === 'red') ? 'red' : ts.some((x) => taskState(x) === 'amber') ? 'amber' : 'green') : '';
+          cells.push(h('button', { type: 'button', class: 'cal-day' + (iso === t0 ? ' today' : '') + (calDay === iso ? ' sel' : ''), 'data-day': iso, 'aria-label': d + ' ' + first.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }) + (ts.length ? ', ' + ts.length + (ts.length === 1 ? ' task' : ' tasks') : ''), onclick: () => { calDay = calDay === iso ? null : iso; viewTasks(); } },
+            h('span', {}, String(d)), ts.length ? h('i', { class: 'dot ' + st }) : null));
+        }
+        const dayTasks = calDay ? (byDay[calDay] || []) : [];
+        return h('div', { class: 'calendar', id: 'task-calendar' },
+          h('div', { class: 'cal-head' }, h('button', { type: 'button', class: 'linkbtn', id: 'cal-prev', 'aria-label': 'Previous month', onclick: () => shift(-1) }, '\u2039'),
+            h('strong', {}, first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })),
+            h('button', { type: 'button', class: 'linkbtn', id: 'cal-next', 'aria-label': 'Next month', onclick: () => shift(1) }, '\u203A')),
+          h('div', { class: 'cal-week', 'aria-hidden': 'true' }, ...['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((x) => h('span', {}, x))),
+          h('div', { class: 'cal-grid' }, ...cells),
+          calDay ? h('div', { class: 'cal-day-list' }, h('h3', {}, shortDate(calDay)), ...(dayTasks.length ? dayTasks.map(row) : [h('p', { class: 'muted' }, 'No tasks due this day.')])) : h('p', { class: 'muted small' }, 'Tap a day to see its tasks.'),
+          pend.some((t) => !t.due_date) ? h('p', { class: 'muted small' }, 'Tasks with no due date only show in the list.') : null);
+      };
       shell('tasks', h('div', { class: 'card' },
         h('div', { class: 'titlerow' }, h('h1', {}, 'My Tasks')),
-        ...heading(note), tabs, box,
+        ...heading(note), viewSwitch, tview === 'list' ? tabs : null, box,
         !rights.can_edit ? h('p', { class: 'muted' }, 'You can see these tasks but not change them.') : null,
-        ...(list.length ? list.map(row) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'No pending tasks.' : 'No completed tasks yet.')]),
+        ...(tview === 'calendar' ? [calendar()] : list.length ? list.map(row) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'No pending tasks.' : 'No completed tasks yet.')]),
         rights.can_edit && props.length ? h('button', { class: 'btn', id: 'add-task', type: 'button', onclick: () => viewTaskAdd() }, 'Add New Task +') : null),
         sitePicker(viewTasks));
     }
@@ -655,10 +692,13 @@
       const help = h('div', { class: 'card' }, h('h2', {}, 'Help & Support'),
         h('p', { class: 'muted' }, 'Questions about your passport? We are happy to help.'),
         h('a', { class: 'btn small', id: 'help-email', href: 'mailto:info@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'Email Tremcore'));
+      const reminders = h('div', { class: 'card' }, h('h2', {}, 'Reminder Emails'),
+        h('p', { class: 'muted' }, rights.can_edit ? 'We email you before a check or task falls due, and again if it becomes overdue, so nothing slips past you.' : 'Tremcore manages your renewals and will be in touch before anything falls due.'),
+        h('p', { class: 'muted small' }, 'Reminders go to the email address you sign in with.'));
       const acct = h('div', { class: 'card' }, h('h2', {}, 'My account'), ...(ctx.account || []));
       // Settings is a menu of rows (as in the prototype); each row opens its own page with a back arrow.
       const PARTS = [['biz', 'Business Information', biz, 'M3 11l9-8 9 8v10H3z M9 21v-6h6v6'], ['premises', 'Manage Premises', premises, 'M4 21V8l8-5 8 5v13 M9 21v-7h6v7'], ['plan', 'Subscription Details', plan, 'M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4'],
-        ['custom', 'Customised Tasks', custom, 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5'], ['help', 'Help & Support', help, 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.7 M12 17h.01'], ['acct', 'My account', acct, 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7']];
+        ['reminders', 'Reminder Emails', reminders, 'M4 6h16v12H4z M4 7l8 6 8-6'], ['custom', 'Customised Tasks', custom, 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5'], ['help', 'Help & Support', help, 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.7 M12 17h.01'], ['acct', 'My account', acct, 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7']];
       if (part) {
         const cur = PARTS.find((x) => x[0] === part);
         if (cur) return shell('settings', h('div', { class: 'card settitle' }, backBtn('Back to settings', () => viewSettings()), h('h1', {}, cur[1]), ...heading(note), box), cur[2]);
@@ -666,7 +706,10 @@
       const row = ([k, label, , d]) => h('button', { class: 'setrow', type: 'button', 'data-set': k, onclick: () => viewSettings(null, k) },
         svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, svg('path', { d })),
         h('span', { class: 'setlabel' }, label), h('span', { class: 'setchev', 'aria-hidden': 'true' }, '\u203A'));
-      shell('settings', h('div', { class: 'card' }, h('h1', {}, 'Settings'), ...heading(note), box), h('div', { class: 'setmenu' }, ...PARTS.map(row)),
+      shell('settings', h('div', { class: 'card' }, h('h1', {}, 'Settings'), ...heading(note), box), h('div', { class: 'setmenu' }, ...PARTS.map(row),
+          h('button', { class: 'setrow', type: 'button', id: 'set-logout', onclick: async () => { try { await sb.auth.signOut(); } finally { window.location.reload(); } } },
+            svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, svg('path', { d: 'M9 4H5v16h4 M16 8l4 4-4 4 M20 12H9' })),
+            h('span', { class: 'setlabel' }, 'Log Out'))),
         h('div', { class: 'setfoot' }, h('img', { src: '/img/logo-full.png', alt: 'Tremcore', width: 150 }), h('p', { class: 'muted small' }, 'The smarter way to stay compliant')));
     }
 
@@ -810,6 +853,12 @@
         h('div', { class: 'statusline' }, h('span', { class: 'tag ' + item.status }, ST[item.status].label), h('span', { class: 'muted' }, dueText(item))),
         props.length > 1 ? h('p', { class: 'muted' }, siteName(item.property_id)) : null,
         h('div', { class: 'kv' }, h('span', {}, 'Basis'), h('span', {}, BASIS[item.basis] || 'Standard')),
+        h('div', { class: 'kv grpline', id: 'core-line' }, h('span', {}, (isCore(item) ? 'Core' : 'Other') + ' Compliance'), h('span', { class: 'muted small' }, isCore(item) ? 'Counts towards the score' : 'Not counted in the score')),
+        rights.can_edit ? h('button', { class: 'btn small ghost', id: 'move-group', type: 'button', onclick: (e) => busy(e.target, async () => {
+          const u = await sb.from('compliance_items').update({ is_core: !isCore(item) }).eq('id', id);
+          if (u.error) return message(msg, 'err', 'Sorry, that could not be changed. You may not have permission to change this check.');
+          await reload(); viewItem(id, 'Moved to ' + (isCore(item) ? 'Other' : 'Core') + ' Compliance.');
+        }) }, isCore(item) ? 'Move to Other' : 'Move to Core') : null,
         h('p', { class: 'muted small' }, 'The basis shown is a general guide only, not legal advice. What applies to your premises depends on the property, equipment and risk assessment, so please check with a competent professional.'),
         msg, form, remove), h('div', { class: 'card' }, docsBox)));
     }
@@ -1022,6 +1071,7 @@
       const groups = Array.from(new Set(GROUPS.concat(items.map((i) => i.grp).filter(Boolean)))).sort();
       const grp = h('select', { id: 'a-grp' }, ...groups.map((g) => h('option', { value: g, selected: g === 'Other' }, g)));
       const basis = h('select', { id: 'a-basis' }, ...Object.entries(BASIS).map(([k, l]) => h('option', { value: k, selected: k === 'standard' }, l)));
+      const coreBox = h('input', { type: 'checkbox', id: 'a-core', checked: 'checked' });
       const freq = h('input', { id: 'a-freq', type: 'number', min: '1', max: '120', inputmode: 'numeric' });
       const last = h('input', { id: 'a-last', type: 'date' });
       const due = h('input', { id: 'a-due', type: 'date' });
@@ -1041,7 +1091,7 @@
         if (!target.length) return message(msg, 'err', 'Please tick at least one site.');
         let uid = null; try { uid = (await sb.auth.getSession()).data.session.user.id; } catch { uid = null; }
         await busy(save, async () => {
-          const rows = target.map((pid) => ({ property_id: pid, grp: grp.value, title: t, basis: basis.value, frequency_months: f, last_done: last.value || null, due_date: due.value || null, created_by: uid }));
+          const rows = target.map((pid) => ({ property_id: pid, is_core: coreBox.checked, grp: grp.value, title: t, basis: basis.value, frequency_months: f, last_done: last.value || null, due_date: due.value || null, created_by: uid }));
           const r = await sb.from('compliance_items').insert(rows);
           if (r.error) return message(msg, 'err', 'Sorry, that could not be added. You may not have permission to add checks.');
           await reload(); viewList('Check added.');
@@ -1055,6 +1105,7 @@
         h('label', { for: 'a-freq' }, 'Repeat every (months, optional)'), freq,
         h('label', { for: 'a-due' }, 'Next due date (optional)'), due,
         h('p', { class: 'muted small' }, 'If you do not know the due date yet, leave it empty. It will show as "No date" until you enter it.'),
+        h('label', { class: 'checkline', for: 'a-core' }, coreBox, h('span', {}, 'Add to Core Compliance so it counts towards the score')),
         save, msg);
       page('form', h('div', { class: 'card form' }, goBack(), h('h1', {}, 'Add a check'), h('p', { class: 'muted' }, 'Add anything your premises need, such as an extra inspection or a piece of equipment.'), form));
     }

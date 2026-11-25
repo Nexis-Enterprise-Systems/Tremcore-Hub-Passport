@@ -197,3 +197,9 @@
 - 25 Nov 2026: Fixed the tail of the 'g' (and y, p, j) being clipped on gold gradient headings, on the website and in the app, by giving those headings room underneath.
 
 - 25 Nov 2026: Passport app Settings is now a menu list (Business Information, Manage Premises, Subscription Details, Customised Tasks, Help & Support, My account), each row opening its own page with a back arrow, as in the 24 Nov prototype. Same content and saving as before. Not built: Core/Other split, Home Core/Other buttons, task calendar (Aaron chose Settings only).
+
+## 25 Nov 2026 — Core / Other compliance (matches the 24 Nov prototype)
+- Every check is now either **Core** or **Other** (`compliance_items.is_core`, migration 0036, default Core so nobody's score changes until they move something).
+- The score ring and percentage on the passport app (Home, Compliance, site cards) count **Core items only**. Missing dates still count against the total and are never green. The hub's own scoring is unchanged.
+- Who can move an item between Core and Other is the same as who can edit it: Self-Managed clients and Tremcore staff. Level 2 and 3 clients stay view-only (proved in `supabase/tests/01_permissions.sql`).
+- Tasks has a List / Calendar toggle; Settings gained Reminder Emails (information only) and Log Out rows; Home gained Core/Other buttons and Quick Access.

@@ -889,7 +889,7 @@ const USERS = {
     check('first confirmed sign-in creates the company once, with the saved details and billing choice', made.length === 1 && made[0].p_company === 'Acme Cafes Ltd' && made[0].p_full_name === 'Pat Jones' && made[0].p_sites === 3 && made[0].p_billing === 'annual');
     check('the new head-office user is then required to set up 2FA', (await h1(p)) === 'Set up 2FA' && (await p.locator('text=required on your account').count()) === 1);
     await p.fill('#code', '123456'); await p.click('button[type=submit]'); await p.waitForSelector('text=Welcome, Pat');
-    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Overall Compliance').count()) === 1);
+    check('after 2FA they reach their account, not the staff hub', (await p.locator('.hubbar').count()) === 0 && (await p.locator('text=Core Compliance').count()) >= 1);
     check('no page or CSP errors through the whole sign-up', t.problems.filter((x) => !/status of 503/.test(x)).length === 0);
     if (t.problems.length) console.log(t.problems);
     await t.ctx.close();
@@ -1046,7 +1046,7 @@ const USERS = {
     check('set-up: a site with no postcode is refused', (await t.page.locator('#setup-msg').innerText()).includes('postcode of') && (await calls(t.page, 'rpc:finish_setup')).length === 0);
     await t.page.fill('[data-site-row=s1] input >> nth=2', 'ME3 8FX');
     await t.page.fill('[data-site-row=s2] input >> nth=0', 'Rear Yard'); await t.page.fill('[data-site-row=s2] input >> nth=1', '2 High St'); await t.page.fill('[data-site-row=s2] input >> nth=2', 'ME1 1AA');
-    await t.page.click('#st-go'); await t.page.waitForSelector('text=Overall Compliance');
+    await t.page.click('#st-go'); await t.page.waitForSelector('text=Core Compliance');
     const fs = (await calls(t.page, 'rpc:finish_setup'))[0];
     check('set-up: only the ticked checks and the details are sent, with the site names capitalised and the details sent', fs.p_codes.join() === 'c0,c5' && fs.p_phone === '01634 000000' && fs.p_sites[0].name === 'High Street Shop' && fs.p_sites[0].address === '1 High St' && fs.p_sites[1].name === 'Rear Yard');
     await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
@@ -1248,7 +1248,7 @@ const USERS = {
     if (process.env.SHOT) { const sh = async (n) => { await t.page.screenshot({ path: '/tmp/shot/' + n + '.png', fullPage: true }); }; await sh('home390'); await t.page.setViewportSize({ width: 1440, height: 900 }); await t.page.waitForTimeout(400); await sh('home1440'); await t.page.click('[data-nav=settings]'); await t.page.waitForTimeout(300); await sh('settings1440'); await t.page.click('[data-nav=home]');
       await t.page.click('[data-nav=compliance]'); await t.page.waitForTimeout(300); await sh('comp1440'); await t.page.click('.item >> nth=0'); await t.page.waitForTimeout(300); await sh('item1440'); await t.page.setViewportSize({ width: 390, height: 800 }); await t.page.click('[data-back]'); await t.page.click('[data-nav=home]'); await t.page.waitForTimeout(300); }
     check('home: overall compliance shows on-track, due soon, overdue and no-date counts (missing is never on track)', (await t.page.locator('.lglist').innerText()).replace(/\s+/g, ' ').includes('On track · 2') && (await t.page.locator('.lglist').innerText()).includes('1 item due soon') && (await t.page.locator('.lglist').innerText()).includes('1 overdue') && (await t.page.locator('.lglist').innerText()).includes('1 with no date'));
-    check('home: there is no Quick Access section; only Emergency Information is left as a tool (no add-ons owned) and nothing is shown as locked', (await t.page.locator('text=Quick Access').count()) === 0 && (await t.page.locator('.qtile').count()) === 1 && (await t.page.locator('[data-q=emergency]').count()) === 1 && (await t.page.locator('.qtile.locked').count()) === 0);
+    check('home: Quick Access shows My Tasks and Emergency Information (no add-ons owned) and nothing is shown as locked', (await t.page.locator('text=Quick Access').count()) >= 1 && (await t.page.locator('.qtile').count()) === 2 && (await t.page.locator('[data-q=emergency]').count()) === 1 && (await t.page.locator('[data-q=mytasks]').count()) === 1 && (await t.page.locator('.qtile.locked').count()) === 0 && (await t.page.locator('#view-other').count()) === 1);
     check('home: both paid add-ons are shown as bold gold promo cards with their price and an Add now button', (await t.page.locator('.promo').count()) === 2 && (await t.page.locator('[data-promo=toolbox_talks]').innerText()).includes('Add now') && (await t.page.locator('[data-promo=staff_signin]').innerText()).includes('/ site / month') && (await t.page.locator('.card.addons').innerText()).includes('Add-ons'));
     await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('[data-extra=staff_signin]');
     check('home: tapping a promo card opens that add-on page, whose price is in a gold box', (await t.page.locator('.goldbox').count()) === 1);
@@ -1290,7 +1290,14 @@ const USERS = {
     await t.page.selectOption('#e-site', 's2'); await t.page.waitForSelector('#e-assembly');
     check('emergency: each site has its own details', (await t.page.locator('#e-assembly').inputValue()) === '' && (await t.page.locator('.econ').count()) === 0);
     await t.page.click('[data-back]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('.setmenu');
-    check('settings: a menu lists business info, premises, subscription, customised tasks, help and account', (await t.page.locator('.setrow .setlabel').allInnerTexts()).join('|') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
+    check('settings: a menu lists business info, premises, subscription, reminder emails, customised tasks, help, account and log out', (await t.page.locator('.setrow .setlabel').allInnerTexts()).join('|') === 'Business Information|Manage Premises|Subscription Details|Reminder Emails|Customised Tasks|Help & Support|My account|Log Out');
+    await t.page.click('[data-nav=home]'); await t.page.waitForSelector('#view-other');
+    check('core/other: Home shows Core and Other counts and the Other button opens the Other group', (await t.page.locator('#view-full .cnt').count()) === 1 && (await t.page.locator('#view-other .cnt').count()) === 1);
+    await t.page.click('#view-other'); await t.page.waitForSelector('[data-group]');
+    check('core/other: the Compliance switch shows Core and Other, with Other selected', (await t.page.locator('[data-group=other][aria-selected=true]').count()) === 1 && (await t.page.locator('[data-group=core][aria-selected=false]').count()) === 1);
+    await t.page.click('[data-nav=tasks]'); await t.page.click('[data-tview=calendar]'); await t.page.waitForSelector('#task-calendar');
+    check('tasks: the Calendar view shows a month grid and can move month', (await t.page.locator('.cal-day').count()) >= 28 && (await t.page.locator('#cal-next').count()) === 1);
+    await t.page.click('[data-tview=list]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('.setmenu');
     await t.page.click('[data-set=plan]');
     check('settings: subscription shows the plan, two sites and the price including the extra site', (await t.page.locator('.appbody').innerText()).includes('Self-Managed') && (await t.page.locator('.appbody').innerText()).includes('£22.98 + VAT per month'));
     check('settings: add-ons not yet taken are offered from the subscription box, with their price', (await t.page.locator('[data-add-addon=toolbox_talks]').innerText()).includes('£2.99') && (await t.page.locator('[data-add-addon=staff_signin]').innerText()).includes('per site'));
