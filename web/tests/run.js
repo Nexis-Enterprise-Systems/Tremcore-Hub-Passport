@@ -1554,7 +1554,7 @@ const USERS = {
     let signupOpen = false;
     await pg.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: String(signupOpen) }));
     pg.on('console', (m) => { if (m.type() === 'error') probs.push(m.text()); }); pg.on('pageerror', (e) => probs.push(String(e)));
-    for (const [u, h] of [['/', 'Commercial property compliance'], ['/passport/', 'The checks that keep a building safe'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Ask us a question']]) {
+    for (const [u, h] of [['/', 'Commercial property compliance'], ['/passport/', 'The passport, start to finish'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Ask us a question']]) {
       await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
     }
     await pg.goto(base + '/');
@@ -1578,48 +1578,18 @@ const USERS = {
     check('new home page: phone picture, both add-ons, the websites and media section and the "winning customers" wording', (await pg.locator('.hm .phone img').count()) === 1 && (await pg.locator('.hm .addon').count()) === 2 && (await pg.locator('#websites').innerText()).includes('winning customers.') && (await pg.locator('#websites a[href="/media/"]').count()) === 1);
     check('every page shares the logo banner, centred menu and footer: home, passport, contact, media', await (async () => { for (const u of ['/', '/passport/', '/contact/', '/media/']) { await pg.goto(base + u); if ((await pg.locator('.masthead .mast-logo').count()) !== 1 || (await pg.locator('header.top nav.main a').count()) !== 6 || (await pg.locator('footer .f-nav').count()) !== 1) return false; } return true; })());
     await pg.goto(base + '/');
-    // demo
-    await pg.goto(base + '/what-you-get/');
-    check('demo dashboard is complete before play: donut painted and 80%', (await pg.locator('#d-donut').evaluate((e) => e.style.background)).includes('conic-gradient') && (await pg.locator('#d-pct').innerText()) === '80');
-    await pg.click('.poster .play'); await pg.waitForTimeout(700);
-    check('demo dashboard does not build up while playing: still 80% and the same full ring', (await pg.locator('#d-pct').innerText()) === '80' && (await pg.locator('#d-donut').evaluate((e) => e.style.background)).includes('55%'));
-    await pg.waitForFunction(() => document.querySelector('#d-cap b').textContent !== 'Your dashboard', null, { timeout: 8000 });
-    check('demo plays through to the next scene by itself', (await pg.locator('#d-cap b').innerText()) === 'Add a certificate');
-    await pg.click('.chap button:nth-child(4)'); check('demo chapter buttons jump', (await pg.locator('#d-cap b').innerText()) === 'There is more to see');
-    await pg.click('#d-pop'); check('pop-out opens as a dialog', (await pg.locator('#demo-player').getAttribute('role')) === 'dialog');
-    await pg.keyboard.press('Escape'); check('Escape closes the pop-out', (await pg.locator('#demo-player').getAttribute('role')) === null);
-    await pg.goto(base + '/what-you-get/?play=1'); await pg.waitForSelector('#demo-player.pop');
-    check('Watch preview link opens the pop-out and plays', (await pg.locator('#d-toggle span').innerText()) === 'Pause');
-
-    // phone: the walkthrough opens full screen by itself when play is pressed
-    {
-      const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); const mp = await mctx.newPage();
-      await mp.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: 'false' }));
-      await mp.goto(base + '/what-you-get/');
-      check('on a phone the walkthrough starts in the page, not popped out', (await mp.locator('#demo-player').getAttribute('role')) === null);
-      check('demo chapter buttons are at least 44px tall to tap', (await mp.locator('.chap button').first().boundingBox()).height >= 44);
-      await mp.tap('.poster .play'); await mp.waitForSelector('#demo-player.pop');
-      const bx = await mp.locator('#demo-player').boundingBox();
-      check('pressing play on a phone opens the walkthrough as a full-screen dialog', (await mp.locator('#demo-player').getAttribute('role')) === 'dialog' && Math.round(bx.width) === 390 && Math.round(bx.height) === 844);
-      check('it plays straight away and the page behind cannot scroll', (await mp.locator('#d-toggle span').innerText()) === 'Pause' && (await mp.evaluate(() => document.documentElement.classList.contains('lock'))));
-      check('the full-screen walkthrough has a close button big enough to tap', (await mp.locator('#d-close').boundingBox()).height >= 44);
-      await mp.tap('#d-close'); await mp.waitForFunction(() => !document.querySelector('#demo-player.pop'));
-      check('closing it returns to the page and frees scrolling', (await mp.evaluate(() => !document.documentElement.classList.contains('lock'))));
-      await mp.tap('.chap button:nth-child(3)'); await mp.waitForSelector('#demo-player.pop');
-      check('choosing a chapter on a phone also opens it full screen', (await mp.locator('#d-cap b').innerText()) === 'Reminders');
-      await mp.tap('#d-close');
-      await mp.setViewportSize({ width: 844, height: 390 }); await mp.tap('.chap button:nth-child(1)'); await mp.waitForSelector('#demo-player.pop');
-      const lb = await mp.locator('#demo-player').boundingBox();
-      check('a phone turned sideways also gets the full-screen walkthrough', Math.round(lb.width) === 844 && Math.round(lb.height) === 390);
-      await mctx.close();
+    // Self-Managed showcase video: home (under the phone), passport page and what-you-get; the old 20-second walkthrough is gone
+    for (const u of ['/', '/passport/', '/what-you-get/']) {
+      await pg.goto(base + u);
+      check('showcase video is on ' + u, (await pg.locator('video#passport-video source[src="/media/tremcore-self-managed-showcase.mp4"]').count()) === 1);
+      check('the old 20-second walkthrough is gone from ' + u, (await pg.locator('#demo-player').count()) === 0 && !(await pg.content()).includes('20-second'));
     }
-    // a computer keeps the walkthrough in the page until Pop out is pressed
+    await pg.goto(base + '/');
+    check('home video sits under the phone picture', await pg.evaluate(() => { const v = document.querySelector('#passport-video').getBoundingClientRect(), p = document.querySelector('.hm .phone').getBoundingClientRect(); return v.top >= p.bottom - 1; }));
     {
-      const dctx = await browser.newContext({ viewport: { width: 1280, height: 900 } }); const dp = await dctx.newPage();
-      await dp.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: 'false' }));
-      await dp.goto(base + '/what-you-get/'); await dp.click('.poster .play'); await dp.waitForTimeout(300);
-      check('on a computer, pressing play does not pop the walkthrough out', (await dp.locator('#demo-player').getAttribute('role')) === null);
-      await dctx.close();
+      const r1 = await fetch(base + '/media/tremcore-self-managed-showcase.mp4', { headers: { Range: 'bytes=0-99' } });
+      check('showcase video is served in ranges so it can play and skip', r1.status === 206 && (await r1.arrayBuffer()).byteLength === 100);
+      check('showcase poster image is served', (await fetch(base + '/media/img/sm-poster.jpg')).status === 200);
     }
     // contact form, using a faked server reply
     await pg.goto(base + '/contact/');

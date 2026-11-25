@@ -185,3 +185,5 @@
 - 25 Nov 2026: Home page 'Websites & media' section now shows all three monthly cards (Social £99, Customer Review £9.99, Poster Design Studio £4.99), matching the flyer and the Media page.
 
 - 25 Nov 2026: The 90-second Tremcore Media video now also sits on the home page, under the media prices.
+
+- 25 Nov 2026: The Self-Managed showcase video (97 seconds, web version 720x1280) replaces the old 20-second walkthrough. It is on the home page under the phone picture, at the top of the passport page, and on What you get. The home button now reads 'Watch the video'.

@@ -178,3 +178,5 @@
 
 .hm .grid.media{grid-template-columns:repeat(3,1fr);max-width:1040px}
 @media (max-width:860px){.hm .grid.media{grid-template-columns:1fr;gap:28px}}
+.hm .hero-video{width:100%;display:flex;justify-content:center}
+.hm .hero-video .vidwrap{width:100%;max-width:340px}
