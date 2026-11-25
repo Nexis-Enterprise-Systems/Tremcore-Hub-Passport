@@ -181,3 +181,5 @@
 - 25 Nov 2026: Media page now has a Prices section from the door-drop flyer: Bespoke website £400 fixed (up to 4 pages); Social Media Management £99/month; Customer Review Management £9.99/month and Poster Design Studio £4.99/month, both free with Social. Prices shown as on the flyer (no VAT wording; to be confirmed with Aaron).
 
 - 25 Nov 2026: Removed the 'Site plans / See your building, not just your records' section from the passport page of the website.
+
+- 25 Nov 2026: Home page 'Websites & media' section now shows all three monthly cards (Social £99, Customer Review £9.99, Poster Design Studio £4.99), matching the flyer and the Media page.

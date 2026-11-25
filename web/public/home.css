@@ -175,3 +175,6 @@
 @media (max-width:480px){.hm .pc-num{font-size:52px}}
 .hm .hero .hero-grid.wrap{align-items:start}.hm .hero .hero-grid>div:first-child{padding-top:24px}
 .hm .pc-multi a{color:#45c35f;font-weight:700;text-decoration:underline}
+
+.hm .grid.media{grid-template-columns:repeat(3,1fr);max-width:1040px}
+@media (max-width:860px){.hm .grid.media{grid-template-columns:1fr;gap:28px}}
