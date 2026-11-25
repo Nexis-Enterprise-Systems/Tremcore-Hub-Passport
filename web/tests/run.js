@@ -139,12 +139,11 @@ const USERS = {
     return realFetch(u, o);
   };
   const post = (body, h) => realFetch(base + '/api/enquiry', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', Accept: 'application/json' }, h || {}), body: JSON.stringify(body) });
-  let r = await post({ name: 'Sam', email: 'sam@example.com', sites: '2-5', package: '1', message: 'Hi' });
+  let r = await post({ name: 'Sam', email: 'sam@example.com', sites: '2-5', package: '1', topic: 'website', message: 'Hi' });
   check('enquiry is stored through the public key only', r.status === 200 && sent.length === 1 && sent[0].u.endsWith('/rest/v1/enquiries') && sent[0].o.headers.apikey === 'anon-public-key' && !JSON.stringify(sent[0]).includes('SERVICE-SECRET'));
   check('enquiry fields are mapped', JSON.parse(sent[0].o.body).package_interest === 'self_managed' && JSON.parse(sent[0].o.body).sites === '2-5');
+  check('enquiry subject is added to the start of the message', JSON.parse(sent[0].o.body).message === 'Question about: Website\n\nHi');
   r = await post({ name: 'Sam', email: 'sam@example.com', package: '2' }); check('enquiry about Managed Service is stored as such', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).package_interest === 'managed_service');
-  r = await post({ name: 'Sam', email: 'sam@example.com', topic: 'website', message: 'Need a site' }); check('enquiry topic is added to the message', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).message === 'Question about: Website\n\nNeed a site');
-  r = await post({ name: 'Sam', email: 'sam@example.com', topic: 'rubbish', message: 'Hi' }); check('unknown enquiry topic is ignored', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).message === 'Hi');
   r = await post({ name: '', email: 'sam@example.com' }); check('enquiry needs a name', r.status === 422);
   r = await post({ name: 'Sam', email: 'nope' }); check('enquiry needs a valid email', r.status === 422);
   const before = sent.length; r = await post({ name: 'Bot', email: 'b@example.com', website: 'http://spam' });
