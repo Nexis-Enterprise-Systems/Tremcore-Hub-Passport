@@ -143,6 +143,8 @@ const USERS = {
   check('enquiry is stored through the public key only', r.status === 200 && sent.length === 1 && sent[0].u.endsWith('/rest/v1/enquiries') && sent[0].o.headers.apikey === 'anon-public-key' && !JSON.stringify(sent[0]).includes('SERVICE-SECRET'));
   check('enquiry fields are mapped', JSON.parse(sent[0].o.body).package_interest === 'self_managed' && JSON.parse(sent[0].o.body).sites === '2-5');
   r = await post({ name: 'Sam', email: 'sam@example.com', package: '2' }); check('enquiry about Managed Service is stored as such', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).package_interest === 'managed_service');
+  r = await post({ name: 'Sam', email: 'sam@example.com', topic: 'website', message: 'Need a site' }); check('enquiry topic is added to the message', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).message === 'Question about: Website\n\nNeed a site');
+  r = await post({ name: 'Sam', email: 'sam@example.com', topic: 'rubbish', message: 'Hi' }); check('unknown enquiry topic is ignored', r.status === 200 && JSON.parse(sent[sent.length - 1].o.body).message === 'Hi');
   r = await post({ name: '', email: 'sam@example.com' }); check('enquiry needs a name', r.status === 422);
   r = await post({ name: 'Sam', email: 'nope' }); check('enquiry needs a valid email', r.status === 422);
   const before = sent.length; r = await post({ name: 'Bot', email: 'b@example.com', website: 'http://spam' });
@@ -1596,6 +1598,7 @@ const USERS = {
     for (const u of ['/', '/passport/', '/what-you-get/']) {
       await pg.goto(base + u);
       check('showcase video is on ' + u, (await pg.locator('video#passport-video source[src="/media/tremcore-self-managed-showcase-2.mp4"]').count()) === 1);
+      check('Ask us a question drop-down lists the three subjects on ' + u, (await pg.locator('details.askdd:visible .askmenu a, details.askdd .askmenu a').count()) >= 3);
       check('big play button is centred on the video on ' + u, (await pg.locator('.vidwrap .vplay').count()) >= 1);
       check('the old 20-second walkthrough is gone from ' + u, (await pg.locator('#demo-player').count()) === 0 && !(await pg.content()).includes('20-second'));
     }

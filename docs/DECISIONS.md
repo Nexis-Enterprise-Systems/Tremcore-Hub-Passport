@@ -211,3 +211,4 @@
 - 25 Nov 2026: Explore the app now uses the hero serif font and sits above the video (stacked); video and poster files renamed (-2) so browsers drop the cached old poster.
 - 25 Nov 2026: desktop hero phone widened (230 to 275px); Explore the app heading larger.
 - 25 Nov 2026: hero phone picture retaken at a real phone shape (it looked stretched); big gold centred play button on every website video (web/public/site.js).
+- 25 Nov 2026: 'Ask us a question' drop-down (Free multi-site hub / Website / Social media management) on the home hero and the bottom call-to-action bands. Choosing a subject opens the contact form with that subject chosen; the subject is added to the start of the enquiry message (no database change).

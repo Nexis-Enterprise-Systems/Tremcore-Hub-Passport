@@ -94,6 +94,8 @@ async function handleEnquiry(req, res) {
   if (clip(d.website, 50)) return reply(200, { ok: true }); // hidden field filled in: a bot. Pretend all is well.
   const row = { name: clip(d.name, 120), company: clip(d.company, 160), email: clip(d.email, 200), phone: clip(d.phone, 40),
     sites: ['1', '2-5', '6-20', '20+'].includes(d.sites) ? d.sites : null, package_interest: d.package === '1' ? 'self_managed' : d.package === '2' ? 'managed_service' : null, message: clip(d.message, 2000) };
+  const TOPICS = { multisite: 'Free multi-site hub', website: 'Website', social: 'Social media management' };
+  if (TOPICS[d.topic]) row.message = ('Question about: ' + TOPICS[d.topic] + (row.message ? '\n\n' + row.message : '')).slice(0, 2000);
   if (!row.name) return reply(422, { error: 'Please tell us your name.' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) return reply(422, { error: 'Please check your email address.' });
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return reply(503, { error: 'Sorry, enquiries are not switched on yet. Please call us.' });

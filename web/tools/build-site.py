@@ -24,6 +24,13 @@ SIGNUP_HREF = '/app/?signup=1' if PASSPORT_OPEN else '/register/'
 SIGNUP_LABEL = 'Sign up' if PASSPORT_OPEN else 'Register your interest'
 SIGNUP = f'<a class="btn solid" href="{SIGNUP_HREF}">{SIGNUP_LABEL}</a>'
 
+def ask_menu(cls=''):
+    # "Ask us a question" drop-down: pick a subject and the contact form opens with it already chosen.
+    return ('<details class="askdd %s"><summary class="btn ghost btn-ghost">Ask us a question <span class="car" aria-hidden="true">&#9662;</span></summary>'
+            '<ul class="askmenu"><li><a href="/contact/?topic=multisite">Free multi-site hub</a></li>'
+            '<li><a href="/contact/?topic=website">Website</a></li>'
+            '<li><a href="/contact/?topic=social">Social media management</a></li></ul></details>') % cls
+
 def page(path, title, desc, body, current, noindex=False, extra_css=''):
     nav = ''.join('<a href="%s"%s>%s</a>' % (h, ' aria-current="page"' if h == current else '', l) for h, l in NAV)
     foot = ''.join('<a href="%s">%s</a>' % (h, l) for h, l in NAV)
@@ -71,7 +78,7 @@ def page(path, title, desc, body, current, noindex=False, extra_css=''):
     open(os.path.join(d, 'index.html'), 'w').write(html)
 
 def cta(h, p):
-    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}<a class="btn ghost" href="/contact/">Ask a question</a>{OR_CALL}</div></div></section>'
+    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}{ask_menu("up")}{OR_CALL}</div></div></section>'
 
 ITEMS = [('g','Fire risk assessment','Mar 2027','In date'),('a','Fire alarm service and test','in 12 days','Due in 12d'),('r','Portable appliance testing','4 days ago','Overdue 4d'),('m','Kitchen extract cleaning','Not entered','No date'),('g','Legionella risk assessment','Jan 2027','In date'),('g','Emergency lighting test','Feb 2027','In date')]
 items = ''.join(f'<li{" class=fade" if i==5 else ""}><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></li>' for i,(c,t,d,l) in enumerate(ITEMS))
@@ -84,6 +91,7 @@ home = '''<div class="hm"><!-- HERO -->
         <div class="ctas">
           <a href="/register/" class="btn btn-primary">Register your interest</a>
           <a href="#passport-video" class="btn btn-ghost">▶ Watch the video</a>
+          @@ASK@@
         </div>
         <p class="cats">Fire safety · Electrical · Water hygiene · Building services · and more</p>
       </div>
@@ -361,6 +369,7 @@ contact = f'''<section class="sec"><div class="wrap contact"><div><div class="ey
 <form class="f card" id="enquiry" method="post" action="/api/enquiry"><div class="two"><div><label class="lbl" for="f-name">Your name</label><input class="fld" id="f-name" name="name" type="text" autocomplete="name" required maxlength="120"></div><div><label class="lbl" for="f-company">Company</label><input class="fld" id="f-company" name="company" type="text" autocomplete="organization" maxlength="160"></div></div>
 <div class="two"><div><label class="lbl" for="f-email">Email</label><input class="fld" id="f-email" name="email" type="email" autocomplete="email" required maxlength="200"></div><div><label class="lbl" for="f-phone">Phone</label><input class="fld" id="f-phone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div></div>
 <div class="two"><div><label class="lbl" for="f-sites">Number of properties</label><select class="fld" id="f-sites" name="sites"><option value="1">1</option><option value="2-5">2 to 5</option><option value="6-20">6 to 20</option><option value="20+">More than 20</option></select></div><div><label class="lbl" for="f-pkg">Package</label><select class="fld" id="f-pkg" name="package"><option value="">Not sure yet</option><option value="1">Self-Managed</option>''' + ('<option value="2">Managed Service (near Medway)</option>' if SHOW_MANAGED else '') + '''</select></div></div>
+<div><label class="lbl" for="f-topic">What is your question about?</label><select class="fld" id="f-topic" name="topic"><option value="">Something else</option><option value="multisite">Free multi-site hub</option><option value="website">Website</option><option value="social">Social media management</option></select></div>
 <div><label class="lbl" for="f-msg">What would you most like to see?</label><textarea class="fld" id="f-msg" name="message" rows="4" maxlength="2000"></textarea></div>
 <div class="hp" aria-hidden="true"><label>Leave this empty <input name="website" type="text" tabindex="-1" autocomplete="off"></label></div>
 <button class="btn solid" id="f-go" type="submit">Send my question</button><div id="f-out" role="status"></div>
@@ -457,6 +466,7 @@ shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore p
 <div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
 <section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
 
+home = home.replace('@@ASK@@', ask_menu('inhero'))
 page('/', 'Tremcore | Compliance passports for commercial premises', 'One clear view of certificates, due dates and reminders across your commercial properties.', home, '/', extra_css='home.css')
 page('/passport/', 'The passport | Tremcore', 'The checks that keep a building safe, with traffic lights and reminders, in one place.', passport, '/passport/')
 page('/what-you-get/', 'What you get | Tremcore', 'The Self-Managed Compliance Passport, quoted to suit your premises.', what, '/what-you-get/')

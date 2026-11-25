@@ -116,6 +116,7 @@
   if (form) {
     var out = $('#f-out'), go = $('#f-go');
     var pre = (location.search.match(/[?&]package=([^&]*)/) || [])[1]; if (pre && form.package) form.package.value = decodeURIComponent(pre);
+    var top = (location.search.match(/[?&]topic=([^&]*)/) || [])[1]; if (top && form.topic) form.topic.value = decodeURIComponent(top);
     form.addEventListener('submit', function (e) {
       e.preventDefault(); out.className = ''; out.textContent = '';
       var data = {}; new FormData(form).forEach(function (v, k) { data[k] = String(v); });
@@ -164,4 +165,13 @@
     v.addEventListener('play', sync); v.addEventListener('pause', sync); v.addEventListener('ended', sync);
     sync();
   });
+})();
+
+// "Ask us a question" drop-down: closes when you click elsewhere or press Escape.
+(function () {
+  var all = document.querySelectorAll('details.askdd');
+  if (!all.length) return;
+  document.addEventListener('click', function (e) { all.forEach(function (d) { if (d.open && !d.contains(e.target)) d.open = false; }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') all.forEach(function (d) { d.open = false; }); });
+  all.forEach(function (d) { d.addEventListener('toggle', function () { if (d.open) all.forEach(function (o) { if (o !== d) o.open = false; }); }); });
 })();
