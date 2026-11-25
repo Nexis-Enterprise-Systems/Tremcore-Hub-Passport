@@ -206,3 +206,7 @@ html.lock{overflow:hidden}
 /* gold gradient headings: leave room below the line so the tails of g, y, p and j are not clipped */
 .gt,.h1,.h2,.hm h1,.hm h2,.hm .gt,.hm .p-app,.hm .pc-num,.bprice b,.pprice b{padding-bottom:.16em}
 .hm h1{line-height:1.14}
+.vidwrap{position:relative}
+.vplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:76px;height:76px;border-radius:50%;border:2px solid #f1d98c;background:rgba(10,8,4,.62);color:#f1d98c;display:flex;align-items:center;justify-content:center;padding:0 0 0 5px;cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.6),0 0 30px rgba(212,175,85,.25);transition:transform .15s,background .15s}
+.vplay[hidden]{display:none}
+.vplay:hover{background:rgba(212,175,85,.9);color:#140f04;transform:translate(-50%,-50%) scale(1.06)}

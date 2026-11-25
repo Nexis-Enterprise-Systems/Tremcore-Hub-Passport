@@ -150,3 +150,18 @@
     });
   }
 })();
+
+// A big gold play button in the middle of every video (the normal controls stay underneath).
+(function () {
+  document.querySelectorAll('.vidwrap video').forEach(function (v) {
+    var wrap = v.parentNode;
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'vplay'; b.setAttribute('aria-label', 'Play video');
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
+    wrap.appendChild(b);
+    var sync = function () { b.hidden = !v.paused && !v.ended; };
+    b.addEventListener('click', function () { v.play(); });
+    v.addEventListener('play', sync); v.addEventListener('pause', sync); v.addEventListener('ended', sync);
+    sync();
+  });
+})();

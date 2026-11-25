@@ -1596,6 +1596,7 @@ const USERS = {
     for (const u of ['/', '/passport/', '/what-you-get/']) {
       await pg.goto(base + u);
       check('showcase video is on ' + u, (await pg.locator('video#passport-video source[src="/media/tremcore-self-managed-showcase-2.mp4"]').count()) === 1);
+      check('big play button is centred on the video on ' + u, (await pg.locator('.vidwrap .vplay').count()) >= 1);
       check('the old 20-second walkthrough is gone from ' + u, (await pg.locator('#demo-player').count()) === 0 && !(await pg.content()).includes('20-second'));
     }
     await pg.goto(base + '/');
