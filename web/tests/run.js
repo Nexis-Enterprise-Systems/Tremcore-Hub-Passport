@@ -461,13 +461,13 @@ const USERS = {
   // site user, 2FA optional
   t = await newPage(); await login(t.page, 'site@t');
   await t.page.waitForSelector('text=Welcome, Leah');
-  await t.page.click('[data-nav=settings]'); 
+  await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); 
   check('site user signs in without 2FA when not required', (await t.page.locator('.badge').innerText()) === 'Off');
   check('optional user is offered 2FA set-up', await t.page.locator('text=Set up 2FA').count() === 1);
   await t.page.click('text=Set up 2FA'); await t.page.waitForSelector('img.qr');
   check('optional set-up has a Not now button', await t.page.locator('text=Not now').count() === 1);
   await t.page.click('text=Not now'); await t.page.waitForSelector('text=Welcome, Leah');
-  await t.page.click('[data-nav=settings]'); 
+  await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); 
   check('Not now returns to the home screen with 2FA still off', (await t.page.locator('.badge').innerText()) === 'Off');
   await t.page.click('text=Sign out'); await t.page.waitForSelector('text=Sign in');
   check('sign out returns to login', (await h1(t.page)) === 'Sign in');
@@ -1011,14 +1011,14 @@ const USERS = {
     check('stopped: only a stop message, Call Tremcore and Sign out are offered', (await t.page.locator('.kv').count()) === 0 && (await t.page.locator('#contact-tremcore').count()) === 1);
     await t.ctx.close();
     t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: true }; });
-    await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
+    await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); await t.page.waitForSelector('#cancel-start');
     await t.page.click('#cancel-start'); await t.page.waitForSelector('#cancel-confirm');
     check('cancel: explains one month notice, data removal and that a year paid up front is not refunded', (await t.page.locator('.card').innerText()).includes('one month') && (await t.page.locator('.card').innerText()).includes('not refunded'));
     const cancelBodies = []; await t.page.route('**/api/cancellation', async (rt) => { const b = JSON.parse(rt.request().postData() || '{}'); cancelBodies.push(b.action);
       await t.page.evaluate((a) => { window.__mock.access = a === 'request' ? { state: 'cancelling', is_head: true, ends_at: '2026-12-08T00:00:00Z', days_left: 30 } : { state: 'ok', is_head: true }; }, b.action); rt.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
     await t.page.click('#cancel-confirm'); await t.page.waitForSelector('text=due to close on');
     check('cancel: after giving notice the banner shows the end date and a Keep my account button', (await t.page.locator('button:has-text("Keep my account")').count()) === 1 && cancelBodies.join() === 'request');
-    await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#cancel-start');
+    await t.page.click('button:has-text("Keep my account")'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); await t.page.waitForSelector('#cancel-start');
     check('cancel: notice can be withdrawn (through the server, so Stripe is told too)', cancelBodies.join() === 'request,withdraw');
     await t.ctx.close();
     // the website's Login button always shows the login page, even if someone is still signed in on this device
@@ -1289,11 +1289,14 @@ const USERS = {
     check('emergency: removing a contact works', (await t.page.locator('.econ').count()) === 1);
     await t.page.selectOption('#e-site', 's2'); await t.page.waitForSelector('#e-assembly');
     check('emergency: each site has its own details', (await t.page.locator('#e-assembly').inputValue()) === '' && (await t.page.locator('.econ').count()) === 0);
-    await t.page.click('[data-back]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#b-save');
-    check('settings: business info, premises, subscription, customised tasks, help and account are all there', (await t.page.locator('.appbody h2').allInnerTexts()).join('|').replace(/\s+/g, ' ') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
+    await t.page.click('[data-back]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('.setmenu');
+    check('settings: a menu lists business info, premises, subscription, customised tasks, help and account', (await t.page.locator('.setrow .setlabel').allInnerTexts()).join('|') === 'Business Information|Manage Premises|Subscription Details|Customised Tasks|Help & Support|My account');
+    await t.page.click('[data-set=plan]');
     check('settings: subscription shows the plan, two sites and the price including the extra site', (await t.page.locator('.appbody').innerText()).includes('Self-Managed') && (await t.page.locator('.appbody').innerText()).includes('£22.98 + VAT per month'));
     check('settings: add-ons not yet taken are offered from the subscription box, with their price', (await t.page.locator('[data-add-addon=toolbox_talks]').innerText()).includes('£2.99') && (await t.page.locator('[data-add-addon=staff_signin]').innerText()).includes('per site'));
+    await t.page.click('[data-back]'); await t.page.click('[data-set=custom]');
     check('settings: customised tasks shows how many of the 10 repeating tasks are used', (await t.page.locator('.appbody').innerText()).includes('2 of 10'));
+    await t.page.click('[data-back]'); await t.page.click('[data-set=biz]'); await t.page.waitForSelector('#b-save');
     await t.page.fill('#b-phone', '1634 99'); await t.page.click('#b-save');
     check('formats: a short phone number is refused with a clear message', (await t.page.locator('.msg.err').innerText()).includes('11 digits') && (await calls(t.page, 'rpc:update_business')).length === 0);
     await t.page.fill('#b-phone', '+44 1634 999999'); await t.page.fill('#b-postcode', 'me38fx'); await t.page.fill('#b-address', '12 high street'); await t.page.click('#b-save'); await t.page.waitForSelector('text=Business information saved.');
@@ -1302,8 +1305,10 @@ const USERS = {
     check('formats: a bad postcode is refused', (await t.page.locator('.msg.err').innerText()).includes('postcode'));
     await t.page.fill('#b-postcode', 'ME3 8FX'); await t.page.fill('#b-phone', '01634 999999'); await t.page.click('#b-save'); await t.page.waitForSelector('text=Business information saved.'); await t.page.waitForSelector('text=Business information saved.');
     check('settings: head office can change the business phone', (await calls(t.page, 'rpc:update_business')).pop().p_phone === '01634 999999');
+    await t.page.click('[data-back]'); await t.page.click('[data-set=premises]');
     await t.page.fill('[data-site-name=s2]', 'Station Road Depot'); await t.page.click('[data-save-site=s2]'); await t.page.waitForSelector('text=Site saved.');
     check('settings: head office can rename a site', (await t.page.evaluate(() => window.__mock.tables.properties[1].name)) === 'Station Road Depot');
+    await t.page.click('[data-back]'); await t.page.click('[data-set=help]');
     check('settings: Email Tremcore help button', (await t.page.locator('#help-email').getAttribute('href')).startsWith('mailto:info@tremcore.co.uk'));
     await t.ctx.close();
     // a view-only user: sees tasks and emergency details but cannot change them
@@ -1377,15 +1382,15 @@ const USERS = {
     await t.ctx.close();
     // coming back from Stripe: waits for the confirmation, then opens the add-on
     // add-ons the business has are listed in Subscription Details with what each costs
-    t = await newPage(appSeed, { owned: 'both' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('[data-addon]');
+    t = await newPage(appSeed, { owned: 'both' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=plan]'); await t.page.waitForSelector('[data-addon]');
     check('settings: each add-on is listed with its monthly cost (Toolbox £2.99; Clock In 2 sites x £5.99 = £11.98) and a total of £14.97', (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£2.99 + VAT per month') && (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £5.99 = £11.98') && (await t.page.locator('#addons-total').innerText()).includes('£14.97') && (await t.page.locator('[data-add-addon]').count()) === 0);
     await t.ctx.close();
     // the introductory offer shows in Subscription Details while it lasts
     const offerSeed = new Function('cfg', '(' + appSeed.toString() + ')(cfg); window.__mock.tables.companies[0].offer_code = "TC-ABC234"; window.__mock.tables.companies[0].offer_ends_at = new Date(Date.now() + 200 * 86400000).toISOString();');
-    t = await newPage(offerSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#offer-line');
+    t = await newPage(offerSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=plan]'); await t.page.waitForSelector('#offer-line');
     check('offer: Subscription Details says the first site is £7.99 until the end date, then £14.99', (await t.page.locator('#offer-line').innerText()).replace(/\s+/g, ' ').includes('£7.99 + VAT per month until') && (await t.page.locator('#offer-line').innerText()).includes('then £14.99'));
     await t.ctx.close();
-    t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('text=Subscription Details');
+    t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=plan]'); await t.page.waitForSelector('text=Subscription Details');
     check('offer: no offer line for a business without one', (await t.page.locator('#offer-line').count()) === 0);
     await t.ctx.close();
     // business insurance missed at set-up can be added later
@@ -1478,7 +1483,7 @@ const USERS = {
       window.__mock.team = { summary: { used: 2, allowed: 3, require_mfa: false },
         members: [{ user_id: 'u1', full_name: 'Boss', email: 'boss@x.test', role: 'client_super', perm: 'full', active: true, property_ids: [], is_me: true },
                   { user_id: 'u2', full_name: 'Mo Manager', email: 'mo@x.test', role: 'client_site', perm: 'view', active: true, property_ids: ['s1'], is_me: false }], pending: [] }; };
-    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.waitForSelector('#team-open');
+    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); await t.page.waitForSelector('#team-open');
     await t.page.click('#team-open'); await t.page.waitForSelector('text=My team');
     check('team: shows seats used, the head-office user and the manager', (await t.page.locator('.card').innerText()).includes('2 of 3 users') && (await t.page.locator('.member').count()) === 3);
     await t.page.selectOption('[data-user=u2] select', 'update'); await t.page.check('[data-user=u2] input[value=s2]');
@@ -1494,12 +1499,12 @@ const USERS = {
     await t.page.check('#team-mfa'); await t.page.waitForSelector('text=2FA is now required');
     check('team: head office can require 2FA for everyone', (await calls(t.page, 'rpc:team_set_require_mfa')).pop().p_on === true);
     await t.ctx.close();
-    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.evaluate(() => { window.__mock.team.inviteError = 'user_limit_reached'; }); await t.page.click('#team-open'); await t.page.waitForSelector('#inv-name');
+    t = await newPage(teamSeed); await login(t.page, 'site@t'); await t.page.waitForSelector('[data-nav=settings]'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); await t.page.evaluate(() => { window.__mock.team.inviteError = 'user_limit_reached'; }); await t.page.click('#team-open'); await t.page.waitForSelector('#inv-name');
     await t.page.fill('#inv-name', 'X'); await t.page.fill('#inv-email', 'x@x.test'); await t.page.check('input[data-site=new][value=s1]'); await t.page.click('#inv-go');
     await t.page.waitForSelector('.msg.err');
     check('team: going over the user limit is explained', (await t.page.locator('.msg.err').innerText()).includes('used all the users'));
     await t.ctx.close();
-    t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: false }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah'); await t.page.click('[data-nav=settings]'); 
+    t = await newPage(() => { window.__mock.access = { state: 'ok', is_head: false }; }); await login(t.page, 'site@t'); await t.page.waitForSelector('text=Welcome, Leah'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]'); 
     check('team: a site user is not offered the team page', (await t.page.locator('#team-open').count()) === 0);
     await t.ctx.close();
     // invited person's own sign-up
@@ -1513,7 +1518,7 @@ const USERS = {
     await t.ctx.close();
     t = await newPage(() => { window.__mock.users['sam@x.test'] = { password: 'correct-horse-battery', factor: false, profile: null, confirmed: true, meta: { invited: true, signup_full_name: 'Sam Site' },
       invitedProfile: { role_name: 'client_site', full_name: 'Sam Site', company_id: 'c1', level: 1, mfa_required: false } }; });
-    await login(t.page, 'sam@x.test'); await t.page.waitForSelector('text=Welcome, Sam'); await t.page.click('[data-nav=settings]');
+    await login(t.page, 'sam@x.test'); await t.page.waitForSelector('text=Welcome, Sam'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=acct]');
     check('invite: first confirmed sign-in accepts the invitation and lands in the passport as a site user', (await calls(t.page, 'rpc:accept_invitation')).length === 1 && (await t.page.locator('.kv:has-text("Site user")').count()) === 1);
     await t.ctx.close();
 

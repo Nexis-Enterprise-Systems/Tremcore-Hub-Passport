@@ -595,7 +595,7 @@
     }
 
     // ---------- Settings ----------
-    function viewSettings(note) {
+    function viewSettings(note, part) {
       tab = 'settings';
       const box = h('div', {});
       const F = window.TCFormat;
@@ -608,7 +608,7 @@
         if (!pc.ok) return ctx.message(box, 'err', F.POSTCODE_HELP);
         const r = await sb.rpc('update_business', { p_phone: ph.value, p_address: F.cap(baddr.value.trim()), p_postcode: pc.value });
         if (r.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please try again.');
-        await reload(); viewSettings('Business information saved.');
+        await reload(); viewSettings('Business information saved.', 'biz');
       }) }, 'Save');
       const biz = h('div', { class: 'card' }, h('h2', {}, 'Business Information'),
         h('div', { class: 'kv' }, h('span', {}, 'Business'), h('span', {}, (company && company.name) || '')),
@@ -622,7 +622,7 @@
           const pc = F.postcode(z.value); if (!pc.ok) return ctx.message(box, 'err', F.POSTCODE_HELP);
           const r = await sb.rpc('update_site', { p_id: p.id, p_name: F.cap(n.value.trim()), p_address: F.cap(a.value.trim()), p_postcode: pc.value });
           if (r.error) return ctx.message(box, 'err', 'Sorry, that did not save. Please check the name and try again.');
-          await reload(); viewSettings('Site saved.');
+          await reload(); viewSettings('Site saved.', 'premises');
         }) }, 'Save')] : [h('strong', {}, p.name), h('span', { class: 'muted small' }, [p.address, p.postcode].filter(Boolean).join(', '))]);
       };
       const premises = h('div', { class: 'card' }, h('h2', {}, 'Manage Premises'), ...props.map(siteRow),
@@ -656,7 +656,18 @@
         h('p', { class: 'muted' }, 'Questions about your passport? We are happy to help.'),
         h('a', { class: 'btn small', id: 'help-email', href: 'mailto:info@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'Email Tremcore'));
       const acct = h('div', { class: 'card' }, h('h2', {}, 'My account'), ...(ctx.account || []));
-      shell('settings', h('div', { class: 'card' }, h('h1', {}, 'Settings'), ...heading(note), box), biz, premises, plan, custom, help, acct);
+      // Settings is a menu of rows (as in the prototype); each row opens its own page with a back arrow.
+      const PARTS = [['biz', 'Business Information', biz, 'M3 11l9-8 9 8v10H3z M9 21v-6h6v6'], ['premises', 'Manage Premises', premises, 'M4 21V8l8-5 8 5v13 M9 21v-7h6v7'], ['plan', 'Subscription Details', plan, 'M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4'],
+        ['custom', 'Customised Tasks', custom, 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5'], ['help', 'Help & Support', help, 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.7 M12 17h.01'], ['acct', 'My account', acct, 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-7 8-7s8 3 8 7']];
+      if (part) {
+        const cur = PARTS.find((x) => x[0] === part);
+        if (cur) return shell('settings', h('div', { class: 'card settitle' }, backBtn('Back to settings', () => viewSettings()), h('h1', {}, cur[1]), ...heading(note), box), cur[2]);
+      }
+      const row = ([k, label, , d]) => h('button', { class: 'setrow', type: 'button', 'data-set': k, onclick: () => viewSettings(null, k) },
+        svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, svg('path', { d })),
+        h('span', { class: 'setlabel' }, label), h('span', { class: 'setchev', 'aria-hidden': 'true' }, '\u203A'));
+      shell('settings', h('div', { class: 'card' }, h('h1', {}, 'Settings'), ...heading(note), box), h('div', { class: 'setmenu' }, ...PARTS.map(row)),
+        h('div', { class: 'setfoot' }, h('img', { src: '/img/logo-full.png', alt: 'Tremcore', width: 150 }), h('p', { class: 'muted small' }, 'The smarter way to stay compliant')));
     }
 
     // ---------- one check ----------

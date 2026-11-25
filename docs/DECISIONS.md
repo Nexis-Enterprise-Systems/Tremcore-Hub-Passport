@@ -195,3 +195,5 @@
 - 25 Nov 2026: Home hero on a computer: video bottom-left, price card bottom-right (so the phone and video are not stacked), and the hero phone made smaller (230px).
 
 - 25 Nov 2026: Fixed the tail of the 'g' (and y, p, j) being clipped on gold gradient headings, on the website and in the app, by giving those headings room underneath.
+
+- 25 Nov 2026: Passport app Settings is now a menu list (Business Information, Manage Premises, Subscription Details, Customised Tasks, Help & Support, My account), each row opening its own page with a back arrow, as in the 24 Nov prototype. Same content and saving as before. Not built: Core/Other split, Home Core/Other buttons, task calendar (Aaron chose Settings only).
