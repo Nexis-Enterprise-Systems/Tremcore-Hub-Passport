@@ -268,3 +268,6 @@
 - Not offered: the "Unlock all 4 add-ons" bundle, and a yearly line on Reviews / Poster Generator. They are Coming soon and cannot be bought, so they stay without a yearly or bundle offer until built.
 - Tests: 12 new database checks (363 pass), 5 new web checks (602 pass). Service worker cache v66.
 - Before this works on a real project, migration 0037 must be run in Supabase (staging first, then Live). Until then the add-on page still loads but buying gives the "database update needed" message.
+
+## 26 Nov 2026 - Yearly upfront is pre-selected on the add-on page
+- On the add-on page "Yearly upfront" is chosen by default (Aaron's request); the client can switch to Monthly. The server and database still treat "no choice" as monthly. Service worker cache v67.

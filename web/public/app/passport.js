@@ -478,8 +478,8 @@
           : state === 'confirming' ? null : [h('p', { class: 'big goldbox' }, priceText(e)),
             e.charged_per === 'site' ? h('p', { class: 'muted' }, 'This is charged for each site. You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month, or ' + money(yearlyPence(e) * qty) + ' + VAT for 12 months paid upfront.') : null,
             isHead && ((company && company.level) || 1) === 1 ? h('fieldset', { class: 'payway', id: 'extra-way' }, h('legend', {}, 'How would you like to pay?'),
-              h('label', { class: 'payopt' }, h('input', { type: 'radio', name: 'extra-way', value: 'month', checked: true }), h('span', {}, h('strong', {}, 'Monthly'), ' ' + money(total) + ' + VAT a month')),
-              h('label', { class: 'payopt' }, h('input', { type: 'radio', name: 'extra-way', value: 'year' }), h('span', {}, h('strong', {}, 'Yearly upfront'), ' ' + money(yearlyPence(e) * qty) + ' + VAT a year \u00b7 save 15%'))) : null,
+              h('label', { class: 'payopt' }, h('input', { type: 'radio', name: 'extra-way', value: 'year', checked: true }), h('span', {}, h('strong', {}, 'Yearly upfront'), ' ' + money(yearlyPence(e) * qty) + ' + VAT a year \u00b7 save 15%')),
+              h('label', { class: 'payopt' }, h('input', { type: 'radio', name: 'extra-way', value: 'month' }), h('span', {}, h('strong', {}, 'Monthly'), ' ' + money(total) + ' + VAT a month'))) : null,
             isHead && ((company && company.level) || 1) === 1
               ? [h('button', { class: 'btn', id: 'extra-add', type: 'button', onclick: (ev) => { const w = document.querySelector('input[name=extra-way]:checked'); startExtraPayment(code, ev.target, box, w && w.value); } }, 'Add ' + e.name + ' · pay now'),
                 h('p', { class: 'muted small' }, 'You will be taken to our secure payment page. The add-on starts as soon as your payment is confirmed. Monthly add-ons are added to your monthly subscription; a yearly add-on is one payment for 12 months.'),
