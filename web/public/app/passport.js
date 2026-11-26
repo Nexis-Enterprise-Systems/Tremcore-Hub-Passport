@@ -20,16 +20,16 @@
   ];
   // Add-ons that are announced but not built into the real app yet: shown on Home as "Coming soon", never sold.
   const SOON = [
-    { code: 'reviews', name: 'Reviews', tagline: 'Reply to Google and Tripadvisor reviews, with replies drafted in your brand voice.', price_pence: 999,
+    { code: 'reviews', icon: 'star', name: 'Reviews', short: 'Reply to Google & Tripadvisor reviews', price_pence: 999,
       intro: 'Every Google and Tripadvisor review in one inbox, with replies drafted in your brand voice so none go unanswered.',
       feats: ['One inbox for Google and Tripadvisor reviews, with the lowest ratings at the top', 'Replies drafted for you in your brand voice', 'Insights on ratings, trends and what guests mention most', 'Feedback QR cards for tables, rooms and receipts: happy guests go to Google, complaints reach the manager first', 'Import reviews from a CSV or JSON export'] },
-    { code: 'posters', name: 'Poster Generator', tagline: '17 templates for print and social.', price_pence: 499,
+    { code: 'posters', icon: 'poster', name: 'Poster Generator', short: '17 templates for print & social', price_pence: 499,
       intro: 'Professional posters for your venue in three steps: pick a template, change the words, download.',
       feats: ['17 ready-made templates for pubs, cafés, shops, seasonal events and notices', '12 looks plus your own brand kit with logo, colours and contact details', 'Print-ready PDFs at A5, A4, A3 and A1 A-board', 'Images sized for Instagram, Stories and Facebook', 'Add a QR code to any poster'] }
   ];
   const ICON = {
     home: 'M3 11l9-8 9 8v10h-6v-6H9v6H3z', compliance: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z M8.5 12l2.5 2.5L16 9.5',
-    tasks: 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5', settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 5v4 M8 15v4'
+    tasks: 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5', chat: 'M4 5h16v11H10l-5 4v-4H4z M8 9h8 M8 12h5', clock: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z M12 7v5l3 2', star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z', poster: 'M6 3h9l4 4v14H6z M9 12h7 M9 16h7', lock: 'M7 11V8a5 5 0 0 1 10 0v3 M5 11h14v10H5z', alert: 'M12 3l10 18H2z M12 10v5 M12 18v.01', taskck: 'M5 4h14v16H5z M9 12l2.5 2.5L15.5 9.5', settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 5v4 M8 15v4'
   };
   const icon = (k) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, svg('path', { d: ICON[k] }));
   const money = (p) => '£' + (p / 100).toFixed(2);
@@ -157,18 +157,21 @@
       const rows = items.filter((r) => site === 'all' || r.property_id === site);
       const c = tally(rows.filter(isCore)), cAll = tally(rows), nCore = rows.filter(isCore).length, nOther = rows.length - nCore;
       const pend = tasks.filter((t) => t.status === 'pending' && (site === 'all' || t.property_id === site)).length;
-      const q = (code, label, sub, onclick, locked) => h('button', { class: 'qtile' + (locked ? ' locked' : ''), type: 'button', 'data-q': code, onclick },
-        h('strong', {}, label), h('span', { class: 'muted small' }, sub), locked ? h('span', { class: 'tag add' }, 'Add') : null);
+      const q = (code, label, sub, onclick, locked, ik) => h('button', { class: 'qtile' + (locked ? ' locked' : ''), type: 'button', 'data-q': code, onclick },
+        ik ? icon(ik) : null, h('strong', {}, label), h('span', { class: 'muted small' }, sub), locked ? h('span', { class: 'tag add' }, 'Add') : null);
       const tt = extraOf('toolbox_talks'), ss = extraOf('staff_signin');
       // Add-on promo cards: bold gold, so the two paid extras are not overlooked (only for Self-Managed accounts that do not have them yet)
       const isL1 = !company || (company.level || 1) === 1;
-      const promo = (code, name, tagline, price, cta) => h('button', { class: 'promo', type: 'button', 'data-promo': code, onclick: () => viewExtra(code) },
-        h('strong', { class: 'promo-name' }, name), h('span', { class: 'promo-tag' }, tagline), h('span', { class: 'promo-price' }, price), h('span', { class: 'promo-cta' }, cta));
-      const promos = isL1 ? [
-        !tt.owned ? promo('toolbox_talks', 'Toolbox Talks', '30 ready-made safety talks plus 10 of your own, signed off by your team on a phone, with PDF records saved for audits.', money(tt.price_pence) + ' / month + VAT', 'Add now') : null,
-        !ss.owned ? promo('staff_signin', 'Staff Clock In / Out', 'A unique QR code for each site. Staff scan to clock in and out, and you see who is on site and download attendance records.', money(ss.price_pence) + ' / site / month + VAT', 'Add now') : null].filter(Boolean) : [];
-      const soons = isL1 ? SOON.map((x) => h('button', { class: 'promo soon', type: 'button', 'data-soon': x.code, onclick: () => viewSoon(x.code) },
-        h('strong', { class: 'promo-name' }, x.name), h('span', { class: 'promo-tag' }, x.tagline), h('span', { class: 'promo-price' }, money(x.price_pence) + ' / month + VAT'), h('span', { class: 'promo-cta' }, 'Coming soon'))) : [];
+      // Add-on cards, 2 across: icon with a lock until bought, price a month, Buy Now. Reviews and Poster Generator are announced only (Coming soon, nothing to buy).
+      const aoc = (o) => h('button', { class: 'aoc' + (o.soon ? ' soon' : '') + (o.owned ? ' owned' : ''), type: 'button', [o.soon ? 'data-soon' : 'data-promo']: o.code, onclick: o.go },
+        h('span', { class: 'aoc-i', 'aria-hidden': 'true' }, 'i'),
+        h('span', { class: 'aoc-ic', 'aria-hidden': 'true' }, icon(o.icon), o.owned ? null : h('span', { class: 'aoc-lock' }, icon('lock'))),
+        h('strong', { class: 'aoc-name' }, o.name), h('span', { class: 'aoc-blurb' }, o.blurb),
+        h('span', { class: 'aoc-price' }, o.price, h('small', {}, ' pcm')), h('span', { class: 'aoc-sub' }, o.sub),
+        h('span', { class: 'aoc-btn' }, o.owned ? 'Active \u2013 open' : o.soon ? 'Coming soon' : [icon('lock'), 'Buy Now']));
+      const live = (code, ik, blurb) => { const e = extraOf(code); if (e.owned) return null; return aoc({ code, icon: ik, name: e.name, blurb, price: money(e.price_pence), sub: (e.charged_per === 'site' ? 'per site \u00b7 ' : '') + '+ VAT', owned: !!e.owned, go: () => viewExtra(code) }); };
+      const promos = isL1 ? [live('toolbox_talks', 'chat', '30 talks, bespoke talks \u00a31.99 each'), live('staff_signin', 'clock', 'QR clock-in and attendance log')].filter(Boolean) : [];
+      const soons = isL1 ? SOON.map((x) => aoc({ code: x.code, icon: x.icon, name: x.name, blurb: x.short, price: money(x.price_pence), sub: '+ VAT', soon: true, go: () => viewSoon(x.code) })) : [];
       // What needs attention now: overdue first, then due in the next 30 days (checks and tasks), so it is the first thing seen.
       const multiH = props.length > 1 && site === 'all';
       const lateItems = rows.filter((r) => r.status === 'red').sort(byUrgency), soonItems = rows.filter((r) => r.status === 'amber').sort(byUrgency);
@@ -191,13 +194,13 @@
       const toolsCard =
         h('div', { class: 'card tools' }, h('h2', {}, 'Quick Access'),
           h('div', { class: 'qtiles' },
-            q('mytasks', 'My Tasks', pend + ' Pending', () => go('tasks')),
-            tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks')) : null,
-            ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin')) : null,
-            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency())));
+            q('mytasks', 'My Tasks', pend + ' Pending', () => go('tasks'), false, 'taskck'),
+            tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks'), false, 'chat') : null,
+            ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin'), false, 'clock') : null,
+            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency(), false, 'alert')));
       shellWith('home', sideCards, [
+        h('div', { class: 'homehead' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', { class: 'sr-only' }, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'tagline' }, 'the smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
         h('div', { class: 'card overview' },
-          h('div', { class: 'welcome' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', {}, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'muted' }, 'The smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
           ...heading(note),
           h('h2', {}, 'Core Compliance'),
           h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),

@@ -251,3 +251,10 @@
 ## 26 Nov 2026 - Website phone picture updated to the v54 Home screen
 - `web/public/img/app-phone-2.webp` (from Aaron's screenshot, in a phone frame) replaces `app-phone.webp` on Home (hero) and at the bottom of the passport page. New file name because images are cached for 24 hours.
 - The picture shows the v54 Home with four add-ons, "Buy Now", "a year upfront, save 15%" and "Unlock all 4 add-ons". The real app does not offer the yearly price or the bundle (see the entry above), so the website picture is ahead of the app on those two points.
+
+## 26 Nov 2026 - App Home rebuilt to match the v54 picture
+- Home order is now: big logo and tagline, Core Compliance card, Quick Access (with icons), Add-ons in a 2 x 2 grid (icon with lock, i, price pcm, Buy Now), then the site list and Needs attention. Before, Needs attention and the site list came first and the add-ons were large single cards.
+- Add-on cards for bought add-ons are hidden (they are Quick Access tiles). Reviews and Poster Generator show "Coming soon".
+- Still not built, so not shown: "a year upfront, save 15%", the "Unlock all 4 add-ons" bundle, and the task-reminder bell. They need billing set up (yearly and bundle prices in Stripe, database changes) and Aaron's decision.
+- The "Welcome, Name" heading is kept for screen readers only (hidden on screen), as the v54 design has no welcome line.
+- Service worker cache v65.
