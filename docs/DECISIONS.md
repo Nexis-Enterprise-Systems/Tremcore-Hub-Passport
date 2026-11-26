@@ -247,3 +247,7 @@
 - Held back from v54 on purpose: "or a year upfront, save 15%" and the "Unlock all 4 add-ons" bundle. The app's existing rule is that add-ons are charged monthly with no yearly discount, and Stripe has no yearly or bundle price yet. Needs Aaron's decision and new Stripe prices before it can be shown.
 - Reviews and Poster Generator prices are shown "+ VAT" like the two live add-ons; VAT wording still to be confirmed.
 - Service worker cache bumped to v64.
+
+## 26 Nov 2026 - Website phone picture updated to the v54 Home screen
+- `web/public/img/app-phone-2.webp` (from Aaron's screenshot, in a phone frame) replaces `app-phone.webp` on Home (hero) and at the bottom of the passport page. New file name because images are cached for 24 hours.
+- The picture shows the v54 Home with four add-ons, "Buy Now", "a year upfront, save 15%" and "Unlock all 4 add-ons". The real app does not offer the yearly price or the bundle (see the entry above), so the website picture is ahead of the app on those two points.

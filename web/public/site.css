@@ -228,7 +228,7 @@ details.askdd>summary{padding:0 22px;margin:0;display:inline-flex;align-items:ce
 .skyline .sm{display:none}
 @media (max-width:700px){.skyline .sd{display:none}.skyline .sm{display:block}}
 
-.appphone.big{display:block;width:340px;max-width:84vw;height:auto;margin:28px auto 0;filter:drop-shadow(0 30px 50px rgba(0,0,0,.7)) drop-shadow(0 0 60px rgba(212,175,85,.12))}
+.appphone.big{display:block;width:290px;max-width:84vw;height:auto;margin:28px auto 0;filter:drop-shadow(0 30px 50px rgba(0,0,0,.7)) drop-shadow(0 0 60px rgba(212,175,85,.12))}
 .tcp{max-width:760px;margin:28px auto 44px;padding:0 4px;font-family:inherit;color:#F3EEE4}
 .tcp *{box-sizing:border-box}
 .tcp-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px 16px}
