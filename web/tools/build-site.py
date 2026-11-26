@@ -89,7 +89,7 @@ home = '''<div class="hm"><!-- HERO -->
     <div class="wrap hero-grid">
       <div>
         <h1>Commercial property compliance at your fingertips</h1>
-        <p class="lead">Tremcore gives every commercial property a compliance passport, so you can see exactly where each site stands.</p>
+        <p class="lead">Tremcore provides every commercial property with its own compliance passport, giving you a clear overview of each site&rsquo;s compliance status.</p>
         <div class="ctas">
           <a href="/register/" class="btn btn-primary">Register your interest</a>
           <a href="#passport-video" class="btn btn-ghost">▶ Watch the video</a>
@@ -115,8 +115,8 @@ home = '''<div class="hm"><!-- HERO -->
     <div class="wrap addons" id="add-ons">
       <div class="head center-head">
         <p class="kicker">Add-ons</p>
-        <h2>Unlock extra tools for your team</h2>
-        <p>Add them on their own, or get them at a lower monthly price when you have the Tremcore app.</p>
+        <h2>More add-ons = better value with Tremcore.</h2>
+        <p>Choose from our range of additional add-ons, available individually or at reduced monthly rates when you already have a Tremcore app subscription.</p>
       </div>
       <div class="grid g2">
         <article class="addon">
@@ -153,42 +153,21 @@ home = '''<div class="hm"><!-- HERO -->
     </div>
 
     <div class="wrap features">
-      <div class="grid g4">
-        <div class="card"><div class="icon">●</div><h3>Clear at a glance</h3><p>Green, amber and red show what's fine, what's coming up and what needs action.</p></div>
-        <div class="card"><div class="icon">⌂</div><h3>Yours to run</h3><p>Your records belong to you, not your contractors.</p></div>
+      <div class="grid g3">
+        <div class="card"><div class="icon">●</div><h3>A clear picture at a glance</h3><p>Colour-coded statuses make it easy to see what&rsquo;s up to date, what&rsquo;s due soon and what requires attention.</p></div>
         <div class="card"><div class="icon">?</div><h3>Honest about gaps</h3><p>Missing certificates and dates are shown plainly, never hidden.</p></div>
         <div class="card"><div class="icon">▢</div><h3>Phone, tablet or desktop</h3><p>Check any site from wherever you are.</p></div>
       </div>
     </div>
   </div>
 
-  <!-- PROBLEM -->
-  <section class="alt">
-    <div class="wrap">
-      <div class="head">
-        <p class="kicker">Sound familiar?</p>
-        <h2>Compliance has a way of getting scattered</h2>
-      </div>
-      <div class="grid g3">
-        <div class="card"><div class="icon">✉</div><h3>Certificates in inboxes</h3><p>Paperwork buried in old emails or sitting with whichever contractor did the job.</p></div>
-        <div class="card"><div class="icon">◷</div><h3>Dates in someone's head</h3><p>Renewals tracked from memory, until that person is off or moves on.</p></div>
-        <div class="card"><div class="icon">◎</div><h3>No clear picture</h3><p>No single place to see what's current across all your sites.</p></div>
-      </div>
-      <p class="closing">The Tremcore passport brings it all together in one place.</p>
-    </div>
-  </section>
-
   <!-- PASSPORT -->
   <section>
     <div class="wrap">
       <div class="head">
-        <p class="kicker">The passport</p>
+        <p class="kicker">The Tremcore passport brings it all together in one place.</p>
         <h2>Your premises, in your hands</h2>
         <p>Each site gets its own passport: every record and every renewal, kept together.</p>
-      </div>
-      <div class="grid g2">
-        <a href="/passport/" class="card"><div class="icon">▤</div><h3>Your records</h3><p>Every certificate stored against the right site and check.</p><span class="more">Learn more →</span></a>
-        <a href="/passport/" class="card"><div class="icon">◷</div><h3>Your reminders</h3><p>Get a nudge before something falls due, not after.</p><span class="more">Learn more →</span></a>
       </div>
     </div>
   </section>
@@ -308,14 +287,14 @@ home = '''<div class="hm"><!-- HERO -->
 def cat(t, p, lis):
     ul = '<ul>' + ''.join(f'<li>{x}</li>' for x in lis) + '</ul>' if lis else ''
     return f'<div class="tile"><span class="rule"></span><div class="h3">{t}</div><p>{p}</p>{ul}</div>'
-passport = f'''<section class="sec alt"><div class="wrap"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">The passport, start to finish</h2><p class="lead">Ninety seconds on a phone: compliance at a glance, certificates and dates, sites, toolbox talks, staff clock in and out. Best with the sound on.</p></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></section>
-<section class="sec"><div class="wrap"><div class="eyebrow">What it covers</div><h2 class="h2">The checks that keep a building safe, in one place</h2><p class="lead">Each property&rsquo;s passport holds the checks that apply to it, and you can add your own for anything particular to your premises.</p>
-<div class="grid3">''' + cat('Fire safety','Assessments, alarms, lighting and equipment.',['Fire risk assessments','Fire alarm servicing','Emergency lighting','and more']) + cat('Electrical','Installation and equipment testing.',['Installation condition reports','Portable appliance testing','and more']) + cat('Water hygiene','Keeping water systems safe.',['Legionella risk assessments','Temperature monitoring','and more']) + cat('Building and services','The wider fabric and plant.',['Asbestos management','Gas and heating','Air conditioning','and more']) + cat('Made for your premises','Add a title for anything specific to you, from kitchen extract cleaning to a particular piece of equipment.',[]) + f'''</div>
+passport = f'''<section class="sec alt"><div class="wrap"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">Everything in one place, made simple.</h2><p class="lead">Take a quick look at how the platform works, including compliance tracking, certificates, important dates, site management, toolbox talks and staff attendance.</p></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></section>
+<section class="sec"><div class="wrap"><div class="eyebrow">What it covers</div><h2 class="h2">Everything your property needs to stay safe and compliant.</h2><p class="lead">Each property&rsquo;s passport brings together the relevant safety checks and requirements in one place. You can also add your own checks to cover any specific needs or requirements unique to your premises.</p>
+<div class="grid3">''' + cat('Fire safety','Assessments, alarms, lighting and equipment.',['Fire risk assessments','Fire alarm servicing','Emergency lighting']) + cat('Electrical','Installation and equipment testing.',['Installation condition reports','Portable appliance testing']) + cat('Water hygiene','Keeping water systems safe.',['Legionella risk assessments','Temperature monitoring']) + cat('Building and services','The wider fabric and plant.',['Asbestos management','Gas and heating','Air conditioning']) + cat('Further services','Further services available, all built in and ready to activate in your core passport.',['Toolbox Talks','Staff Clock In / Out']) + cat('Tailored to your premises','Add your own checks and requirements to cover anything specific to your property or business, from kitchen extract cleaning to specialist equipment inspections.',[]) + f'''</div>
 <p class="small" style="margin-top:28px;max-width:70ch">These are examples. Which checks apply, and how often, depends on the premises, the equipment, current legislation and guidance, and your risk assessment. Nothing here is legal advice.</p></div></section>
-<section class="sec alt"><div class="wrap"><div class="grid2" style="align-items:center"><div><div class="eyebrow">Traffic lights</div><h2 class="h2">See where you stand in a second</h2><p class="lead">Every check has a due date and a colour. If a date hasn&rsquo;t been recorded, the passport says so rather than showing green.</p>
-<div class="lights"><div><span class="dot g"></span><span><b>In date.</b> More than 30 days to go.</span></div><div><span class="dot a"></span><span><b>Due soon.</b> Due within 30 days.</span></div><div><span class="dot r"></span><span><b>Overdue.</b> Past the due date.</span></div><div><span class="dot m"></span><span><b>No date.</b> Never shown as green.</span></div></div></div>
+<section class="sec alt"><div class="wrap"><div class="grid2" style="align-items:center"><div><div class="eyebrow">Traffic lights</div><h2 class="h2">See where you stand in a second</h2><p class="lead">Every check is assigned a due date and colour-coded status, making it easy to see what&rsquo;s up to date and what needs attention. Where a date hasn&rsquo;t been recorded, this is clearly highlighted rather than being shown as compliant.</p>
+<div class="lights"><div><span class="dot g"></span><span><b>In date.</b> More than 30 days to go.</span></div><div><span class="dot a"></span><span><b>Due soon.</b> Due within 30 days.</span></div><div><span class="dot r"></span><span><b>Overdue.</b> Past the due date.</span></div><div><span class="dot m"></span><span><b>No date.</b> No due date has been recorded.</span></div></div></div>
 <div class="card"><div class="bar" aria-hidden="true"></div><div style="margin-top:20px"><b>Your score, across every site</b><p style="color:var(--mute);margin:6px 0 14px">We&rsquo;ll show you how your own properties would look.</p>{SIGNUP}</div></div></div></div></section>
-<section class="sec alt"><div class="wrap"><div class="eyebrow">Privacy and control</div><h2 class="h2">Your records stay yours</h2><div class="grid2">''' + ''.join(f'<div class="tile"><span class="rule"></span><div class="h3">{a}</div><p>{b}</p></div>' for a,b in [('Only your company&rsquo;s records','Each client sees their own properties and records, and nothing belonging to anyone else.'),('Rules enforced by the system','What each person can see and do is controlled by the system itself, not just hidden on screen.'),('Private document storage','Certificates, documents and uploaded photos are stored privately.'),('A record of changes','Changes to compliance records are logged, so there is always a clear trail.')]) + '</div></div></section>' + """<section class="sec"><div class="wrap center-head"><div class="eyebrow">On your phone</div><h2 class="h2">Your whole passport in your pocket</h2><p class="lead">Your score, your checks and your tasks, wherever you are.</p><img class="appphone big" src="/img/app-phone.webp" width="712" height="1761" alt="Tremcore app home screen showing core compliance at 80%, quick access to tasks and emergency information, and add-ons" loading="lazy"></div></section>""" + cta('Ready to see your own sites scored?','Sign up and add your first site. It takes a few minutes.')
+<section class="sec alt"><div class="wrap"><div class="eyebrow">Privacy and control</div><h2 class="h2">Your records stay yours</h2><div class="grid3">''' + ''.join(f'<div class="tile"><span class="rule"></span><div class="h3">{a}</div><p>{b}</p></div>' for a,b in [('Your records, kept private.','Each company has access only to its own properties, information and records, ensuring your business data remains separate and confidential.'),('Private document storage','Certificates, documents and uploaded photos are stored securely.'),('Changes tracked','Changes to your compliance records are recorded, giving you a clear history of updates and activity.')]) + '</div></div></section>' + """<section class="sec"><div class="wrap center-head"><div class="eyebrow">On your phone</div><h2 class="h2">Your whole passport in your pocket</h2><p class="lead">Your score, your checks and your tasks, wherever you are.</p><img class="appphone big" src="/img/app-phone.webp" width="712" height="1761" alt="Tremcore app home screen showing core compliance at 80%, quick access to tasks and emergency information, and add-ons" loading="lazy"></div></section>""" + cta('Ready to see your own sites&rsquo; compliance score?','Sign up today, it only takes a few minutes!')
 
 def faq(q, a): return f'<details><summary><span>{q}</span><span class="plus" aria-hidden="true">+</span></summary><p>{a}</p></details>'
 rows = ''.join(f'<div class="drow"><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></div>' for c,t,l in [('g','Fire risk assessment','In date'),('a','Fire alarm service and test','Due in 12d'),('r','Portable appliance testing','Overdue 4d'),('m','Kitchen extract cleaning','No date'),('g','Legionella risk assessment','In date')])
@@ -396,7 +375,7 @@ what = f'''<section class="sec"><div class="wrap"><div class="center-head"><div 
 {row_open}<article class="plan-card"><div class="eyebrow">The Compliance Passport</div><h3 class="h3" style="font-size:36px">Self-Managed</h3><p style="color:var(--mute)">For businesses that want to keep their own records and arrange their own inspections.</p>
 <ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li></ul>
 <div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px">{SIGNUP}<a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn ghost" href="/contact/?package=1">Ask a question</a></div></div></article>
-{managed_html if SHOW_MANAGED else ""}{row_close}<div id="demo" class="demo-video"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">The passport, start to finish</h2></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>''' + cta('','')
+{managed_html if SHOW_MANAGED else ""}{row_close}<div id="demo" class="demo-video"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">Everything in one place, made simple.</h2></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>''' + cta('','')
 how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it works</div><h2 class="h2">Simple to start. Easy to live with.</h2>
 <ol class="steps"><li><span class="no">01</span><div class="h3">Get Started</div><p>Create your account and add your first site. It&rsquo;s quick and easy, and only takes a few minutes to get started.</p></li><li><span class="no">02</span><div class="h3">Add your records</div><p>Upload certificates, enter due dates and add the checks specific to your premises. Each site has its own passport, ready on your mobile or desktop.</p></li><li><span class="no">03</span><div class="h3">Stay on top of it</div><p>Keep your records up to date and keep your property safe.</p></li></ol></div></section>
 <section class="sec alt" id="faq"><div class="wrap"><div class="eyebrow">Questions</div><h2 class="h2">Before you ask</h2><p class="lead">Something not covered here? Get in touch and we will answer it.</p><div class="faq">''' + ''.join(faq(q,a) for q,a in [

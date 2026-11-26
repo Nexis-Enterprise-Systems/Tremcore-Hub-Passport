@@ -230,3 +230,9 @@
 - Aaron's 9-change list applied (Media page prices heading and Red Lion text; Media "A few questions" section; How it works steps 01-03; What you get heading and text; bottom section heading and text removed, both buttons kept).
 - New 7 price boxes on What you get, under the "WHAT YOU GET" label. Styling lives in `web/public/site.css` (classes start `tcp-`), not an inline style block, because the site's security rules (CSP) block inline style blocks.
 - Prices shown as supplied by Aaron (Passport 14.99/month, Toolbox Talks 4.99, Clock In/Out 7.99, Website 400 fixed, Social 99/month, Reviews 9.99, Posters 4.99). VAT wording still to be confirmed.
+
+## 26 Nov 2026 - Website text changes, part 2 (changes 10 to 27)
+- Passport page: video heading and text, "What it covers" heading and text, every "and more" bullet removed, new "Further services" card (Toolbox Talks, Staff Clock In / Out), "Tailored to your premises" card, traffic-light wording, Privacy cards cut from four to three (the "Rules enforced by the system" card removed), closing wording.
+- Home page: top text, Add-ons heading and text, "A clear picture at a glance" card, "Yours to run" card removed, whole "Sound familiar?" section removed, "The passport" section keeps its heading and text with its cards removed and the intro line in place of the small label.
+- The What you get page video heading changed to match (same heading as the passport page).
+- With cards removed, the Home feature row and the passport Privacy row are now three across so they fill the width.

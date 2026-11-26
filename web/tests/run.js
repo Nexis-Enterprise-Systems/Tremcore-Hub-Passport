@@ -1569,7 +1569,7 @@ const USERS = {
     let signupOpen = false;
     await pg.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: String(signupOpen) }));
     pg.on('console', (m) => { if (m.type() === 'error') probs.push(m.text()); }); pg.on('pageerror', (e) => probs.push(String(e)));
-    for (const [u, h] of [['/', 'Commercial property compliance'], ['/passport/', 'The passport, start to finish'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Ask us a question']]) {
+    for (const [u, h] of [['/', 'Commercial property compliance'], ['/passport/', 'Everything in one place, made simple.'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Ask us a question']]) {
       await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
     }
     await pg.goto(base + '/');
@@ -1577,6 +1577,9 @@ const USERS = {
     check('website never mentions Level 2 or 3 or jobs', !/Level 2|Level 3|Raise a Job|Managed Compliance/i.test(await pg.locator('body').innerText()));
     await pg.goto(base + '/what-you-get/');
     check('website does not offer the Managed Service for now (no card, no postcode box)', (await pg.locator('#managed').count()) === 0 && (await pg.locator('#area-check').count()) === 0 && !/Managed Service/i.test(await pg.locator('body').innerText()));
+    await pg.goto(base + '/'); { const t = await pg.locator('body').innerText(); check('home page: Sound familiar section and Yours to run card are gone, the passport cards are gone, and the new wording is in', !/Sound familiar|Yours to run|Certificates in inboxes|Your reminders/i.test(t) && t.includes('More add-ons = better value with Tremcore.') && t.includes('A clear picture at a glance') && t.toLowerCase().includes('the tremcore passport brings it all together in one place.') && (await pg.locator('.hm .features .card').count()) === 3); }
+    await pg.goto(base + '/passport/'); { const t = await pg.locator('body').innerText(); check('passport page: no "and more", new Further services card, 3 privacy cards, new closing wording', !/and more/i.test(t) && t.includes('Further services') && t.includes('Tailored to your premises') && !/Rules enforced/i.test(t) && t.includes('Changes tracked') && t.includes('No due date has been recorded.') && t.includes('Sign up today, it only takes a few minutes!')); }
+    await pg.goto(base + '/what-you-get/');
     check('what you get page shows the 7 price boxes above the new heading, with the bottom section keeping both buttons and no heading', (await pg.locator('.tcp-card').count()) === 7 && (await pg.locator('.tcp-feature .tcp-price b').innerText()) === '£14.99' && (await pg.locator('h2:has-text("One passport, tailored to your business.")').count()) === 1 && (await pg.locator('.cta h2').count()) === 0 && (await pg.locator('.cta a.btn.solid[href="/register/"]').count()) === 1 && (await pg.locator('.cta .askdd').count()) === 1);
     await pg.goto(base + '/contact/?topic=social'); check('contact form subject offers the three subjects and the link preselects one', (await pg.locator('#f-topic option').allInnerTexts()).join('|') === 'Not sure yet|Free multi-site hub|Website|Social media management|Other' && (await pg.locator('#f-topic').inputValue()) === 'social' && (await pg.locator('#f-pkg').count()) === 0);
     await pg.goto(base + '/what-you-get/'); await pg.waitForTimeout(400);
