@@ -236,3 +236,8 @@
 - Home page: top text, Add-ons heading and text, "A clear picture at a glance" card, "Yours to run" card removed, whole "Sound familiar?" section removed, "The passport" section keeps its heading and text with its cards removed and the intro line in place of the small label.
 - The What you get page video heading changed to match (same heading as the passport page).
 - With cards removed, the Home feature row and the passport Privacy row are now three across so they fill the width.
+
+## 26 Nov 2026 - Prototype v54 saved (design reference only, not live)
+- `prototype/app-v54-2026-11-26/` holds the v54 clickable prototype (Claude artifact build) with its four add-ons: Toolbox Talks, Staff Clock In / Out, Reviews, Poster Generator.
+- The real app already matches v54's Home, Compliance (Core / Other), Tasks and Settings layout. What v54 adds that the real app does not have: Reviews and Poster Generator add-ons, "Buy Now" cards with a yearly-upfront option (save 15%), an "Unlock all 4 add-ons" bundle, and a bell with task reminders on Home.
+- Nothing from v54 has been put into the real app yet; waiting on Aaron's decision on scope.

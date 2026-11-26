@@ -1,0 +1,85 @@
+{
+  "app": "Tremcore Compliance",
+  "build": "2026-11-26 v54",
+  "source_version": "1795715377-8ce1",
+  "title": "Tremcore Compliance",
+  "capabilities": {
+    "downloads": true,
+    "sample": {
+      "images": true
+    }
+  },
+  "published_files": {
+    "addons/posters.html": "addons/posters.html",
+    "addons/reviews.html": "addons/reviews.html",
+    "assets/tremcore-mark.png": "assets/tremcore-mark.png",
+    "poster-preview.jpg": "poster-preview.jpg",
+    "poster.pdf": "poster.pdf",
+    "samples/eicr-2017.pdf": "samples/eicr-2017.pdf",
+    "samples/eicr-2022.pdf": "samples/eicr-2022.pdf",
+    "samples/ext-2025.pdf": "samples/ext-2025.pdf",
+    "samples/ext-2026.pdf": "samples/ext-2026.pdf",
+    "samples/gas-2023.pdf": "samples/gas-2023.pdf",
+    "samples/gas-2024.pdf": "samples/gas-2024.pdf",
+    "samples/gas-2025.pdf": "samples/gas-2025.pdf",
+    "samples/pat-2025.pdf": "samples/pat-2025.pdf"
+  },
+  "files": {
+    "addons/posters.html": {
+      "sha256": "2a5e8adad19406a24cbc72d780f4251173b6a0a3f50ce5a4ee5653ccc0af8088",
+      "bytes": 77552
+    },
+    "addons/reviews.html": {
+      "sha256": "b4dddae67c9497c481863bc4dbdc0efb963703186f60e34dd96dd0af004767e0",
+      "bytes": 224475
+    },
+    "assets/tremcore-mark.png": {
+      "sha256": "b826d46a9c0fb2ceace0e9955b9e60982e9d361409f3be1cf54129850c140ced",
+      "bytes": 20670
+    },
+    "index.html": {
+      "sha256": "d2841b316dca8da750ca59010259d4d7ff9868210b69b62eae46adffd012cfb7",
+      "bytes": 399942
+    },
+    "poster-preview.jpg": {
+      "sha256": "3e9f1c934f88ed0bb1a3192ac1f7cae56e3c2e25eb079914bbec69d6c0763002",
+      "bytes": 73611
+    },
+    "poster.pdf": {
+      "sha256": "eac85bf21a358e3a004f30b236606c56775aa5570efadad3d69c78ae567f86eb",
+      "bytes": 294650
+    },
+    "samples/eicr-2017.pdf": {
+      "sha256": "24d0fe3b419535d22a2d094552cc4acce19e3df71596ae27acad89918ae6d3ac",
+      "bytes": 2269
+    },
+    "samples/eicr-2022.pdf": {
+      "sha256": "ac4d25d56d81b6c7ca894cbe71d8a761699d6531424532a72239ec938df16ce5",
+      "bytes": 2268
+    },
+    "samples/ext-2025.pdf": {
+      "sha256": "9c0850271a845c06781959b2d96b74d9ae0abc64a4d60356a339915a12ec45ad",
+      "bytes": 2277
+    },
+    "samples/ext-2026.pdf": {
+      "sha256": "52e3819ea33e2085af8e5ea1776c2f47e2b744ceb5bdbc5bf2bfb01825abb4b5",
+      "bytes": 2277
+    },
+    "samples/gas-2023.pdf": {
+      "sha256": "5cdba2ea3a00b4762311062011a27a6596652c5b83a386b2e2dff8049217d889",
+      "bytes": 2251
+    },
+    "samples/gas-2024.pdf": {
+      "sha256": "d85fb1dd98c6f3c1f8add208bf3fa5e4ac383a28beb685b7e135d9fb11c953d0",
+      "bytes": 2260
+    },
+    "samples/gas-2025.pdf": {
+      "sha256": "f62d25b100098ae95e353a1aa0825b969761c7f2db37b7167dfb84df2a5d8a21",
+      "bytes": 2260
+    },
+    "samples/pat-2025.pdf": {
+      "sha256": "504c54723a4293b590bf19ea08f1470ec5ec6f12b7f1fb9abba7abb1719c8add",
+      "bytes": 2283
+    }
+  }
+}
