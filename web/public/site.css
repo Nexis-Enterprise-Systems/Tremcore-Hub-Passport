@@ -229,3 +229,24 @@ details.askdd>summary{padding:0 22px;margin:0;display:inline-flex;align-items:ce
 @media (max-width:700px){.skyline .sd{display:none}.skyline .sm{display:block}}
 
 .appphone.big{display:block;width:340px;max-width:84vw;height:auto;margin:28px auto 0;filter:drop-shadow(0 30px 50px rgba(0,0,0,.7)) drop-shadow(0 0 60px rgba(212,175,85,.12))}
+.tcp{max-width:760px;margin:28px auto 44px;padding:0 4px;font-family:inherit;color:#F3EEE4}
+.tcp *{box-sizing:border-box}
+.tcp-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px 16px}
+.tcp-card{position:relative;display:flex;flex-direction:column;gap:8px;padding:22px 20px 18px;border:1px solid rgba(212,175,90,.45);border-radius:16px;background:#0f0d0a;text-align:left}
+.tcp-feature{grid-column:1/-1;max-width:420px;width:100%;justify-self:center;text-align:center;align-items:center;border:2px solid #D4AF5A;background:linear-gradient(135deg,#2a2316,#0d0b09 75%);box-shadow:0 18px 50px rgba(212,175,90,.16);padding:30px 24px 24px}
+.tcp-tag{position:absolute;top:-12px;right:14px;font:900 11px/1 system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#0b1a0e;background:#45c35f;border-radius:99px;padding:6px 11px}
+.tcp-feature .tcp-tag{right:auto;left:50%;transform:translateX(-50%);background:linear-gradient(180deg,#f6d27a,#d9a23a);color:#1a1204;letter-spacing:.18em;padding:7px 14px}
+.tcp-name{font-weight:800;font-size:16px;line-height:1.25;color:#F3EEE4}
+.tcp-feature .tcp-name{font-size:20px}
+.tcp-price{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.tcp-price b{font-weight:900;font-size:32px;line-height:1;letter-spacing:-.03em;color:#E9B949}
+.tcp-feature .tcp-price{justify-content:center}
+.tcp-feature .tcp-price b{font-size:54px;background:linear-gradient(180deg,#ffe29a,#d9a23a 60%,#a8721c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tcp-price span{font-weight:700;font-size:14px;color:#CFC6B4}
+.tcp-desc{margin:0;font-size:14.5px;line-height:1.45;color:#CFC6B4}
+.tcp-note{margin-top:auto;padding-top:4px;font-weight:600;font-size:13px;line-height:1.35;color:#E9B949}
+.tcp-note.muted{color:#a59c8c}
+@media (max-width:600px){
+  .tcp-grid{grid-template-columns:1fr;gap:22px}
+  .tcp-feature .tcp-price b{font-size:46px}
+}

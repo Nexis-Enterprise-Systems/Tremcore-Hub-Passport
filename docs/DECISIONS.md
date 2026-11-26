@@ -225,3 +225,8 @@
 - 25 Nov 2026: gold diamond added in the centre of the skyline divider line.
 - 25 Nov 2026: the line between the skylines now tapers to a point at each side of the centre diamond, like the outer ends do.
 - 25 Nov 2026: new phone picture (Aaron's supplied render of the app home screen, cut out on a transparent background, /img/app-phone.webp) replaces the old phone on the Home page and is added as a new 'On your phone' section at the bottom of the passport page. Also fixed the call-to-action buttons being pushed apart (class name clash with .up).
+
+## 26 Nov 2026 - Website text changes and price boxes
+- Aaron's 9-change list applied (Media page prices heading and Red Lion text; Media "A few questions" section; How it works steps 01-03; What you get heading and text; bottom section heading and text removed, both buttons kept).
+- New 7 price boxes on What you get, under the "WHAT YOU GET" label. Styling lives in `web/public/site.css` (classes start `tcp-`), not an inline style block, because the site's security rules (CSP) block inline style blocks.
+- Prices shown as supplied by Aaron (Passport 14.99/month, Toolbox Talks 4.99, Clock In/Out 7.99, Website 400 fixed, Social 99/month, Reviews 9.99, Posters 4.99). VAT wording still to be confirmed.

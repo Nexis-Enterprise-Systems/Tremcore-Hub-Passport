@@ -79,7 +79,8 @@ def page(path, title, desc, body, current, noindex=False, extra_css=''):
     open(os.path.join(d, 'index.html'), 'w').write(html)
 
 def cta(h, p):
-    return f'<section class="sec alt"><div class="wrap cta"><h2 class="h2">{h}</h2><p>{p}</p><div class="row">{SIGNUP}{ask_menu("cband")}{OR_CALL}</div></div></section>'
+    head = f'<h2 class="h2">{h}</h2><p>{p}</p>' if h else ''
+    return f'<section class="sec alt"><div class="wrap cta">{head}<div class="row">{SIGNUP}{ask_menu("cband")}{OR_CALL}</div></div></section>'
 
 ITEMS = [('g','Fire risk assessment','Mar 2027','In date'),('a','Fire alarm service and test','in 12 days','Due in 12d'),('r','Portable appliance testing','4 days ago','Overdue 4d'),('m','Kitchen extract cleaning','Not entered','No date'),('g','Legionella risk assessment','Jan 2027','In date'),('g','Emergency lighting test','Feb 2027','In date')]
 items = ''.join(f'<li{" class=fade" if i==5 else ""}><span class="dot {c}"></span><span>{t}</span><span class="lab">{l}</span></li>' for i,(c,t,d,l) in enumerate(ITEMS))
@@ -342,13 +343,62 @@ managed_html = '''<article class="plan-card" id="managed"><div class="eyebrow">T
 '''
 row_open = '<div class="plan-row">' if SHOW_MANAGED else ''
 row_close = '</div>' if SHOW_MANAGED else ''
-what = f'''<section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What you get</div><h2 class="h2">One passport, quoted to suit your premises</h2><p class="lead">Tell us about your sites and we&rsquo;ll put together a quote that fits.</p></div>
+what = f'''<section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What you get</div></div>
+<section class="tcp" aria-label="Our prices">
+  <div class="tcp-grid">
+    <div class="tcp-card tcp-feature">
+      <span class="tcp-tag">Core product</span>
+      <div class="tcp-name">The Compliance Passport</div>
+      <div class="tcp-price"><b>£14.99</b><span>per month</span></div>
+      <p class="tcp-desc">Every certificate in one place, automatic renewal reminders and your compliance at a glance.</p>
+    </div>
+    <div class="tcp-card">
+      <div class="tcp-name">Toolbox Talks</div>
+      <div class="tcp-price"><b>£4.99</b><span>per month</span></div>
+      <p class="tcp-desc">30 ready-to-deliver safety talks, with attendance records. Bespoke talks £1.99 each.</p>
+      <div class="tcp-note">£2.99 per month with the Tremcore app</div>
+    </div>
+    <div class="tcp-card">
+      <div class="tcp-name">Staff Clock In / Out</div>
+      <div class="tcp-price"><b>£7.99</b><span>per month</span></div>
+      <p class="tcp-desc">QR clock-in, a live log of who's on site, shift rota and staff hours report.</p>
+      <div class="tcp-note">£5.99 per month with the Tremcore app</div>
+    </div>
+    <div class="tcp-card">
+      <div class="tcp-name">Bespoke Website Design</div>
+      <div class="tcp-price"><b>£400</b><span>fixed price</span></div>
+      <p class="tcp-desc">Up to 4 pages, built from scratch and designed to bring in new customers.</p>
+      <div class="tcp-note muted">One price. No surprises.</div>
+    </div>
+    <div class="tcp-card">
+      <div class="tcp-name">Social Media Management</div>
+      <div class="tcp-price"><b>£99</b><span>per month</span></div>
+      <p class="tcp-desc">A ready-made post every day for your chosen platforms. Just click send, or edit.</p>
+      <div class="tcp-note muted">Fixed price · 12-month rolling contract</div>
+    </div>
+    <div class="tcp-card">
+      <span class="tcp-tag">Free with Social</span>
+      <div class="tcp-name">Customer Review Management</div>
+      <div class="tcp-price"><b>£9.99</b><span>per month</span></div>
+      <p class="tcp-desc">A QR code linked to Google and TripAdvisor. 4 and 5 star reviews go live; 1 to 3 star come to you first.</p>
+      <div class="tcp-note muted">12-month rolling contract · or free with Social</div>
+    </div>
+    <div class="tcp-card">
+      <span class="tcp-tag">Free with Social</span>
+      <div class="tcp-name">Poster Design Studio</div>
+      <div class="tcp-price"><b>£4.99</b><span>per month</span></div>
+      <p class="tcp-desc">Create professional posters in minutes. Print them for your premises or share them straight to your socials.</p>
+      <div class="tcp-note muted">Or free with Social</div>
+    </div>
+  </div>
+</section>
+<div class="center-head"><h2 class="h2">One passport, tailored to your business.</h2><p class="lead">Whether you have one location or several, tell us a little about your business and we&rsquo;ll put together a personalised quote based on your requirements.</p></div>
 {row_open}<article class="plan-card"><div class="eyebrow">The Compliance Passport</div><h3 class="h3" style="font-size:36px">Self-Managed</h3><p style="color:var(--mute)">For businesses that want to keep their own records and arrange their own inspections.</p>
 <ul><li>Your own digital compliance passport</li><li>Traffic-light view of every property</li><li>Reminders before anything lapses</li><li>Upload and keep your certificates safe</li><li>Add your own checks for your premises</li></ul>
 <div class="quote">Tailored to your premises. Ask for a quote.<div class="row" style="margin-top:16px">{SIGNUP}<a class="btn ghost" href="#demo-player">{PLAY} Watch the preview</a><a class="btn ghost" href="/contact/?package=1">Ask a question</a></div></div></article>
-{managed_html if SHOW_MANAGED else ""}{row_close}<div id="demo" class="demo-video"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">The passport, start to finish</h2></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>''' + cta('Want to see it around your premises?','Tell us about your premises and we&rsquo;ll show you how it would work.')
+{managed_html if SHOW_MANAGED else ""}{row_close}<div id="demo" class="demo-video"><div class="center-head"><div class="eyebrow">See it in action</div><h2 class="h2">The passport, start to finish</h2></div><div class="vidwrap"><video id="passport-video" controls preload="metadata" playsinline poster="/media/img/sm-poster-2.jpg" width="720" height="1280" aria-label="Tremcore Compliance Passport video, about 90 seconds"><source src="/media/tremcore-self-managed-showcase-2.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>''' + cta('','')
 how = f'''<section class="sec"><div class="wrap"><div class="eyebrow">How it works</div><h2 class="h2">Simple to start. Easy to live with.</h2>
-<ol class="steps"><li><span class="no">01</span><div class="h3">Sign up</div><p>Create your account and add your first site. It takes a few minutes.</p></li><li><span class="no">02</span><div class="h3">Add your records</div><p>Upload certificates, enter due dates and add the checks specific to your premises. Each site has its own passport, ready on your phone or computer.</p></li><li><span class="no">03</span><div class="h3">Stay on top of it</div><p>Keep your records up to date and watch the colours stay green.</p></li></ol></div></section>
+<ol class="steps"><li><span class="no">01</span><div class="h3">Get Started</div><p>Create your account and add your first site. It&rsquo;s quick and easy, and only takes a few minutes to get started.</p></li><li><span class="no">02</span><div class="h3">Add your records</div><p>Upload certificates, enter due dates and add the checks specific to your premises. Each site has its own passport, ready on your mobile or desktop.</p></li><li><span class="no">03</span><div class="h3">Stay on top of it</div><p>Keep your records up to date and keep your property safe.</p></li></ol></div></section>
 <section class="sec alt" id="faq"><div class="wrap"><div class="eyebrow">Questions</div><h2 class="h2">Before you ask</h2><p class="lead">Something not covered here? Get in touch and we will answer it.</p><div class="faq">''' + ''.join(faq(q,a) for q,a in [
 ('Is every check on the list a legal requirement?','No. The list shows common checks for commercial premises. What applies to your property, and how often, depends on the premises, the equipment, current legislation and guidance, and your risk assessment. If you are unsure, ask us.'),
 ('Can I keep using my own contractors?','Yes. You stay in control. You choose your own contractors and record the results in your passport.'),
@@ -434,14 +484,14 @@ media = f'''<section class="sec hero"><div class="wrap">
 <div class="vidwrap"><video controls preload="metadata" playsinline poster="/media/img/video-poster.jpg" width="720" height="1280" aria-label="Tremcore Media showcase video, 90 seconds"><source src="/media/tremcore-media-showcase.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>
 <section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What we do</div><h2 class="h2">Everything your business shows the world</h2><p class="lead">Four things, one team, one look.</p></div>
 <div class="grid4"><div class="tile"><span class="rule"></span><div class="h3">Your website</div><p>A site built around your business: who you are, what you offer and how to book or get in touch.</p></div><div class="tile"><span class="rule"></span><div class="h3">Social media</div><p>Posts and stories that match your brand, planned ahead so your pages never go quiet.</p></div><div class="tile"><span class="rule"></span><div class="h3">Posters</div><p>Event and offer posters from a set of ready-made designs, with your branding and a QR code on every one.</p></div><div class="tile"><span class="rule"></span><div class="h3">Customer reviews</div><p>Every review in one place, with a suggested reply in the tone you choose, ready for you to check and send.</p></div></div></div></section>
-<section class="sec" id="prices"><div class="wrap"><div class="center-head"><div class="eyebrow">Prices</div><h2 class="h2">Get your business online, then keep the customers coming</h2><p class="lead">A bespoke website designed around your business, with simple monthly extras to bring customers through the door.</p></div>
+<section class="sec" id="prices"><div class="wrap"><div class="center-head"><div class="eyebrow">Prices</div><h2 class="h2">Get your business online and keep it growing.</h2><p class="lead">A bespoke website designed around your business, with ongoing monthly services to help attract new customers, increase your visibility and keep your business moving forward.</p></div>
 <div class="bespoke"><span class="btag">Bespoke website design</span><div class="bprice"><b>&pound;400</b><span class="fixed">Fixed price</span></div><ul class="ticks"><li>Up to 4 pages, built from scratch</li><li>Designed to bring in new customers</li><li>One price. No surprises.</li></ul></div>
 <p class="then">Then keep the customers coming</p>
 <div class="pgrid"><div class="pcard"><div class="h3">Social Media Management</div><div class="pprice"><b>&pound;99</b> <span>per month</span></div><p>A ready-made post every day for your chosen platforms. Just click send, or edit.</p><p class="pfoot">Fixed price &middot; 12-month rolling contract</p></div><div class="pcard"><span class="freebadge">Free with Social</span><div class="h3">Customer Review Management</div><div class="pprice"><b>&pound;9.99</b> <span>per month</span></div><p>A QR code linked to Google and TripAdvisor. 4 and 5 star reviews go live; 1 to 3 star come to you first.</p><p class="pfoot">12-month rolling contract &middot; or free with Social</p></div><div class="pcard"><span class="freebadge">Free with Social</span><div class="h3">Poster Design Studio</div><div class="pprice"><b>&pound;4.99</b> <span>per month</span></div><p>Create professional posters in minutes. Print them for your premises or share them straight to your socials.</p><p class="pfoot">Or free with Social</p></div></div>
 <div class="row" style="justify-content:center;margin-top:32px"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a></div></div></section>
 <section class="sec alt"><div class="wrap">{feat('Your website','A few questions, then you see your new site',
-'We ask about your business, show you a first design to look at on a computer and on a phone, and take your feedback section by section until you are happy.',
-['Answer a few simple questions about your business','See the design on a desktop and on a phone before anything goes live','Tell us what you love and what to change, part by part'],
+'We ask about your business, show you a first design to look at on a desktop and on a mobile, and take your feedback section by section until you are happy.',
+['Answer a few simple questions about your business','See the design on a desktop and on a mobile before anything goes live','Tell us what you love and what to change, part by part'],
 shot('builder-start.jpg','The start screen of the Tremcore website builder',1400,875))}</div></section>
 <section class="sec"><div class="wrap">{feat('Posters','Event posters, ready when you are',
 'Pick a design, fill in the details and download it. Your branding is already in place, and each poster can carry a QR code that links to your booking page or menu.',
@@ -453,7 +503,7 @@ shot('posters-choose.jpg','Choosing a poster design in the Tremcore poster studi
 'Reviews from your listings arrive in one inbox. Each one comes with a suggested reply written in the tone you pick, which you can edit before you send it. Social posts and stories follow the same look as your website and posters.',
 ['One inbox for your reviews, with the lowest ratings at the top','A suggested reply for every review, in a friendly, apologetic or formal tone','A QR code on a poster or table card that asks happy customers to leave a review'],
 shot('posters-edit.jpg','Editing a poster headline and details in the Tremcore poster studio',1400,875))}</div></section>
-<section class="sec"><div class="wrap"><div class="grid2" style="align-items:center"><div><div class="eyebrow">An example</div><h2 class="h2">The Red Lion, Rochester</h2><p class="lead">This is the kind of website we build. The Red Lion is a made-up pub, so the menu, prices and reviews are only an illustration, but you can open it and scroll around it like any other site.</p>
+<section class="sec"><div class="wrap"><div class="grid2" style="align-items:center"><div><div class="eyebrow">An example</div><h2 class="h2">The Red Lion, Rochester</h2><p class="lead">This is an example of the type of website we create. The Red Lion Rochester is a fictional business, so the menu, prices and customer reviews are for demonstration purposes only. Feel free to explore the website, click through the pages and see how everything works, just as you would on a live website.</p>
 <div class="row" style="margin-top:28px"><a class="btn solid" href="/media/red-lion/">Open the example website {ARROW}</a></div></div>
 <div class="devices">{shot('redlion-desktop.jpg','The example Red Lion website on a computer',1400,850)}{shot('redlion-mobile.jpg','The example Red Lion website on a phone',500,1062)}</div></div></div></section>
 <section class="sec alt"><div class="wrap cta"><h2 class="h2">Want to see what it could look like for you?</h2><p>Tell us a little about your business and we&rsquo;ll get back to you.</p><div class="row"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/">Tremcore Compliance Passport</a></div></div></section>'''
