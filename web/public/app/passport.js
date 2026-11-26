@@ -15,8 +15,8 @@
   const NS = 'http://www.w3.org/2000/svg';
   // Shown if the server list cannot be read, so the paid add-ons are always visible with their price.
   const EXTRA_DEFAULT = [
-    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 299, charged_per: 'site', owned: false },
-    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 599, charged_per: 'site', owned: false }
+    { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 299, yearly_pence: 3050, charged_per: 'site', owned: false },
+    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 599, yearly_pence: 6110, charged_per: 'site', owned: false }
   ];
   // Add-ons that are announced but not built into the real app yet: shown on Home as "Coming soon", never sold.
   const SOON = [
@@ -142,6 +142,8 @@
         h('option', { value: 'all', selected: site === 'all' }, 'All sites'), ...props.map((p) => h('option', { value: p.id, selected: site === p.id }, p.name))));
     }
     const extraOf = (code) => extras.find((e) => e.code === code) || EXTRA_DEFAULT.find((e) => e.code === code);
+    // Paying a year upfront is 15% off twelve months, to the nearest 10p (the database works it out the same way and is what Stripe is charged).
+    const yearlyPence = (e) => e.yearly_pence || Math.round(e.price_pence * 12 * 0.85 / 10) * 10;
     const priceText = (e) => money(e.price_pence) + ' + VAT ' + (e.charged_per === 'site' ? 'per site, ' : '') + 'per month';
     const legendLines = (c) => h('div', { class: 'lglist' },
       h('div', { class: 'lg' }, h('i', { class: 'dot green' }), 'On track · ' + c.green),
@@ -167,9 +169,9 @@
         h('span', { class: 'aoc-i', 'aria-hidden': 'true' }, 'i'),
         h('span', { class: 'aoc-ic', 'aria-hidden': 'true' }, icon(o.icon), o.owned ? null : h('span', { class: 'aoc-lock' }, icon('lock'))),
         h('strong', { class: 'aoc-name' }, o.name), h('span', { class: 'aoc-blurb' }, o.blurb),
-        h('span', { class: 'aoc-price' }, o.price, h('small', {}, ' pcm')), h('span', { class: 'aoc-sub' }, o.sub),
+        h('span', { class: 'aoc-price' }, o.price, h('small', {}, ' pcm')), h('span', { class: 'aoc-sub' }, o.sub), o.yearly ? h('span', { class: 'aoc-year' }, 'or ' + o.yearly + ' a year upfront \u00b7 save 15%') : null,
         h('span', { class: 'aoc-btn' }, o.owned ? 'Active \u2013 open' : o.soon ? 'Coming soon' : [icon('lock'), 'Buy Now']));
-      const live = (code, ik, blurb) => { const e = extraOf(code); if (e.owned) return null; return aoc({ code, icon: ik, name: e.name, blurb, price: money(e.price_pence), sub: (e.charged_per === 'site' ? 'per site \u00b7 ' : '') + '+ VAT', owned: !!e.owned, go: () => viewExtra(code) }); };
+      const live = (code, ik, blurb) => { const e = extraOf(code); if (e.owned) return null; return aoc({ code, icon: ik, name: e.name, blurb, price: money(e.price_pence), yearly: money(yearlyPence(e)), sub: (e.charged_per === 'site' ? 'per site \u00b7 ' : '') + '+ VAT', owned: !!e.owned, go: () => viewExtra(code) }); };
       const promos = isL1 ? [live('toolbox_talks', 'chat', '30 talks, bespoke talks \u00a31.99 each'), live('staff_signin', 'clock', 'QR clock-in and attendance log')].filter(Boolean) : [];
       const soons = isL1 ? SOON.map((x) => aoc({ code: x.code, icon: x.icon, name: x.name, blurb: x.short, price: money(x.price_pence), sub: '+ VAT', soon: true, go: () => viewSoon(x.code) })) : [];
       // What needs attention now: overdue first, then due in the next 30 days (checks and tasks), so it is the first thing seen.
@@ -422,11 +424,11 @@
     // ---------- paid add-ons (Toolbox Talks, Staff Clock In / Out) ----------
     // The head-office user is sent to Stripe to pay; the add-on switches on when Stripe confirms (the database decides, not this screen).
     let onExtra = null, extraChecks = 0;
-    async function startExtraPayment(code, btn, box) {
+    async function startExtraPayment(code, btn, box, interval) {
       await ctx.busy(btn, async () => {
         try {
           const { data: { session } } = await sb.auth.getSession();
-          const r = await fetch('/api/checkout-extra', { method: 'POST', headers: { Authorization: 'Bearer ' + ((session && session.access_token) || ''), 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+          const r = await fetch('/api/checkout-extra', { method: 'POST', headers: { Authorization: 'Bearer ' + ((session && session.access_token) || ''), 'Content-Type': 'application/json' }, body: JSON.stringify({ code, interval: interval === 'year' ? 'year' : 'month' }) });
           const j = await r.json().catch(() => ({}));
           if (r.ok && j.url) { location.href = j.url; return; }
           ctx.message(box, 'err', j.error || 'Sorry, we could not start the payment. Please try again, or contact Tremcore.');
@@ -474,10 +476,14 @@
         e.owned && state !== 'confirming'
           ? h('div', { class: 'msg ok', role: 'status' }, 'This add-on is active on your account.')
           : state === 'confirming' ? null : [h('p', { class: 'big goldbox' }, priceText(e)),
-            e.charged_per === 'site' ? h('p', { class: 'muted' }, 'This is charged for each site. You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month. Add-ons are always charged monthly, with no yearly discount.') : null,
+            e.charged_per === 'site' ? h('p', { class: 'muted' }, 'This is charged for each site. You have ' + sites + (sites === 1 ? ' site' : ' sites') + ': ' + sites + ' × ' + money(e.price_pence) + ' = ' + money(total) + ' + VAT per month, or ' + money(yearlyPence(e) * qty) + ' + VAT for 12 months paid upfront.') : null,
+            isHead && ((company && company.level) || 1) === 1 ? h('fieldset', { class: 'payway', id: 'extra-way' }, h('legend', {}, 'How would you like to pay?'),
+              h('label', { class: 'payopt' }, h('input', { type: 'radio', name: 'extra-way', value: 'month', checked: true }), h('span', {}, h('strong', {}, 'Monthly'), ' ' + money(total) + ' + VAT a month')),
+              h('label', { class: 'payopt' }, h('input', { type: 'radio', name: 'extra-way', value: 'year' }), h('span', {}, h('strong', {}, 'Yearly upfront'), ' ' + money(yearlyPence(e) * qty) + ' + VAT a year \u00b7 save 15%'))) : null,
             isHead && ((company && company.level) || 1) === 1
-              ? [h('button', { class: 'btn', id: 'extra-add', type: 'button', onclick: (ev) => startExtraPayment(code, ev.target, box) }, 'Add ' + e.name + ' · pay now'),
-                h('p', { class: 'muted small' }, 'You will be taken to our secure payment page. The add-on starts as soon as your payment is confirmed and is added to your monthly subscription.')]
+              ? [h('button', { class: 'btn', id: 'extra-add', type: 'button', onclick: (ev) => { const w = document.querySelector('input[name=extra-way]:checked'); startExtraPayment(code, ev.target, box, w && w.value); } }, 'Add ' + e.name + ' · pay now'),
+                h('p', { class: 'muted small' }, 'You will be taken to our secure payment page. The add-on starts as soon as your payment is confirmed. Monthly add-ons are added to your monthly subscription; a yearly add-on is one payment for 12 months.'),
+                h('p', { class: 'muted small', id: 'extra-terms' }, 'Add-ons run on a 12-month rolling contract: it renews for a further 12 months unless you request cancellation at least 30 days before the renewal date.')]
               : h('p', { class: 'muted' }, 'Ask your head-office user to add this to your account.'), box]));
       onExtra = code;
     }
@@ -693,9 +699,12 @@
       // Each add-on the business has, with what it costs; the ones it does not have can be added from here.
       const addonsOwned = extras.filter((e) => e.owned), addonsNot = extras.filter((e) => !e.owned && EXTRA_DEFAULT.some((x) => x.code === e.code));
       const perMonth = (e) => e.price_pence * (e.charged_per === 'site' ? Math.max(n, 1) : 1);
+      const perYear = (e) => yearlyPence(e) * (e.charged_per === 'site' ? Math.max(n, 1) : 1);
+      const isYr = (e) => e.billing_interval === 'year';
+      const costOf = (e) => (e.charged_per === 'site' ? Math.max(n, 1) + (n === 1 ? ' site \u00d7 ' : ' sites \u00d7 ') + money(isYr(e) ? yearlyPence(e) : e.price_pence) + ' = ' : '') + (isYr(e) ? money(perYear(e)) + ' + VAT per year (paid upfront)' : money(perMonth(e)) + ' + VAT per month');
       const addonRows = addonsOwned.length ? [
-        ...addonsOwned.map((e) => h('div', { class: 'kv', 'data-addon': e.code }, h('span', {}, e.name), h('span', {}, (e.charged_per === 'site' ? Math.max(n, 1) + (n === 1 ? ' site \u00d7 ' : ' sites \u00d7 ') + money(e.price_pence) + ' = ' : '') + money(perMonth(e)) + ' + VAT per month'))),
-        h('div', { class: 'kv', id: 'addons-total' }, h('span', {}, 'Add-ons total'), h('span', {}, money(addonsOwned.reduce((a, e) => a + perMonth(e), 0)) + ' + VAT per month'))
+        ...addonsOwned.map((e) => h('div', { class: 'kv', 'data-addon': e.code }, h('span', {}, e.name), h('span', {}, costOf(e)))),
+        h('div', { class: 'kv', id: 'addons-total' }, h('span', {}, 'Add-ons total'), h('span', {}, [addonsOwned.some((e) => !isYr(e)) ? money(addonsOwned.filter((e) => !isYr(e)).reduce((a, e) => a + perMonth(e), 0)) + ' + VAT per month' : null, addonsOwned.some(isYr) && addonsOwned.some((e) => !isYr(e)) ? ' and ' : null, addonsOwned.some(isYr) ? money(addonsOwned.filter(isYr).reduce((a, e) => a + perYear(e), 0)) + ' + VAT per year' : null].filter(Boolean).join('')))
       ] : [h('div', { class: 'kv' }, h('span', {}, 'Add-ons'), h('span', {}, 'None'))];
       const addLinks = lvl === 1 && isHead ? addonsNot.map((e) => h('button', { class: 'linkbtn', type: 'button', 'data-add-addon': e.code, onclick: () => viewExtra(e.code) }, 'Add ' + e.name + ' (' + money(e.price_pence) + (e.charged_per === 'site' ? ' per site' : '') + ' + VAT per month)')) : [];
       const plan = h('div', { class: 'card' }, h('h2', {}, 'Subscription Details'),

@@ -44,20 +44,21 @@ function checkoutParams({ companyId, sites, interval, email, origin, methods, we
   return q;
 }
 
-// An add-on is its own small subscription, charged monthly. The Stripe customer is reused when we already have one, so the card details carry over.
-function extraCheckoutParams({ companyId, code, name, unitPence, quantity, customerId, email, origin }) {
+// An add-on is its own small subscription, charged monthly (default) or once a year upfront (12 months in one payment, renews every 12 months). The Stripe customer is reused when we already have one, so the card details carry over.
+function extraCheckoutParams({ companyId, code, name, unitPence, quantity, customerId, email, origin, interval }) {
+  const every = interval === 'year' ? 'year' : 'month';
   if (!companyId || !code || !(unitPence > 0) || !(quantity >= 1 && quantity <= 100)) throw new Error('bad checkout details');
   const q = new URLSearchParams();
   q.set('mode', 'subscription');
   q.set('client_reference_id', companyId);
   if (customerId) q.set('customer', customerId); else if (email) q.set('customer_email', email);
   for (const pre of ['metadata', 'subscription_data[metadata]']) {
-    q.set(pre + '[company_id]', companyId); q.set(pre + '[kind]', 'extra'); q.set(pre + '[extra_code]', code); q.set(pre + '[quantity]', String(quantity));
+    q.set(pre + '[company_id]', companyId); q.set(pre + '[kind]', 'extra'); q.set(pre + '[extra_code]', code); q.set(pre + '[quantity]', String(quantity)); q.set(pre + '[interval]', every);
   }
   q.set('line_items[0][quantity]', String(quantity));
   q.set('line_items[0][price_data][currency]', 'gbp');
   q.set('line_items[0][price_data][unit_amount]', String(unitPence));
-  q.set('line_items[0][price_data][recurring][interval]', 'month');
+  q.set('line_items[0][price_data][recurring][interval]', every);
   q.set('line_items[0][price_data][product_data][name]', name);
   q.set('success_url', origin + '/app/?extra=' + encodeURIComponent(code) + '&paid=1');
   q.set('cancel_url', origin + '/app/?extra=' + encodeURIComponent(code) + '&paid=0');
@@ -93,7 +94,7 @@ function eventToAction(ev) {
       if (o.payment_status !== 'paid') return null;
       if (o.metadata && o.metadata.kind === 'extra') {
         const qty = parseInt(o.metadata.quantity, 10);
-        return Object.assign(base, { action: 'extra_paid', company: o.client_reference_id || o.metadata.company_id || null, subscription: o.subscription || null, extra: o.metadata.extra_code || null, quantity: qty >= 1 ? qty : 1 });
+        return Object.assign(base, { action: 'extra_paid', company: o.client_reference_id || o.metadata.company_id || null, subscription: o.subscription || null, extra: o.metadata.extra_code || null, quantity: qty >= 1 ? qty : 1, interval: o.metadata.interval === 'year' ? 'year' : 'month' });
       }
       return Object.assign(base, { action: 'paid', company: o.client_reference_id || (o.metadata && o.metadata.company_id) || null, subscription: o.subscription || null });
     case 'invoice.paid':

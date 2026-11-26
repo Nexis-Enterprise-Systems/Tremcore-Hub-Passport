@@ -347,9 +347,29 @@ const USERS = {
       const ro = await realFetch(base + '/api/clock?t=' + TOK, { headers: { 'x-forwarded-for': '8.8.8.8' } });
       check('clock api: guessing wrong codes is stopped after a few tries, and only for that address', last === 429 && rv.status === 429 && ro.status === 200);
     }
+    {   // yearly add-on: the database says what to charge, the server asks Stripe for one payment a year
+      const saved = extraReply;
+      extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 599, charged_per: 'site', quantity: 3, unit_pence: 6110, billing_interval: 'year' }] };
+      const ny = sent.length; const nys = stripeCalls.length;
+      const ry = await realFetch(base + '/api/checkout-extra', { method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'staff_signin', interval: 'year' }) });
+      const yp = new URLSearchParams(stripeCalls[nys] && stripeCalls[nys].o.body);
+      const asked = sent.slice(ny).filter((x) => x.u.endsWith('/rpc/extra_checkout_info')).pop();
+      check('add-on yearly: the server asks the database for the yearly price and sends it to Stripe as one payment every 12 months, per site', ry.status === 200 && JSON.parse(asked.o.body).p_interval === 'year' && yp.get('line_items[0][price_data][unit_amount]') === '6110' && yp.get('line_items[0][price_data][recurring][interval]') === 'year' && yp.get('line_items[0][quantity]') === '3' && yp.get('metadata[interval]') === 'year' && yp.get('subscription_data[metadata][interval]') === 'year');
+      const nm = sent.length; const nms = stripeCalls.length; extraReply = saved;
+      await ce('staff_signin'); const asked2 = sent.slice(nm).filter((x) => x.u.endsWith('/rpc/extra_checkout_info')).pop();
+      check('add-on yearly: asking with no choice (or anything odd) is still monthly', JSON.parse(asked2.o.body).p_interval === 'month' && new URLSearchParams(stripeCalls[nms].o.body).get('line_items[0][price_data][recurring][interval]') === 'month');
+      await realFetch(base + '/api/checkout-extra', { method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'staff_signin', interval: 'weekly' }) });
+      const asked3 = sent.filter((x) => x.u.endsWith('/rpc/extra_checkout_info')).pop();
+      check('add-on yearly: an unknown way of paying is treated as monthly, never passed on', JSON.parse(asked3.o.body).p_interval === 'month');
+    }
     const xs = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_x', metadata: { kind: 'extra', extra_code: 'staff_signin', quantity: '3', company_id: 'co-1' } }, 'evt_extra');
     const nA = applied.length; rr = await realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'Stripe-Signature': sign(xs) }, body: xs });
     check('webhook: a paid add-on is passed on as an add-on with its code and quantity (not as the main account)', rr.status === 200 && applied.length === nA + 1 && applied[nA].body.p_action === 'extra_paid' && applied[nA].body.p_extra === 'staff_signin' && applied[nA].body.p_quantity === 3 && applied[nA].body.p_subscription === 'sub_x');
+    {
+      const xy = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_y', metadata: { kind: 'extra', extra_code: 'staff_signin', quantity: '3', company_id: 'co-1', interval: 'year' } }, 'evt_extra_year');
+      const nB = applied.length; await realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'Stripe-Signature': sign(xy) }, body: xy });
+      check('webhook: a paid yearly add-on is passed on as yearly (a monthly one as monthly)', applied.length === nB + 1 && applied[nB].body.p_interval === 'year' && applied[nA].body.p_interval === 'month');
+    }
     // ---- cancelling also stops Stripe
     let cnN = 0; const cn = (action, auth) => realFetch(base + '/api/cancellation', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.' + (++cnN) }, auth === null ? {} : { Authorization: auth || 'Bearer user-token' }), body: JSON.stringify({ action }) });
     cancelCalls.length = 0; stripeCalls.length = 0;
@@ -1220,7 +1240,7 @@ const USERS = {
     // the app-style screens: Home, Tasks, Emergency Information, Settings and the paid add-ons
     const appExtra = (cfg) => {
       window.__mock.users['site@t'].profile.role_name = (cfg && cfg.role) || 'client_super';
-      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 299, charged_per: 'company', owned: cfg.owned === true || cfg.owned === 'both' }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 599, charged_per: 'site', owned: cfg.owned === 'staff' || cfg.owned === 'both' }];
+      if (cfg && cfg.owned) window.__mock.extras = [{ code: 'toolbox_talks', name: 'Toolbox Talks', description: 'x', price_pence: 299, charged_per: 'company', owned: cfg.owned === true || cfg.owned === 'both' }, { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'y', price_pence: 599, charged_per: 'site', billing_interval: cfg.yearlyStaff ? 'year' : null, owned: cfg.owned === 'staff' || cfg.owned === 'both' }];
       const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
       window.__mock.tables.companies = [{ id: 'c1', name: 'Test Co', contact_phone: '01634 000000', address: '1 High St', level: (cfg && cfg.level) || 1, billing_interval: 'monthly', subscription: 'active' }];
       window.__mock.tables.properties[0].address = '1 High St'; window.__mock.tables.properties[0].clock_token = 'a'.repeat(32); window.__mock.tables.properties[1].clock_token = 'c'.repeat(32);
@@ -1251,7 +1271,7 @@ const USERS = {
     check('home: overall compliance shows on-track, due soon, overdue and no-date counts (missing is never on track)', (await t.page.locator('.lglist').innerText()).replace(/\s+/g, ' ').includes('On track · 2') && (await t.page.locator('.lglist').innerText()).includes('1 item due soon') && (await t.page.locator('.lglist').innerText()).includes('1 overdue') && (await t.page.locator('.lglist').innerText()).includes('1 with no date'));
     check('home: Quick Access shows My Tasks and Emergency Information (no add-ons owned) and nothing is shown as locked', (await t.page.locator('text=Quick Access').count()) >= 1 && (await t.page.locator('.qtile').count()) === 2 && (await t.page.locator('[data-q=emergency]').count()) === 1 && (await t.page.locator('[data-q=mytasks]').count()) === 1 && (await t.page.locator('.qtile.locked').count()) === 0 && (await t.page.locator('#view-other').count()) === 1);
     check('home: both paid add-ons are shown as bold gold promo cards with their price and an Add now button', (await t.page.locator('.aoc:not(.soon)').count()) === 2 && (await t.page.locator('[data-promo=toolbox_talks]').innerText()).includes('Buy Now') && (await t.page.locator('[data-promo=staff_signin]').innerText()).includes('per site') && (await t.page.locator('.card.addons').innerText()).includes('Add-ons'));
-    check('home: Reviews and Poster Generator show as Coming soon cards with their price, and there is no yearly or bundle offer', (await t.page.locator('.aoc.soon').count()) === 2 && (await t.page.locator('[data-soon=reviews]').innerText()).includes('£9.99') && (await t.page.locator('[data-soon=reviews]').innerText()).includes('Coming soon') && (await t.page.locator('[data-soon=posters]').innerText()).includes('£4.99') && !/upfront|save 15|Unlock all/i.test(await t.page.locator('.card.addons').innerText()));
+    check('home: Reviews and Poster Generator show as Coming soon cards with their price, and no yearly or bundle offer on them (the two live add-ons do offer yearly)', (await t.page.locator('.aoc.soon').count()) === 2 && (await t.page.locator('[data-soon=reviews]').innerText()).includes('£9.99') && (await t.page.locator('[data-soon=reviews]').innerText()).includes('Coming soon') && (await t.page.locator('[data-soon=posters]').innerText()).includes('£4.99') && !/upfront|save 15|Unlock all/i.test((await t.page.locator('[data-soon=reviews]').innerText()) + (await t.page.locator('[data-soon=posters]').innerText())) && !/Unlock all/i.test(await t.page.locator('.card.addons').innerText()) && (await t.page.locator('[data-promo=staff_signin] .aoc-year').innerText()).includes('or £61.10 a year upfront') && (await t.page.locator('[data-promo=toolbox_talks] .aoc-year').innerText()).includes('£30.50') && (await t.page.locator('[data-promo=toolbox_talks] .aoc-year').innerText()).includes('save 15%'));
     await t.page.click('[data-soon=reviews]'); await t.page.waitForSelector('[data-soon-page=reviews]');
     check('a Coming soon add-on opens an info page with its price and nothing to buy', (await t.page.locator('#soon-note').innerText()).includes('Coming soon') && (await t.page.locator('#extra-add').count()) === 0 && (await t.page.locator('.goldbox').innerText()).includes('£9.99'));
     await t.page.click('[data-back]'); await t.page.waitForSelector('[data-promo=staff_signin]');
@@ -1381,12 +1401,17 @@ const USERS = {
     let extraReq = null; await t.page.route('**/api/checkout-extra', (rt) => { extraReq = { auth: rt.request().headers().authorization, body: rt.request().postData() }; rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/healthz' }) }); });
     await t.page.click('[data-promo=staff_signin]'); await t.page.waitForSelector('#extra-add');
     check('add-on: the page shows the per-site total (2 sites x £5.99 = £11.98 + VAT per month)', (await t.page.locator('.card').innerText()).includes('2 × £5.99 = £11.98 + VAT per month'));
+    check('add-on: the page offers monthly (chosen) or yearly upfront, with the yearly total and the 12-month rolling wording', (await t.page.locator('#extra-way input[value=month]').isChecked()) && !(await t.page.locator('#extra-way input[value=year]').isChecked()) && (await t.page.locator('.card').innerText()).includes('2 × £5.99 = £11.98 + VAT per month, or £122.20 + VAT for 12 months paid upfront') && (await t.page.locator('#extra-way').innerText()).includes('£122.20 + VAT a year') && (await t.page.locator('#extra-terms').innerText()).includes('12-month rolling contract') && !(await t.page.locator('.card').innerText()).includes('no yearly discount'));
     await t.page.click('#extra-add'); await t.page.waitForURL('**/healthz');
     check('add-on: Add sends the sign-in token and the add-on code to our server, then goes to the payment page', extraReq && extraReq.auth === 'Bearer tok-site@t' && JSON.parse(extraReq.body).code === 'staff_signin');
+    check('add-on: with no choice made it asks for monthly', JSON.parse(extraReq.body).interval === 'month');
     await t.ctx.close();
     t = await newPage(appSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full');
     await t.page.route('**/api/checkout-extra', (rt) => rt.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'You already have this add-on.' }) }));
-    await t.page.click('[data-promo=toolbox_talks]'); await t.page.click('#extra-add'); await t.page.waitForSelector('.msg.err');
+    await t.page.click('[data-promo=toolbox_talks]'); await t.page.waitForSelector('#extra-way'); await t.page.check('#extra-way input[value=year]');
+    let yearReq = null; await t.page.route('**/api/checkout-extra', (rt) => { yearReq = rt.request().postData(); rt.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'You already have this add-on.' }) }); });
+    await t.page.click('#extra-add'); await t.page.waitForSelector('.msg.err');
+    check('add-on: choosing yearly upfront asks the server for a yearly payment', yearReq && JSON.parse(yearReq).interval === 'year' && JSON.parse(yearReq).code === 'toolbox_talks');
     check('add-on: if the server refuses, the person sees its plain message and stays on the page', (await t.page.locator('.msg.err').innerText()).includes('already have') && (await t.page.locator('#extra-add').count()) === 1);
     await t.ctx.close();
     t = await newPage(appSeed, { role: 'client_site', rights: { can_edit: false, can_manage: false } }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-promo=toolbox_talks]'); await t.page.waitForSelector('[data-extra]');
@@ -1396,6 +1421,8 @@ const USERS = {
     // add-ons the business has are listed in Subscription Details with what each costs
     t = await newPage(appSeed, { owned: 'both' }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=plan]'); await t.page.waitForSelector('[data-addon]');
     check('settings: each add-on is listed with its monthly cost (Toolbox £2.99; Clock In 2 sites x £5.99 = £11.98) and a total of £14.97', (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£2.99 + VAT per month') && (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £5.99 = £11.98') && (await t.page.locator('#addons-total').innerText()).includes('£14.97') && (await t.page.locator('[data-add-addon]').count()) === 0);
+    t = await newPage(appSeed, { owned: 'both', yearlyStaff: true }); await login(t.page, 'site@t'); await t.page.waitForSelector('#view-full'); await t.page.click('[data-nav=settings]'); await t.page.click('[data-set=plan]'); await t.page.waitForSelector('[data-addon]');
+    check('settings: an add-on paid yearly shows its yearly cost (2 sites x £61.10 = £122.20 per year), and the total shows monthly and yearly parts', (await t.page.locator('[data-addon=staff_signin]').innerText()).replace(/\s+/g, ' ').includes('2 sites × £61.10 = £122.20 + VAT per year') && (await t.page.locator('[data-addon=toolbox_talks]').innerText()).includes('£2.99 + VAT per month') && (await t.page.locator('#addons-total').innerText()).replace(/\s+/g, ' ').includes('£2.99 + VAT per month and £122.20 + VAT per year'));
     await t.ctx.close();
     // the introductory offer shows in Subscription Details while it lasts
     const offerSeed = new Function('cfg', '(' + appSeed.toString() + ')(cfg); window.__mock.tables.companies[0].offer_code = "TC-ABC234"; window.__mock.tables.companies[0].offer_ends_at = new Date(Date.now() + 200 * 86400000).toISOString();');

@@ -1307,4 +1307,41 @@ select * from chk('core: a view-only user cannot move a check', :'siteAv', 'aal1
 select * from chk('core: a Level 2 client cannot move a check', :'superB', 'aal2',
   $$with u as (update compliance_items set is_core=false where id='30000000-0000-0000-0000-000000000006' returning 1) select count(*)=0 from u$$);
 select * from chk('core: the new column shows in compliance_status', :'siteAu', 'aal1', $$select count(*)>=1 from compliance_status where is_core is not null$$);
+-- Yearly add-ons (migration 0037) -----------------------------------------------------
+update companies set subscription='active', stripe_customer_id='cus_A', stripe_subscription_id='sub_main', access_ends_at=null, billing_interval='monthly', monthly_value_pence=1499+799 where id='10000000-0000-0000-0000-00000000000a';
+delete from company_extras where company_id='10000000-0000-0000-0000-00000000000a';
+select 'yearly add-ons: the yearly price is the monthly price x 12 less 15%, to the nearest 10p (2.99 -> 30.50, 5.99 -> 61.10)' as test,
+  (select yearly_pence=3050 from extras where code='toolbox_talks') and (select yearly_pence=6110 from extras where code='staff_signin') as ok;
+select 'yearly add-ons: a yearly add-on counts as one twelfth a month, a monthly one as its price' as test, extra_monthly_value(599,'year')=509 and extra_monthly_value(599,'month')=599 and extra_monthly_value(299,'year')=254 as ok;
+select * from chk('yearly add-ons: the shop list shows the yearly price', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select yearly_pence=6110 from my_extras() where code='staff_signin') and (select yearly_pence=3050 from my_extras() where code='toolbox_talks')$$);
+select * from chk('yearly add-ons: choosing yearly charges the yearly price per site, once a year', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select unit_pence=6110 and billing_interval='year' and price_pence=599 and quantity=(select count(*) from properties where company_id='10000000-0000-0000-0000-00000000000a') from extra_checkout_info('staff_signin','year'))$$);
+select * from chk('yearly add-ons: monthly is still the default', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select unit_pence=599 and billing_interval='month' from extra_checkout_info('staff_signin'))$$);
+select * from deny('yearly add-ons: any other way of paying is refused', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select * from extra_checkout_info('staff_signin','week')$$);
+select * from deny('yearly add-ons: a site user cannot start a yearly purchase', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select * from extra_checkout_info('staff_signin','year')$$);
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_y1','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_ss_year','extra_paid','staff_signin',2,'year');
+  if r <> 'extra_applied' then raise exception 'got %', r; end if;
+  reset role;
+end $$;
+select 'yearly add-ons: a confirmed yearly payment is recorded as yearly' as test, (select billing_interval='year' and status='active' and quantity=2 and price_pence=599 from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='staff_signin') as ok;
+select * from chk('yearly add-ons: the shop list tells the client which way an owned add-on is paid', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select billing_interval='year' from my_extras() where code='staff_signin') and (select billing_interval is null from my_extras() where code='toolbox_talks')$$);
+select 'yearly add-ons: the account value counts the yearly add-on as one twelfth a month (509 x 2 sites)' as test, (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') + 509*2 from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_y2','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_ss_year','extra_paid','staff_signin',2);
+  if r <> 'unknown_extra' and r <> 'duplicate' and r <> 'extra_applied' then raise exception 'got %', r; end if;
+  reset role;
+end $$;
+select 'yearly add-ons: a later monthly purchase of the same add-on is recorded as monthly' as test, (select billing_interval='month' from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='staff_signin') as ok;
+do $$ declare r text; begin
+  set local role service_role;
+  r := apply_stripe_event('evt_y3','checkout.session.completed','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt_year','extra_paid','toolbox_talks',1,'year');
+  if r <> 'extra_applied' then raise exception 'got %', r; end if;
+  r := apply_stripe_event('evt_y4','customer.subscription.deleted','10000000-0000-0000-0000-00000000000a','cus_A','sub_tt_year','cancelled');
+  if r <> 'extra_cancelled' then raise exception 'got %', r; end if;
+  reset role;
+end $$;
+select 'yearly add-ons: cancelling a yearly add-on switches it off and takes its value off the account' as test, (select status='cancelled' from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks') and (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') + 599*2 from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
+select * from chk('yearly add-ons: a client cannot mark an add-on as yearly for itself', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with u as (update company_extras set billing_interval='year' where company_id='10000000-0000-0000-0000-00000000000a' returning 1) select count(*)=0 from u$$);
 rollback;

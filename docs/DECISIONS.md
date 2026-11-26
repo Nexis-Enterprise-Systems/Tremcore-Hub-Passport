@@ -258,3 +258,13 @@
 - Still not built, so not shown: "a year upfront, save 15%", the "Unlock all 4 add-ons" bundle, and the task-reminder bell. They need billing set up (yearly and bundle prices in Stripe, database changes) and Aaron's decision.
 - The "Welcome, Name" heading is kept for screen readers only (hidden on screen), as the v54 design has no welcome line.
 - Service worker cache v65.
+
+## 26 Nov 2026 - Add-ons can be paid yearly upfront (migration 0037)
+- Each live add-on (Toolbox Talks, Staff Clock In / Out) can be paid **monthly (default)** or **once a year upfront at 15% off**: monthly x 12 x 0.85, rounded to the nearest 10p, per site. Toolbox Talks £30.50, Staff Clock In / Out £61.10, per site, + VAT. The database works the price out (`extras.yearly_pence`), so changing a monthly price changes the yearly one too.
+- A yearly add-on is its own Stripe subscription with a 12-month interval; checkout sends `interval` (month or year, anything else is monthly), the database (`extra_checkout_info(code, interval)`) says what to charge, and the webhook passes `interval` to `apply_stripe_event`, which records `company_extras.billing_interval`.
+- The hub's monthly value counts a yearly add-on as one twelfth (`extra_monthly_value`), so the recurring-revenue figure stays a monthly figure.
+- App: add-on cards say "or £X a year upfront · save 15%"; the add-on page has a monthly / yearly choice (monthly pre-selected) and the 12-month rolling contract wording; Settings shows a yearly add-on per year. The old sentence "no yearly discount" is gone.
+- The 12-month rolling wording ("renews for a further 12 months unless you request cancellation at least 30 days before the renewal date") is copied from the v54 prototype and **needs professional review**. Cancelling a yearly add-on in Stripe is still done by Tremcore; there is no self-service cancel yet.
+- Not offered: the "Unlock all 4 add-ons" bundle, and a yearly line on Reviews / Poster Generator. They are Coming soon and cannot be bought, so they stay without a yearly or bundle offer until built.
+- Tests: 12 new database checks (363 pass), 5 new web checks (602 pass). Service worker cache v66.
+- Before this works on a real project, migration 0037 must be run in Supabase (staging first, then Live). Until then the add-on page still loads but buying gives the "database update needed" message.

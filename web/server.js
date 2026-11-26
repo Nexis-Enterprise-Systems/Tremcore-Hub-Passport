@@ -554,11 +554,11 @@ async function handleCheckoutExtra(req, res) {
   if (checkoutLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
   const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
   if (!m) return out(401, { error: 'Please sign in again.' });
-  let code; try { code = String(JSON.parse(await readBody(req, 2000)).code || ''); } catch { return out(400, { error: 'Bad request.' }); }
+  let code, interval = 'month'; try { const b = JSON.parse(await readBody(req, 2000)); code = String(b.code || ''); interval = b.interval === 'year' ? 'year' : 'month'; } catch { return out(400, { error: 'Bad request.' }); }
   if (!/^[a-z_]{1,40}$/.test(code)) return out(400, { error: 'Bad request.' });
   try {
     const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info', { method: 'POST',
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: JSON.stringify({ p_code: code }), signal: AbortSignal.timeout(8000) });
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: JSON.stringify({ p_code: code, p_interval: interval }), signal: AbortSignal.timeout(8000) });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       if (/already_owned/.test(j.message || '')) return out(409, { error: 'You already have this add-on.' });
@@ -575,7 +575,7 @@ async function handleCheckoutExtra(req, res) {
     const info = (await r.json())[0];
     if (!info) return out(403, { error: 'Sorry, this cannot be added to your account right now. Please contact Tremcore. (Reason: no details returned)' });
     const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0];
-    const params = billing.extraCheckoutParams({ companyId: info.company_id, code, name: info.name + (info.charged_per === 'site' ? ' (per site)' : ''), unitPence: info.price_pence, quantity: info.quantity,
+    const params = billing.extraCheckoutParams({ companyId: info.company_id, code, name: info.name + (info.charged_per === 'site' ? ' (per site)' : ''), unitPence: info.unit_pence || info.price_pence, quantity: info.quantity, interval: info.billing_interval === 'year' ? 'year' : 'month',
       customerId: info.stripe_customer_id, email: info.email, origin: proto + '://' + req.headers.host });
     const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
@@ -705,7 +705,7 @@ async function handleWebhook(req, res) {
   try {
     const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/apply_stripe_event', { method: 'POST',
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_event_id: act.eventId, p_event_type: act.type, p_company: act.company, p_customer: act.customer, p_subscription: act.subscription, p_action: act.action, p_extra: act.extra || null, p_quantity: act.quantity || 1 }), signal: AbortSignal.timeout(8000) });
+      body: JSON.stringify({ p_event_id: act.eventId, p_event_type: act.type, p_company: act.company, p_customer: act.customer, p_subscription: act.subscription, p_action: act.action, p_extra: act.extra || null, p_quantity: act.quantity || 1, p_interval: act.interval === 'year' ? 'year' : 'month' }), signal: AbortSignal.timeout(8000) });
     if (!r.ok) { console.error('apply_stripe_event failed', r.status); return out(500, { error: 'try again' }); }   // Stripe will retry
     const result = await r.json();
     if (result === 'unknown_company') console.error('stripe event for an unknown company', act.eventId, act.type);
