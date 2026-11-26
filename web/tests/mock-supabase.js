@@ -143,7 +143,8 @@
       rec('rpc:' + name, args || null);
       if (name === 'my_extras') return { data: M().extras || [
         { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'Talks.', price_pence: 299, charged_per: 'company', owned: false },
-        { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'QR.', price_pence: 599, charged_per: 'site', owned: false }] };
+        { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'QR.', price_pence: 599, charged_per: 'site', owned: false },
+        { code: 'posters', name: 'Poster Generator', description: 'Posters.', price_pence: 499, charged_per: 'company', owned: false }] };
       if (name === 'record_talk') {
         if (M().recordError) return { data: null, error: { message: 'x' } };
         const talk = (db().toolbox_talks || []).find((x) => x.id === args.p_talk);

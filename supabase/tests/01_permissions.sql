@@ -716,7 +716,7 @@ end $$;
 select 'settings: head office can rename a site (tidied to capital letters)' as test, (select name ilike 'north%road%shop' and name <> lower(name) and address='2 North Rd' from properties where id='20000000-0000-0000-0000-0000000000a1') as ok;
 select * from deny('settings: head office cannot rename another company''s site', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select update_site('20000000-0000-0000-0000-0000000000b1','Hacked','x')$$);
 -- extras
-select * from chk('extras: a business that has bought nothing owns no extras but can see what is on offer', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select count(*)=2 from my_extras()) and (select count(*)=0 from my_extras() where owned)$$);
+select * from chk('extras: a business that has bought nothing owns no extras but can see what is on offer', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select count(*)=3 from my_extras()) and (select count(*)=0 from my_extras() where owned)$$);
 -- buying add-ons, and keeping an add-on's payments away from the main account
 update companies set subscription='active', stripe_customer_id='cus_A', stripe_subscription_id='sub_main', access_ends_at=null, billing_interval='monthly' where id='10000000-0000-0000-0000-00000000000a';
 delete from company_extras where company_id='10000000-0000-0000-0000-00000000000a';
@@ -1314,6 +1314,11 @@ select 'yearly add-ons: the yearly price is the monthly price x 12 less 15%, to 
   (select yearly_pence=3050 from extras where code='toolbox_talks') and (select yearly_pence=6110 from extras where code='staff_signin') as ok;
 select 'yearly add-ons: a yearly add-on counts as one twelfth a month, a monthly one as its price' as test, extra_monthly_value(599,'year')=509 and extra_monthly_value(599,'month')=599 and extra_monthly_value(299,'year')=254 as ok;
 select * from chk('yearly add-ons: the shop list shows the yearly price', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select yearly_pence=6110 from my_extras() where code='staff_signin') and (select yearly_pence=3050 from my_extras() where code='toolbox_talks')$$);
+select 'poster generator: is on offer at 4.99 for the whole account (not per site), 50.90 a year upfront' as test, (select price_pence=499 and charged_per='company' and yearly_pence=5090 and active from extras where code='posters') as ok;
+select * from chk('poster generator: a business that has not bought it can see it and does not own it', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select not owned from my_extras() where code='posters')$$);
+select * from chk('poster generator: it is bought once for the whole account whatever the number of sites', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=1 and unit_pence=499 from extra_checkout_info('posters'))$$);
+select * from chk('poster generator: yearly upfront is 50.90 for the account', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select quantity=1 and unit_pence=5090 and billing_interval='year' from extra_checkout_info('posters','year'))$$);
+select * from deny('poster generator: a site user cannot buy it', '00000000-0000-0000-0000-0000000000a3', 'aal1', $$select * from extra_checkout_info('posters')$$);
 select * from chk('yearly add-ons: choosing yearly charges the yearly price per site, once a year', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select unit_pence=6110 and billing_interval='year' and price_pence=599 and quantity=(select count(*) from properties where company_id='10000000-0000-0000-0000-00000000000a') from extra_checkout_info('staff_signin','year'))$$);
 select * from chk('yearly add-ons: monthly is still the default', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select (select unit_pence=599 and billing_interval='month' from extra_checkout_info('staff_signin'))$$);
 select * from deny('yearly add-ons: any other way of paying is refused', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$select * from extra_checkout_info('staff_signin','week')$$);

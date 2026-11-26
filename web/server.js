@@ -585,6 +585,54 @@ async function handleCheckoutExtra(req, res) {
   } catch (e) { console.error('extra checkout error', e.message); return out(502, { error: 'Sorry, we could not start the payment. Please try again, or contact Tremcore.' }); }
 }
 
+// ---------- Add-on pages that run inside the app (Poster Generator) ----------
+// The page is a self-contained tool kept outside the public folder, so it cannot simply be opened by address. A signed-in business that OWNS the add-on
+// asks for a short-lived ticket (checked with their own sign-in token, so the database decides); the page is handed out only against a valid ticket.
+// The app shows it in a locked-down frame (no access to the app's sign-in), and this page gets its own, looser content rules just for itself.
+const ADDON_PAGES = { posters: path.join(__dirname, 'addons', 'posters.html') };
+const ADDON_SECRET = crypto.randomBytes(32);
+const addonSig = (code, exp) => crypto.createHmac('sha256', ADDON_SECRET).update(code + '.' + exp).digest('hex');
+function addonTicketOk(code, t) {
+  const m = /^(\d{10,14})\.([0-9a-f]{64})$/.exec(String(t || '')); if (!m || !ADDON_PAGES[code] || Number(m[1]) < Date.now()) return false;
+  const a = Buffer.from(addonSig(code, m[1]), 'hex'), b = Buffer.from(m[2], 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+const ticketHits = new Map();
+function ticketLimited(ip) { const now = Date.now(), a = (ticketHits.get(ip) || []).filter((t) => now - t < 600000); a.push(now); ticketHits.set(ip, a); return a.length > 120; }
+async function handleAddonTicket(req, res) {
+  const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+  const origin = req.headers.origin;
+  if (origin) { try { if (new URL(origin).host !== req.headers.host) return out(403, { error: 'Not allowed.' }); } catch { return out(403, { error: 'Not allowed.' }); } }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return out(503, { error: 'Not switched on yet.' });
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (ticketLimited(ip)) return out(429, { error: 'Too many attempts. Please wait a few minutes.' });
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!m) return out(401, { error: 'Please sign in again.' });
+  let code; try { code = String(JSON.parse(await readBody(req, 1000)).code || ''); } catch { return out(400, { error: 'Bad request.' }); }
+  if (!ADDON_PAGES[code]) return out(400, { error: 'Bad request.' });
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/my_extras', { method: 'POST', headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
+    if (r.status === 401) return out(401, { error: 'Please sign in again.' });
+    if (!r.ok) return out(502, { error: 'Sorry, we could not open this just now. Please try again.' });
+    const rows = await r.json().catch(() => []);
+    if (!Array.isArray(rows) || !rows.some((x) => x.code === code && x.owned === true)) return out(403, { error: 'This add-on is not on your account.' });
+    const exp = String(Date.now() + 10 * 60 * 1000);
+    return out(200, { url: '/api/addon-page?code=' + encodeURIComponent(code) + '&t=' + exp + '.' + addonSig(code, exp) });
+  } catch (e) { console.error('addon ticket error', e.message); return out(502, { error: 'Sorry, we could not open this just now. Please try again.' }); }
+}
+function handleAddonPage(req, res, params) {
+  const code = String(params.get('code') || '');
+  if (!addonTicketOk(code, params.get('t'))) return send(res, 403, 'This link has expired. Please go back and open it again from the app.', { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  fs.readFile(ADDON_PAGES[code], (err, buf) => {
+    if (err) return send(res, 404, 'Not found', { 'Content-Type': 'text/plain' });
+    const headers = Object.assign(securityHeaders('site'), {
+      'Content-Type': TYPES['.html'], 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy': ["default-src 'none'", "script-src 'unsafe-inline' https://cdn.jsdelivr.net", "style-src 'unsafe-inline' https://fonts.googleapis.com", 'font-src https://fonts.gstatic.com',
+        "img-src data: blob:", "connect-src data: blob:", "frame-ancestors 'self'", "base-uri 'none'", "form-action 'none'", "object-src 'none'"].join('; ') });
+    res.writeHead(200, headers); res.end(buf);
+  });
+}
+
 // ---------- Introductory offer emails (Tremcore staff, from the hub) ----------
 // A staff member types a prospect's name and email in the hub. We make a one-use code with THEIR OWN token (the database refuses anyone who is not
 // signed-in Tremcore staff with 2FA), then email the prospect a link with the code already filled in. If the email service is not set up yet, the
@@ -765,6 +813,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && pathname === '/api/checkout') return handleCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/signup-checkout') return handleSignupCheckout(req, res);
   if (req.method === 'POST' && pathname === '/api/checkout-extra') return handleCheckoutExtra(req, res);
+  if (req.method === 'POST' && pathname === '/api/addon-ticket') return handleAddonTicket(req, res);
   if (req.method === 'POST' && pathname === '/api/send-reminders') return handleSendReminders(req, res);
   if (req.method === 'POST' && pathname === '/api/cancellation') return handleCancellation(req, res);
   if (req.method === 'POST' && pathname === '/api/interest') return handleInterest(req, res);
@@ -776,6 +825,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && (pathname === '/api/managed-check' || pathname === '/api/postcode')) return handleLookup(req, res, pathname, new URL(req.url, 'http://x').searchParams);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
 
+  if (pathname === '/api/addon-page') return handleAddonPage(req, res, new URL(req.url, 'http://x').searchParams);
   if (pathname === '/healthz') return send(res, 200, 'ok', { 'Content-Type': 'text/plain' });
   if (pathname === '/api/version') return send(res, 200, JSON.stringify({ v: BUILD_ID }), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
   if (pathname === '/config.json') {

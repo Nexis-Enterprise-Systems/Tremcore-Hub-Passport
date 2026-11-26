@@ -16,16 +16,14 @@
   // Shown if the server list cannot be read, so the paid add-ons are always visible with their price.
   const EXTRA_DEFAULT = [
     { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 299, yearly_pence: 3050, charged_per: 'site', owned: false },
-    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 599, yearly_pence: 6110, charged_per: 'site', owned: false }
+    { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 599, yearly_pence: 6110, charged_per: 'site', owned: false },
+    { code: 'posters', name: 'Poster Generator', description: 'Make branded posters from 17 ready-made templates for pubs, caf\u00e9s, shops, seasonal offers and notices, with your own logo, colours and QR codes. Download as PNG or PDF. One price for your whole account.', price_pence: 499, yearly_pence: 5090, charged_per: 'company', owned: false }
   ];
   // Add-ons that are announced but not built into the real app yet: shown on Home as "Coming soon", never sold.
   const SOON = [
     { code: 'reviews', icon: 'star', name: 'Reviews', short: 'Reply to Google & Tripadvisor reviews', price_pence: 999,
       intro: 'Every Google and Tripadvisor review in one inbox, with replies drafted in your brand voice so none go unanswered.',
-      feats: ['One inbox for Google and Tripadvisor reviews, with the lowest ratings at the top', 'Replies drafted for you in your brand voice', 'Insights on ratings, trends and what guests mention most', 'Feedback QR cards for tables, rooms and receipts: happy guests go to Google, complaints reach the manager first', 'Import reviews from a CSV or JSON export'] },
-    { code: 'posters', icon: 'poster', name: 'Poster Generator', short: '17 templates for print & social', price_pence: 499,
-      intro: 'Professional posters for your venue in three steps: pick a template, change the words, download.',
-      feats: ['17 ready-made templates for pubs, cafés, shops, seasonal events and notices', '12 looks plus your own brand kit with logo, colours and contact details', 'Print-ready PDFs at A5, A4, A3 and A1 A-board', 'Images sized for Instagram, Stories and Facebook', 'Add a QR code to any poster'] }
+      feats: ['One inbox for Google and Tripadvisor reviews, with the lowest ratings at the top', 'Replies drafted for you in your brand voice', 'Insights on ratings, trends and what guests mention most', 'Feedback QR cards for tables, rooms and receipts: happy guests go to Google, complaints reach the manager first', 'Import reviews from a CSV or JSON export'] }
   ];
   const ICON = {
     home: 'M3 11l9-8 9 8v10h-6v-6H9v6H3z', compliance: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z M8.5 12l2.5 2.5L16 9.5',
@@ -161,7 +159,7 @@
       const pend = tasks.filter((t) => t.status === 'pending' && (site === 'all' || t.property_id === site)).length;
       const q = (code, label, sub, onclick, locked, ik) => h('button', { class: 'qtile' + (locked ? ' locked' : ''), type: 'button', 'data-q': code, onclick },
         ik ? icon(ik) : null, h('strong', {}, label), h('span', { class: 'muted small' }, sub), locked ? h('span', { class: 'tag add' }, 'Add') : null);
-      const tt = extraOf('toolbox_talks'), ss = extraOf('staff_signin');
+      const tt = extraOf('toolbox_talks'), ss = extraOf('staff_signin'), pg = extraOf('posters');
       // Add-on promo cards: bold gold, so the two paid extras are not overlooked (only for Self-Managed accounts that do not have them yet)
       const isL1 = !company || (company.level || 1) === 1;
       // Add-on cards, 2 across: icon with a lock until bought, price a month, Buy Now. Reviews and Poster Generator are announced only (Coming soon, nothing to buy).
@@ -172,7 +170,7 @@
         h('span', { class: 'aoc-price' }, o.price, h('small', {}, ' pcm')), h('span', { class: 'aoc-sub' }, o.sub), o.yearly ? h('span', { class: 'aoc-year' }, 'or ' + o.yearly + ' a year upfront \u00b7 save 15%') : null,
         h('span', { class: 'aoc-btn' }, o.owned ? 'Active \u2013 open' : o.soon ? 'Coming soon' : [icon('lock'), 'Buy Now']));
       const live = (code, ik, blurb) => { const e = extraOf(code); if (e.owned) return null; return aoc({ code, icon: ik, name: e.name, blurb, price: money(e.price_pence), yearly: money(yearlyPence(e)), sub: (e.charged_per === 'site' ? 'per site \u00b7 ' : '') + '+ VAT', owned: !!e.owned, go: () => viewExtra(code) }); };
-      const promos = isL1 ? [live('toolbox_talks', 'chat', '30 talks, bespoke talks \u00a31.99 each'), live('staff_signin', 'clock', 'QR clock-in and attendance log')].filter(Boolean) : [];
+      const promos = isL1 ? [live('toolbox_talks', 'chat', '30 talks, bespoke talks \u00a31.99 each'), live('staff_signin', 'clock', 'QR clock-in and attendance log'), live('posters', 'poster', '17 templates for print & social')].filter(Boolean) : [];
       const soons = isL1 ? SOON.map((x) => aoc({ code: x.code, icon: x.icon, name: x.name, blurb: x.short, price: money(x.price_pence), sub: '+ VAT', soon: true, go: () => viewSoon(x.code) })) : [];
       // What needs attention now: overdue first, then due in the next 30 days (checks and tasks), so it is the first thing seen.
       const multiH = props.length > 1 && site === 'all';
@@ -199,6 +197,7 @@
             q('mytasks', 'My Tasks', pend + ' Pending', () => go('tasks'), false, 'taskck'),
             tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks'), false, 'chat') : null,
             ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin'), false, 'clock') : null,
+            pg && pg.owned ? q('posters', 'Poster Generator', '17 templates', () => viewExtra('posters'), false, 'poster') : null,
             q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency(), false, 'alert')));
       shellWith('home', sideCards, [
         h('div', { class: 'homehead' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', { class: 'sr-only' }, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'tagline' }, 'the smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
@@ -456,6 +455,31 @@
         h('p', { class: 'big goldbox' }, money(x.price_pence) + ' + VAT per month'),
         h('div', { class: 'msg ok', role: 'status', id: 'soon-note' }, 'Coming soon. ' + x.name + ' is not ready to add yet. We will let you know when it is.')));
     }
+    // Poster Generator: a self-contained tool kept on our server. It opens in a locked-down frame that cannot reach the app's sign-in; the saved poster settings
+    // go in through the frame name and come back out as messages, and are kept in this browser for this business.
+    let posterFrame = null;
+    window.addEventListener('message', (ev) => {
+      if (!posterFrame || ev.source !== posterFrame.contentWindow || !ev.data || ev.data.tc !== 'poster-save' || !company) return;
+      try { const t = JSON.stringify(ev.data.state); if (t && t.length < 3000000) localStorage.setItem('tc-poster-' + company.id, t); } catch (e) { /* storage full or off: nothing is lost except the saved settings */ }
+    });
+    async function viewPosters(note) {
+      tab = 'home';
+      const box = h('div', {});
+      page('form', h('div', { class: 'posterwrap', 'data-addon-page': 'posters' }, backTo('Back to home'), note ? h('div', { class: 'msg ok', role: 'status' }, note) : null, box,
+        h('p', { class: 'muted center', id: 'poster-loading' }, 'Opening the Poster Generator\u2026')));
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const r = await fetch('/api/addon-ticket', { method: 'POST', headers: { Authorization: 'Bearer ' + ((session && session.access_token) || ''), 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'posters' }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.url) return ctx.message(box, 'err', j.error || 'Sorry, we could not open the Poster Generator. Please try again.');
+        let saved = null; try { saved = JSON.parse(localStorage.getItem('tc-poster-' + (company && company.id)) || 'null'); } catch (e) { saved = null; }
+        const f = h('iframe', { class: 'posterframe', id: 'poster-frame', title: 'Poster Generator', sandbox: 'allow-scripts allow-downloads allow-modals allow-popups', referrerpolicy: 'no-referrer',
+          name: JSON.stringify({ state: saved, brand: { name: (company && company.name) || '' } }), src: j.url });
+        posterFrame = f;
+        const ld = document.getElementById('poster-loading'); if (ld) ld.remove();
+        box.appendChild(f);
+      } catch (e) { ctx.message(box, 'err', 'Sorry, we could not open the Poster Generator. Please try again.'); }
+    }
     function viewExtra(code, state) {
       const e = extraOf(code);
       if (e.owned && state !== 'confirming' && code === 'toolbox_talks') {
@@ -463,6 +487,7 @@
         return window.TCToolbox.open({ sb, h, ctx, page, backTo, props: () => props, site: () => site, rights: () => rights, isHead: () => isHead, shortDate, siteName,
           companyName: () => (company && company.name) || '', companyId: () => company && company.id, back: backBtn, openPeople: (pid) => viewClock(null, pid, 'toolbox') }, state === 'thanks' ? e.name + ' is now on your account. Pick a talk to get started.' : null);
       }
+      if (e.owned && state !== 'confirming' && code === 'posters') return viewPosters(state === 'thanks' ? e.name + ' is now on your account. Pick a template to get started.' : null);
       if (e.owned && state !== 'confirming' && code === 'staff_signin') return viewClock(state === 'thanks' ? e.name + ' is now on your account. Add the people who will use it below.' : null);
       const box = h('div', {});
       const sites = props.length || 1, qty = e.charged_per === 'site' ? sites : 1;

@@ -271,3 +271,12 @@
 
 ## 26 Nov 2026 - Yearly upfront is pre-selected on the add-on page
 - On the add-on page "Yearly upfront" is chosen by default (Aaron's request); the client can switch to Monthly. The server and database still treat "no choice" as monthly. Service worker cache v67.
+
+## 26 Nov 2026 - Poster Generator built into the real app (migration 0038)
+- New add-on `posters`: £4.99 a month for the whole account (not per site), £50.90 a year upfront, bought like the other add-ons (monthly or yearly, Stripe). Migration 0038 adds it to `extras`. It is a live card on Home (no longer "Coming soon"), a Quick Access tile once bought, and in Settings.
+- The tool is the v54 prototype page, kept at `web/addons/posters.html` (outside the public folder, so it is not reachable as an ordinary file). Changes from the prototype: no sample pub details (business name is filled in from the company, everything else starts blank, default colours are Tremcore black and gold), downloads use the browser's normal download, and saved settings go to the app through a message instead of the page's own storage.
+- How it is opened: the app asks `POST /api/addon-ticket` (with the user's own sign-in token). The server asks the database (`my_extras`) whether that business owns it, and only then returns a 10-minute signed link to `GET /api/addon-page`. The page is shown in an `<iframe sandbox>` with no `allow-same-origin`, so it cannot read the app's sign-in. The page has its own content rules (inline code allowed, scripts only from jsdelivr, fonts from Google Fonts, no network calls, only framable by our own app).
+- Outside libraries used by the page (pinned, from jsdelivr, which the app already allows): html2canvas 1.4.1, jsPDF 2.5.1, qrcode-generator 1.4.4, JSZip 3.10.1, plus Google Fonts. Not tested against the live CDN from the cloud workspace (it blocks those sites); needs one real look in a browser.
+- Poster settings (brand, logo, saved posters) are kept in the browser for that business (`tc-poster-<company id>`), not in the database yet. A different computer or browser starts fresh.
+- The "Unlock all 4" bundle is still not offered (Reviews is not built).
+- Also: drop-down boxes (website contact form, and the app) now have a gold arrow. Service worker cache v68.
