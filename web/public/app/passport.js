@@ -18,6 +18,15 @@
     { code: 'toolbox_talks', name: 'Toolbox Talks', description: 'A library of 30 ready-made safety talks plus up to 10 of your own, with digital sign-off by your team and saved PDF records. Charged for each site.', price_pence: 299, charged_per: 'site', owned: false },
     { code: 'staff_signin', name: 'Staff Clock In / Out', description: 'Staff scan a QR code shown at your site to clock in and out, with attendance records you can view.', price_pence: 599, charged_per: 'site', owned: false }
   ];
+  // Add-ons that are announced but not built into the real app yet: shown on Home as "Coming soon", never sold.
+  const SOON = [
+    { code: 'reviews', name: 'Reviews', tagline: 'Reply to Google and Tripadvisor reviews, with replies drafted in your brand voice.', price_pence: 999,
+      intro: 'Every Google and Tripadvisor review in one inbox, with replies drafted in your brand voice so none go unanswered.',
+      feats: ['One inbox for Google and Tripadvisor reviews, with the lowest ratings at the top', 'Replies drafted for you in your brand voice', 'Insights on ratings, trends and what guests mention most', 'Feedback QR cards for tables, rooms and receipts: happy guests go to Google, complaints reach the manager first', 'Import reviews from a CSV or JSON export'] },
+    { code: 'posters', name: 'Poster Generator', tagline: '17 templates for print and social.', price_pence: 499,
+      intro: 'Professional posters for your venue in three steps: pick a template, change the words, download.',
+      feats: ['17 ready-made templates for pubs, cafés, shops, seasonal events and notices', '12 looks plus your own brand kit with logo, colours and contact details', 'Print-ready PDFs at A5, A4, A3 and A1 A-board', 'Images sized for Instagram, Stories and Facebook', 'Add a QR code to any poster'] }
+  ];
   const ICON = {
     home: 'M3 11l9-8 9 8v10h-6v-6H9v6H3z', compliance: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z M8.5 12l2.5 2.5L16 9.5',
     tasks: 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5', settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 5v4 M8 15v4'
@@ -158,6 +167,8 @@
       const promos = isL1 ? [
         !tt.owned ? promo('toolbox_talks', 'Toolbox Talks', '30 ready-made safety talks plus 10 of your own, signed off by your team on a phone, with PDF records saved for audits.', money(tt.price_pence) + ' / month + VAT', 'Add now') : null,
         !ss.owned ? promo('staff_signin', 'Staff Clock In / Out', 'A unique QR code for each site. Staff scan to clock in and out, and you see who is on site and download attendance records.', money(ss.price_pence) + ' / site / month + VAT', 'Add now') : null].filter(Boolean) : [];
+      const soons = isL1 ? SOON.map((x) => h('button', { class: 'promo soon', type: 'button', 'data-soon': x.code, onclick: () => viewSoon(x.code) },
+        h('strong', { class: 'promo-name' }, x.name), h('span', { class: 'promo-tag' }, x.tagline), h('span', { class: 'promo-price' }, money(x.price_pence) + ' / month + VAT'), h('span', { class: 'promo-cta' }, 'Coming soon'))) : [];
       // What needs attention now: overdue first, then due in the next 30 days (checks and tasks), so it is the first thing seen.
       const multiH = props.length > 1 && site === 'all';
       const lateItems = rows.filter((r) => r.status === 'red').sort(byUrgency), soonItems = rows.filter((r) => r.status === 'amber').sort(byUrgency);
@@ -175,7 +186,7 @@
         cAll.missing ? h('p', { class: 'muted small', id: 'att-missing' }, cAll.missing + (cAll.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (cAll.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
           h('button', { class: 'linkbtn', type: 'button', id: 'att-dates', onclick: () => { filter = 'missing'; ctab = 'overview'; go('compliance'); } }, 'Add the dates')) : null);
       const sideCards = [
-        promos.length ? h('div', { class: 'card addons' }, h('div', { class: 'titlerow' }, h('h2', {}, 'Add-ons'), h('span', { class: 'muted small' }, 'Unlock extra tools')), h('div', { class: 'promos' }, ...promos)) : null
+        promos.length || soons.length ? h('div', { class: 'card addons' }, h('div', { class: 'titlerow' }, h('h2', {}, 'Add-ons'), h('span', { class: 'muted small' }, 'Unlock extra tools')), h('div', { class: 'promos' }, ...promos, ...soons)) : null
       ].filter(Boolean);
       const toolsCard =
         h('div', { class: 'card tools' }, h('h2', {}, 'Quick Access'),
@@ -430,6 +441,15 @@
       if (extraChecks > 20) { clean(); extraChecks = 0; return viewExtra(code, 'late'); }
       viewExtra(code, 'confirming');
       setTimeout(() => { if (onExtra === code) afterExtraPayment(code, '1'); }, 3000);
+    }
+    // An announced add-on that is not available yet: what it will do and its price, with nothing to buy.
+    function viewSoon(code) {
+      const x = SOON.find((y) => y.code === code); if (!x) return viewHome();
+      tab = 'home';
+      page('form', h('div', { class: 'card form', 'data-soon-page': code }, backTo('Back to home'), h('h1', {}, x.name), h('p', {}, x.intro),
+        h('ul', { class: 'ticks' }, ...x.feats.map((f) => h('li', {}, f))),
+        h('p', { class: 'big goldbox' }, money(x.price_pence) + ' + VAT per month'),
+        h('div', { class: 'msg ok', role: 'status', id: 'soon-note' }, 'Coming soon. ' + x.name + ' is not ready to add yet. We will let you know when it is.')));
     }
     function viewExtra(code, state) {
       const e = extraOf(code);

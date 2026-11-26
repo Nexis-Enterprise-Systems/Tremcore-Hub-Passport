@@ -612,3 +612,9 @@ body{overscroll-behavior-y:contain}
 .cal-day .dot{width:8px;height:8px}
 .cal-day-list{margin-top:14px}
 .cal-day-list h3{margin:0 0 8px}
+
+/* Add-ons announced but not on sale yet: same card, quieter button */
+.promo.soon{box-shadow:none;opacity:.92}
+.promo.soon .promo-cta{background:transparent;box-shadow:none;border:1px solid var(--line,#3a3125);color:var(--gold);font-weight:700}
+.promo.soon .promo-cta::after{display:none}
+.promo.soon:hover{box-shadow:0 6px 22px rgba(222,178,70,.14)}

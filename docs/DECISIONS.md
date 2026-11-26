@@ -241,3 +241,9 @@
 - `prototype/app-v54-2026-11-26/` holds the v54 clickable prototype (Claude artifact build) with its four add-ons: Toolbox Talks, Staff Clock In / Out, Reviews, Poster Generator.
 - The real app already matches v54's Home, Compliance (Core / Other), Tasks and Settings layout. What v54 adds that the real app does not have: Reviews and Poster Generator add-ons, "Buy Now" cards with a yearly-upfront option (save 15%), an "Unlock all 4 add-ons" bundle, and a bell with task reminders on Home.
 - Nothing from v54 has been put into the real app yet; waiting on Aaron's decision on scope.
+
+## 26 Nov 2026 - App Home: Reviews and Poster Generator shown as Coming soon
+- Home Add-ons card (Self-Managed only) now also shows Reviews (9.99/month) and Poster Generator (4.99/month) as "Coming soon" cards. Tapping one opens a page with what it will do and its price; nothing can be bought.
+- Held back from v54 on purpose: "or a year upfront, save 15%" and the "Unlock all 4 add-ons" bundle. The app's existing rule is that add-ons are charged monthly with no yearly discount, and Stripe has no yearly or bundle price yet. Needs Aaron's decision and new Stripe prices before it can be shown.
+- Reviews and Poster Generator prices are shown "+ VAT" like the two live add-ons; VAT wording still to be confirmed.
+- Service worker cache bumped to v64.
