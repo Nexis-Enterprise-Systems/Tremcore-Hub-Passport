@@ -18,6 +18,7 @@
   const uuid = () => '00000000-0000-4000-8000-' + String(idn++).padStart(12, '0');
   const db = () => (M().tables = M().tables || {});
   const DEFAULTS = {
+    floor_plans: () => ({ public_key: 'abcdef0123456789abcdef0123456789' }),
     tasks: () => ({ status: 'pending', notes: '' }),
     companies: () => ({ level: 1, subscription: 'trial', monthly_value_pence: 0, require_mfa: false, billing_interval: 'monthly' }),
     compliance_items: () => ({ notes: '', grp: 'Other', basis: 'standard' }),

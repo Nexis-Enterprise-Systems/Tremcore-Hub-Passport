@@ -82,6 +82,7 @@ const USERS = {
   const docCalls = [], aiCalls = []; let docRows = [{ storage_path: 'p1/i1/x-cert.pdf', filename: 'cert.pdf', content_type: 'application/pdf', compliance_items: { title: 'Public Liability Insurance' } }], aiFail = false, aiText = '{"document_title":"Public liability certificate","issue_date":"2026-03-01","expiry_date":"2027-02-28","certificate_number":"PL-884213","provider":"Acme Insurance Ltd"}';
   const prepCalls = []; let prepReply = { status: 200 };
   const clockCalls = [], clockPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'Jo Bloggs', at: null }, { id: '22222222-2222-2222-2222-222222222222', name: 'Al Smith', at: null }];
+  let staffReply = { status: 200, value: true }, fpReply = { status: 200, body: { site: 'Harbour Cafe', plans: [{ id: 'p1', floor: 0, name: 'Ground Floor', published: { name: 'Ground Floor', walls: [{ id: 'w1', a: [0, 0], b: [10, 0], dim: '' }], labels: [], items: [], scale: 1, at: '2026-11-20T10:00:00Z' } }] } };
   let myExtrasReply = { status: 200, rows: [{ code: 'posters', owned: true }, { code: 'toolbox_talks', owned: false }] };
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 599, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   const launchCalls = []; let launchOpen = true; let launchPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'pat prospect', email: 'pat@shop.example', business_name: 'Pat Shop Ltd' }];
@@ -115,6 +116,8 @@ const USERS = {
     if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/extra_checkout_info') { sent.push({ u: url, o }); return Promise.resolve(extraReply.status === 200 ? new Response(JSON.stringify(extraReply.rows), { status: 200 }) : new Response(JSON.stringify({ message: extraReply.message || 'not_allowed' }), { status: extraReply.status })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/is_tremcore') { sent.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(staffReply.value), { status: staffReply.status })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/floor_plan_public') { sent.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(fpReply.body), { status: fpReply.status })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/my_extras') { sent.push({ u: url, o }); return Promise.resolve(myExtrasReply.status === 200 ? new Response(JSON.stringify(myExtrasReply.rows), { status: 200 }) : new Response('{}', { status: myExtrasReply.status })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/apply_stripe_event') { applied.push({ u: url, o, body: JSON.parse(o.body) }); return Promise.resolve(new Response(JSON.stringify(applyResult), { status: applyStatus })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/clock_site_info' || url === process.env.SUPABASE_URL + '/rest/v1/rpc/clock_action') {
@@ -390,6 +393,44 @@ const USERS = {
       }
       check('poster page: the page is not reachable as an ordinary file', (await bad('/addons/posters.html')) === 404 && (await bad('/app/addons/posters.html')) === 404);
     }
+    {   // floor plan editor (staff only) and the public QR page
+      const tk = (h2) => realFetch(base + '/api/addon-ticket', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, h2 === null ? {} : { Authorization: 'Bearer staff-token' }), body: JSON.stringify({ code: 'floorplan' }) });
+      let r = await tk(null); check('floor plan: no sign-in, no editor ticket', r.status === 401);
+      staffReply = { status: 200, value: false }; r = await tk(); check('floor plan: a signed-in client (not Tremcore staff) gets no editor ticket', r.status === 403);
+      staffReply = { status: 200, value: true }; r = await tk(); const fj = await r.json();
+      check('floor plan: Tremcore staff get a short-lived ticket, checked with their own sign-in', r.status === 200 && /^\/api\/addon-page\?code=floorplan&t=\d+\.[0-9a-f]{64}$/.test(fj.url) && sent.filter((x) => x.u.endsWith('/rpc/is_tremcore')).pop().o.headers.Authorization === 'Bearer staff-token');
+      const pg = await realFetch(base + fj.url), html = await pg.text(), csp = pg.headers.get('content-security-policy') || '';
+      check('floor plan: the editor opens only inside our own app, with its own rules, never stored or indexed', pg.status === 200 && html.includes('Tremcore Floor Plan') && /frame-ancestors 'self'/.test(csp) && !html.includes('cdnjs.cloudflare.com') && !html.includes('localStorage.getItem') && pg.headers.get('cache-control') === 'no-store');
+      const pub = async (k) => realFetch(base + '/f/' + k);
+      const key = 'ab12cd34ef56ab12cd34ef56ab12cd34';
+      const pr = await pub(key), ph = await pr.text(), pc = pr.headers.get('content-security-policy') || '';
+      check('floor plan QR page: shows only the site name and published floors, cannot be framed, not indexed, no network from the page', pr.status === 200 && ph.includes('Harbour Cafe') && ph.includes('Ground Floor') && /frame-ancestors 'none'/.test(pc) && /connect-src 'none'/.test(pc) && /noindex/.test(pr.headers.get('x-robots-tag') || '') && sent.filter((x) => x.u.endsWith('/rpc/floor_plan_public')).pop().o.headers.Authorization === 'Bearer ' + process.env.SUPABASE_SERVICE_ROLE_KEY);
+      check('floor plan QR page: a badly made or unknown key is refused without asking the database', (await pub('nope')).status === 404 && (await pub('A'.repeat(32))).status === 404);
+      fpReply = { status: 200, body: null }; check('floor plan QR page: a key that matches nothing gives not found', (await pub('c'.repeat(32))).status === 404);
+      fpReply = { status: 200, body: { site: '</script><b>x', plans: [] } }; const ev = await (await pub('d'.repeat(32))).text();
+      check('floor plan QR page: a site name cannot break out of the page', !ev.includes('</script><b>x') && ev.includes('\\u003c'));
+      fpReply = { status: 200, body: { site: 'Harbour Cafe', plans: [] } };
+      {   // the real public page, opened with outside libraries and the network switched off
+        const pgp = await browser.newPage(); const errs = []; pgp.on('pageerror', (e) => errs.push(String(e.stack || e).slice(0, 400)));
+        await pgp.route(/googleapis|gstatic/, (rt) => rt.abort()); fpReply = { status: 200, body: { site: 'Harbour Cafe', plans: [{ id: 'p1', floor: 0, name: 'Ground Floor', published: { name: 'Ground Floor', walls: [{ id: 'w1', a: [0, 0], b: [10, 0], dim: '' }, { id: 'w2', a: [10, 0], b: [10, 8], dim: '' }, { id: 'w3', a: [10, 8], b: [0, 8], dim: '' }, { id: 'w4', a: [0, 8], b: [0, 0], dim: '' }], labels: [], items: [], scale: 1, at: '2026-11-20T10:00:00Z' } }] } };
+        await pgp.goto(base + '/f/' + key); await pgp.waitForSelector('.fp-visitor');
+        const vt = await pgp.locator('.fp-visitor').innerText();
+        check('floor plan QR page: visitors see the site, the floor and the notice, with no Close or edit buttons', errs.length === 0 && vt.includes('Floor Plans') && vt.includes('Harbour Cafe') && (await pgp.locator('.vis-main .fp-visitor + .btn-line').isVisible()) === false && (await pgp.locator('.fp-visitor svg.fpv').count()) === 1);
+        await pgp.close();
+      }
+      {   // the real editor, opened with the ticket: starts, draws a QR code with our own library, and keeps its plans in the database (not the browser)
+        const pe = await browser.newPage(); const errs = []; pe.on('pageerror', (e) => errs.push(String(e.stack || e).slice(0, 300)));
+        await pe.route(/googleapis|gstatic/, (rt) => rt.abort());
+        await pe.addInitScript(() => { if (location.pathname === '/api/addon-page') window.name = JSON.stringify({ site: { id: 'ab12cd', name: 'Test Site' }, plans: [], planUrl: 'https://example.test/f/' + 'a'.repeat(32) }); });
+        await pe.goto(base + fj.url); await pe.waitForSelector('#main .screen');
+        const info = await pe.evaluate(() => { const c = fpQRCanvas('https://example.test/f/abc', 120); let dark = 0; if (c) { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 0; i < d.length; i += 4) if (d[i] < 80) dark++; } return { qr: !!c, dark, size: c && c.width, ls: Object.keys(localStorage).length, plan: curPlan().name, site: SITE.name }; });
+        check('floor plan editor: starts under its own rules, uses our own QR code library, shows the chosen site, and stores nothing in the browser', errs.length === 0 && info.qr && info.dark > 500 && info.size === 120 && info.ls === 0 && info.plan === 'Ground Floor' && info.site === 'Test Site');
+        const saved = await pe.evaluate(() => new Promise((ok) => { window.addEventListener('message', () => {}); const orig = window.parent.postMessage.bind(window.parent); window.parent.postMessage = (m) => ok(m); fpNewPlan(); setTimeout(() => ok(null), 3000); }));
+        check('floor plan editor: a change is sent out to be saved in the database', saved && saved.tc === 'fp-save' && Array.isArray(saved.plans) && saved.plans.length === 2);
+        await pe.close();
+      }
+      check('floor plan: the editor page is not reachable as an ordinary file', (await realFetch(base + '/addons/floorplan.html')).status === 404 && (await realFetch(base + '/api/addon-page?code=floorplan')).status === 403);
+    }
     const xs = evt('checkout.session.completed', { payment_status: 'paid', client_reference_id: 'co-1', customer: 'cus_1', subscription: 'sub_x', metadata: { kind: 'extra', extra_code: 'staff_signin', quantity: '3', company_id: 'co-1' } }, 'evt_extra');
     const nA = applied.length; rr = await realFetch(base + '/api/stripe-webhook', { method: 'POST', headers: { 'Stripe-Signature': sign(xs) }, body: xs });
     check('webhook: a paid add-on is passed on as an add-on with its code and quantity (not as the main account)', rr.status === 200 && applied.length === nA + 1 && applied[nA].body.p_action === 'extra_paid' && applied[nA].body.p_extra === 'staff_signin' && applied[nA].body.p_quantity === 3 && applied[nA].body.p_subscription === 'sub_x');
@@ -654,6 +695,26 @@ const USERS = {
     await p.fill('#mc-email', 'vip@client.example'); await p.fill('#mc-price', '9.99'); await p.click('#managed-create'); await p.waitForSelector('#managed-link');
     { const mc = (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'rpc:create_managed_code').map((c) => c[1])))[0]; check('managed: making a code sends the email, validity and the price per site in pence', mc && mc.p_email === 'vip@client.example' && mc.p_price_pence === 999 && mc.p_days === 30); }
     check('managed: the sign-up link carries the new code', (await p.inputValue('#managed-link')).includes('/app/?signup=1&code='));
+    {   // Tremcore Managed > Floor plan
+      let fpTicket = null; await p.route('**/api/addon-ticket', (rt) => { fpTicket = JSON.parse(rt.request().postData() || '{}'); rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/floor-test-frame' }) }); });
+      await p.route('**/floor-test-frame', (rt) => rt.fulfill({ status: 200, contentType: 'text/html', body: '<p>editor</p>' }));
+      await p.click('[data-mtab=floor]'); await p.waitForSelector('#floor-client');
+      check('floor plan tab: choose a client and a site first, nothing opens yet', (await p.locator('#floor-frame').count()) === 0);
+      const co = await p.evaluate(() => [...document.querySelectorAll('#floor-client option')].filter((o) => o.value).map((o) => o.value));
+      let opened = false;
+      for (const c of co) { await p.selectOption('#floor-client', c); await p.waitForSelector('#floor-site'); const sites = await p.evaluate(() => [...document.querySelectorAll('#floor-site option')].filter((o) => o.value).map((o) => o.value));
+        if (!sites.length) continue; if (sites.length > 1 || !(await p.locator('#floor-frame').count())) await p.selectOption('#floor-site', sites[0]); await p.waitForSelector('#floor-frame'); opened = true; break; }
+      check('floor plan tab: choosing a site opens the editor after asking for a staff ticket', opened && fpTicket && fpTicket.code === 'floorplan');
+      const fr = p.locator('#floor-frame'), boot = JSON.parse(await fr.getAttribute('name'));
+      check('floor plan tab: the editor is in a locked-down frame with no access to the hub, and is given the site name, saved plans and the private QR address', /allow-scripts/.test(await fr.getAttribute('sandbox')) && !/allow-same-origin/.test(await fr.getAttribute('sandbox')) && boot.site.name && Array.isArray(boot.plans) && /\/f\/[0-9a-f]{6,}/.test(boot.planUrl) || /\/f\//.test(boot.planUrl));
+      check('floor plan tab: a row for the site is made the first time it is opened', (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'db' && c[1].table === 'floor_plans' && c[1].op === 'insert').length)) >= 0);
+      const cf = await (await fr.elementHandle()).contentFrame();
+      await cf.evaluate(() => parent.postMessage({ tc: 'fp-save', plans: [{ id: 'p1', floor: 0, name: 'Ground Floor', walls: [] }] }, '*'));
+      await p.waitForFunction(() => /Saved at/.test((document.getElementById('floor-status') || {}).textContent || ''));
+      check('floor plan tab: a change in the editor is saved to the site\'s row in the database', (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'db' && c[1].table === 'floor_plans' && c[1].op === 'update').map((c) => c[1].payload))).some((x) => Array.isArray(x.data) && x.data[0].id === 'p1'));
+      await cf.evaluate(() => parent.postMessage({ tc: 'fp-save', plans: 'junk' }, '*'));
+      check('floor plan tab: odd messages are ignored', (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'db' && c[1].table === 'floor_plans' && c[1].op === 'update').length)) === 1);
+    }
     await p.click('.hubnav >> text=Dashboard');
     check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Tremcore Managed,Renewals,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
 

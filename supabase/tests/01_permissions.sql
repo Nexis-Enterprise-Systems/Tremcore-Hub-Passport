@@ -1459,3 +1459,29 @@ select 'managed code: once the payment clears the company becomes Managed (Level
 select 'managed code: every add-on is open' as test,
   (select count(*) = (select count(*) from extras where active) and bool_and(status = 'active') from company_extras where company_id = '10000000-0000-0000-0000-0000000000f9') as ok;
 select 'managed code: the code is used up' as test, (select status = 'used' from offer_codes where code = (select code from mc)) as ok;
+
+-- ---- Floor plans (0043) ----
+insert into floor_plans(property_id, data) select id, '[{"id":"p1","floor":0,"name":"Ground","walls":[1],"published":{"name":"Ground","walls":[1]}},{"id":"p2","floor":1,"name":"First","walls":[2]}]'::jsonb from properties limit 1;
+create temp table fpk as select property_id, public_key from floor_plans limit 1;
+grant select on fpk to public;
+select 'floor plan: a public key is made for each site' as test, (select char_length(public_key) = 32 from fpk) as ok;
+select 'floor plan: the QR page gets only the published floors, never drafts' as test,
+  (select jsonb_array_length(floor_plan_public((select public_key from fpk)) -> 'plans') = 1 and floor_plan_public((select public_key from fpk)) -> 'plans' -> 0 ->> 'id' = 'p1' and not (floor_plan_public((select public_key from fpk)) -> 'plans' -> 0 ? 'walls')) as ok;
+select 'floor plan: an unknown key gives nothing' as test, (select floor_plan_public('nope') is null) as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform floor_plan_public((select public_key from fpk)); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a signed-in user read a plan by key: %', e; end if; end $$;
+select 'floor plan: only the server can use a public key' as test, true as ok;
+do $$ declare n int; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin update floor_plans set data = '[]' where property_id = (select property_id from fpk); get diagnostics n = row_count; exception when others then n := -1; end;
+  reset role; if n > 0 then raise exception 'a client changed a floor plan'; end if; end $$;
+select 'floor plan: a client cannot change a plan' as test, (select data <> '[]'::jsonb from floor_plans where property_id = (select property_id from fpk)) as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated; update floor_plans set data = '[{"id":"p1","floor":0,"name":"Ground","walls":[1,2],"published":{"name":"Ground","walls":[1,2]}}]'::jsonb where property_id = (select property_id from fpk); reset role; end $$;
+select 'floor plan: staff can change a plan and the change is dated and signed' as test,
+  (select jsonb_array_length(data -> 0 -> 'walls') = 2 and updated_by = '00000000-0000-0000-0000-0000000000a1' from floor_plans where property_id = (select property_id from fpk)) as ok;

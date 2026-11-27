@@ -636,7 +636,7 @@ async function handleCheckoutExtra(req, res) {
 // The page is a self-contained tool kept outside the public folder, so it cannot simply be opened by address. A signed-in business that OWNS the add-on
 // asks for a short-lived ticket (checked with their own sign-in token, so the database decides); the page is handed out only against a valid ticket.
 // The app shows it in a locked-down frame (no access to the app's sign-in), and this page gets its own, looser content rules just for itself.
-const ADDON_PAGES = { posters: path.join(__dirname, 'addons', 'posters.html') };
+const ADDON_PAGES = { posters: path.join(__dirname, 'addons', 'posters.html'), floorplan: path.join(__dirname, 'addons', 'floorplan.html') };
 const ADDON_SECRET = crypto.randomBytes(32);
 const addonSig = (code, exp) => crypto.createHmac('sha256', ADDON_SECRET).update(code + '.' + exp).digest('hex');
 function addonTicketOk(code, t) {
@@ -658,6 +658,14 @@ async function handleAddonTicket(req, res) {
   let code; try { code = String(JSON.parse(await readBody(req, 1000)).code || ''); } catch { return out(400, { error: 'Bad request.' }); }
   if (!ADDON_PAGES[code]) return out(400, { error: 'Bad request.' });
   try {
+    if (code === 'floorplan') {
+      // The floor plan editor is for Tremcore staff only (the database says whether this person is signed-in staff).
+      const rs = await fetch(SUPABASE_URL + '/rest/v1/rpc/is_tremcore', { method: 'POST', headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
+      if (rs.status === 401) return out(401, { error: 'Please sign in again.' });
+      if (!rs.ok || (await rs.json().catch(() => false)) !== true) return out(403, { error: 'Only Tremcore staff can open this.' });
+      const exp2 = String(Date.now() + 10 * 60 * 1000);
+      return out(200, { url: '/api/addon-page?code=floorplan&t=' + exp2 + '.' + addonSig(code, exp2) });
+    }
     const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/my_extras', { method: 'POST', headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1], 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
     if (r.status === 401) return out(401, { error: 'Please sign in again.' });
     if (!r.ok) return out(502, { error: 'Sorry, we could not open this just now. Please try again.' });
@@ -677,6 +685,34 @@ function handleAddonPage(req, res, params) {
       'Content-Security-Policy': ["default-src 'none'", "script-src 'unsafe-inline' https://cdn.jsdelivr.net", "style-src 'unsafe-inline' https://fonts.googleapis.com", 'font-src https://fonts.gstatic.com',
         "img-src data: blob:", "connect-src data: blob:", "frame-ancestors 'self'", "base-uri 'none'", "form-action 'none'", "object-src 'none'"].join('; ') });
     res.writeHead(200, headers); res.end(buf);
+  });
+}
+
+// Public floor plan page (the QR code on the wall points here). Anyone with the secret address can VIEW the published floors of that one site, nothing else.
+// The database hands back only the finished ("published") copies, never drafts, and only to this server.
+async function handleFloorPlanPublic(req, res, key) {
+  const text = (status, msg) => send(res, status, msg, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' });
+  if (req.method !== 'GET' && req.method !== 'HEAD') return text(405, 'Not allowed');
+  const ip = String((req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
+  if (ticketLimited(ip)) return text(429, 'Too many requests. Please wait a few minutes.');
+  if (!/^[0-9a-f]{32}$/.test(key) || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return text(404, 'These floor plans could not be found.');
+  let data = null;
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/floor_plan_public', { method: 'POST', headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_key: key }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return text(502, 'Sorry, the floor plans could not be loaded. Please try again.');
+    data = await r.json().catch(() => null);
+  } catch (e) { return text(502, 'Sorry, the floor plans could not be loaded. Please try again.'); }
+  if (!data || !data.site) return text(404, 'These floor plans could not be found.');
+  fs.readFile(ADDON_PAGES.floorplan, 'utf8', (err, html) => {
+    if (err) return text(404, 'Not found');
+    const boot = JSON.stringify({ visitor: true, site: { id: key.slice(0, 6), name: data.site }, plans: data.plans || [] });
+    const lit = JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+    const page = html.replace('<script>\nwindow.__TC=(function', () => '<script>window.name=' + lit + ';</script>\n<script>\nwindow.__TC=(function');
+    const headers = Object.assign(securityHeaders('site'), {
+      'Content-Type': TYPES['.html'], 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy': ["default-src 'none'", "script-src 'unsafe-inline'", "style-src 'unsafe-inline' https://fonts.googleapis.com", 'font-src https://fonts.gstatic.com',
+        'img-src data: blob:', "connect-src 'none'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'none'", "object-src 'none'"].join('; ') });
+    res.writeHead(200, headers); res.end(req.method === 'HEAD' ? undefined : page);
   });
 }
 
@@ -872,6 +908,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && (pathname === '/api/managed-check' || pathname === '/api/postcode')) return handleLookup(req, res, pathname, new URL(req.url, 'http://x').searchParams);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
 
+  { const fm = /^\/f\/([0-9a-f]{32})\/?$/.exec(pathname); if (fm) return handleFloorPlanPublic(req, res, fm[1]); }
   if (pathname === '/api/addon-page') return handleAddonPage(req, res, new URL(req.url, 'http://x').searchParams);
   if (pathname === '/healthz') return send(res, 200, 'ok', { 'Content-Type': 'text/plain' });
   if (pathname === '/api/version') return send(res, 200, JSON.stringify({ v: BUILD_ID }), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });

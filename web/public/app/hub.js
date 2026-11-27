@@ -531,7 +531,16 @@
 
 
   // ---------- Tremcore Managed: the VIP clients (Level 2 / 3), managed offer codes ----------
-  let managedTab = 'overview';
+  let managedTab = 'overview', floorCo = '', floorProp = '', floorFrame = null;
+  // Floor plan editor: a locked-down frame that cannot reach the hub's sign-in. The plans go in through the frame name and come back out as messages,
+  // and are saved here, with the staff member's own sign-in, so the database decides who may change them.
+  window.addEventListener('message', async (ev) => {
+    if (!floorFrame || ev.source !== floorFrame.el.contentWindow || !ev.data || ev.data.tc !== 'fp-save' || !Array.isArray(ev.data.plans)) return;
+    const st = document.getElementById('floor-status'), pid = floorFrame.prop;
+    if (st) st.textContent = 'Saving\u2026';
+    try { await q(ctx.sb.from('floor_plans').update({ data: ev.data.plans }).eq('property_id', pid)); if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+    catch (err) { if (st) st.textContent = 'Not saved: ' + err.message + '. Keep this page open and try a small change again.'; }
+  });
   async function pageManaged(my, flash) {
     chrome('managed', h('h1', {}, 'Tremcore Managed'), loading());
     const [companies, props, summary, extras, codes] = await Promise.all([
@@ -546,8 +555,8 @@
     const sitesOf = (id) => props.filter((x) => x.company_id === id), addonsOf = (id) => extras.filter((x) => x.company_id === id && x.status !== 'cancelled').length;
     const pctOf = (id) => { const rows = summary.filter((x) => x.company_id === id); const tot = rows.reduce((t, r) => t + Number(r.total || 0), 0), ok = rows.reduce((t, r) => t + Number(r.green || 0) + Number(r.amber || 0), 0); return tot ? Math.round(100 * ok / tot) : null; };
     const total = vip.reduce((t, c) => t + (c.monthly_value_pence || 0), 0), nSites = vip.reduce((t, c) => t + sitesOf(c.id).length, 0);
-    const reload = (t) => { if (t) managedTab = t; return pageManaged(++token); };
-    const tabs = h('div', { class: 'actions', role: 'tablist' }, ...[['overview', 'Overview'], ['codes', 'Managed offer codes']].map(([k, l]) => h('button', { type: 'button', role: 'tab', 'data-mtab': k, 'aria-selected': String(managedTab === k), class: managedTab === k ? 'btn small' : 'btn ghost small', onclick: () => reload(k) }, l)));
+    const reload = (t) => { if (t) managedTab = t; floorFrame = null; return pageManaged(++token); };
+    const tabs = h('div', { class: 'actions', role: 'tablist' }, ...[['overview', 'Overview'], ['floor', 'Floor plan'], ['codes', 'Managed offer codes']].map(([k, l]) => h('button', { type: 'button', role: 'tab', 'data-mtab': k, 'aria-selected': String(managedTab === k), class: managedTab === k ? 'btn small' : 'btn ghost small', onclick: () => reload(k) }, l)));
     let body;
     if (managedTab === 'codes') {
       const out = h('div', { id: 'managed-out' });
@@ -588,6 +597,39 @@
             return h('tr', { 'data-mcode': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, c.prospect_name || c.prospect_email || ''), h('td', { class: 'num' }, money(c.managed_price_pence)),
               h('td', {}, c.status === 'used' ? ['Used by ', cc ? h('a', { href: '#/clients/' + cc.id }, cc.name) : ''] : c.status === 'cancelled' ? 'Switched off' : live ? 'Waiting' : 'Expired'), h('td', {}, day(c.expires_at)), h('td', {}, copy, ' ', off, ' ', msg));
           }) : [h('tr', {}, h('td', { colspan: '6', class: 'muted' }, 'No managed codes yet.'))])))];
+    } else if (managedTab === 'floor') {
+      const area = h('div', { id: 'floor-area' });
+      const allCo = companies.filter((c) => c.subscription !== 'cancelled').sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const coSel = select(Object.fromEntries([['', 'Choose a client\u2026']].concat(allCo.map((c) => [c.id, c.name]))), floorCo);
+      coSel.id = 'floor-client';
+      const mine = props.filter((x) => x.company_id === floorCo);
+      if (floorCo && !mine.some((x) => x.id === floorProp)) floorProp = mine.length === 1 ? mine[0].id : '';
+      const siteSel = select(Object.fromEntries([['', mine.length ? 'Choose a site\u2026' : 'No sites yet']].concat(mine.map((x) => [x.id, x.name]))), floorProp);
+      siteSel.id = 'floor-site';
+      coSel.addEventListener('change', () => { floorCo = coSel.value; floorProp = ''; floorFrame = null; reload('floor'); });
+      const openFloor = async () => {
+        area.replaceChildren(h('p', { class: 'muted' }, 'Opening the floor plan\u2026'));
+        try {
+          let rows = await q(ctx.sb.from('floor_plans').select('data,public_key').eq('property_id', floorProp));
+          if (!rows.length) { await q(ctx.sb.from('floor_plans').insert({ property_id: floorProp, data: [] })); rows = await q(ctx.sb.from('floor_plans').select('data,public_key').eq('property_id', floorProp)); }
+          const row = rows[0]; if (!row) throw new Error('the plan could not be created');
+          const { data: { session } } = await ctx.sb.auth.getSession();
+          const r = await fetch('/api/addon-ticket', { method: 'POST', headers: { Authorization: 'Bearer ' + ((session && session.access_token) || ''), 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'floorplan' }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.url) return note(area, 'err', j.error || 'Sorry, the floor plan could not be opened. Please try again.');
+          const pr = props.find((x) => x.id === floorProp), link = location.origin + '/f/' + row.public_key;
+          const f = h('iframe', { class: 'posterframe', id: 'floor-frame', title: 'Floor plan', sandbox: 'allow-scripts allow-downloads allow-modals allow-popups', referrerpolicy: 'no-referrer',
+            name: JSON.stringify({ site: { id: row.public_key.slice(0, 6), name: pr ? pr.name : '' }, plans: Array.isArray(row.data) ? row.data : [], planUrl: link }), src: j.url });
+          floorFrame = { el: f, prop: floorProp };
+          area.replaceChildren(h('p', { class: 'hint', id: 'floor-status', role: 'status' }, 'Changes save by themselves.'), f,
+            h('p', { class: 'hint' }, 'The QR code on the poster points to ', h('a', { href: link, target: '_blank', rel: 'noopener', id: 'floor-link' }, link), '. It shows each floor as it was when you last pressed Finish, and nothing else. The address is private and cannot be guessed.'));
+        } catch (err) { note(area, 'err', 'Sorry, the floor plan could not be opened: ' + err.message); }
+      };
+      siteSel.addEventListener('change', () => { floorProp = siteSel.value; floorFrame = null; if (floorProp) openFloor(); else area.replaceChildren(); });
+      body = [h('section', { class: 'card' }, h('h2', {}, 'Floor plan'),
+        h('p', { class: 'hint' }, 'Draw the floors of a site, mark the fire panel, gas valve, stop cock and electrics, and finish to make the QR poster. Plans are saved to the site in the database.'),
+        h('div', { class: 'grid2' }, h('div', { class: 'f' }, h('label', { for: 'floor-client' }, 'Client'), coSel), h('div', { class: 'f' }, h('label', { for: 'floor-site' }, 'Site'), siteSel))), area];
+      body.openFloor = floorProp ? openFloor : null;
     } else {
       body = [
         h('div', { class: 'tiles' }, tile('Managed clients', String(vip.length)), tile('Sites', String(nSites)), tile('Monthly value', money(total)), tile('Add-ons open', String(extras.filter((x) => vip.some((c) => c.id === x.company_id) && x.status !== 'cancelled').length))),
@@ -598,6 +640,7 @@
         h('p', { class: 'hint' }, 'Managed clients are the ones on Managed Compliance or Property & Compliance Managed. Click a name to open the client, their sites and their records.')];
     }
     chrome('managed', h('h1', {}, 'Tremcore Managed'), tabs, ...body);
+    if (managedTab === 'floor' && body.openFloor && !floorFrame) body.openFloor();
     if (flash && flash.code) { const o = document.getElementById('managed-out'); if (o) o.replaceChildren(h('div', { class: 'msg ok', role: 'status' }, 'Code ', h('strong', {}, flash.code), ' is ready. Send the client this link: '), h('input', { type: 'text', readonly: true, value: flash.link, id: 'managed-link', 'aria-label': 'Sign-up link' })); }
     if (flash && flash.done) { const o = document.getElementById('make-out'); if (o) note(o, 'ok', 'Done. The client is now managed with every add-on open.'); }
   }
