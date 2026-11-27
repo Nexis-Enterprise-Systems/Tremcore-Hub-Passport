@@ -443,6 +443,9 @@
     const used = usedIds.length ? await q(ctx.sb.from('companies').select('id,name,offer_ends_at').in('id', usedIds)) : [];
     if (my !== token) return;
     const co = Object.fromEntries(used.map((c) => [c.id, c]));
+    // Everyone who signed up with any discount code, so the codes can be monitored.
+    const withCode = await q(ctx.sb.from('companies').select('id,name,offer_code,subscription').not('offer_code', 'is', null));
+    if (my !== token) return;
     const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
     const stateOf = (c) => c.status === 'used' ? ['green', 'Used'] : c.status === 'cancelled' ? ['missing', 'Switched off'] : c.reusable ? ['green', 'Always on'] : new Date(c.expires_at) <= new Date() ? ['red', 'Expired'] : ['amber', 'Waiting'];
     const out = h('div', { id: 'offer-out' });
@@ -496,6 +499,19 @@
         field('of-price', 'First site price a month, £ (offer codes only)', price),
         h('div', { class: 'f' }, h('label', {}, 'Code is valid for'), days),
         h('div', { class: 'actions' }, create), out),
+      (() => {
+        const by = (code) => withCode.filter((x) => x.offer_code === code);
+        const paying = (l) => l.filter((x) => x.subscription === 'active' || x.subscription === 'past_due').length, trial = (l) => l.filter((x) => x.subscription === 'trial').length, gone = (l) => l.filter((x) => x.subscription === 'cancelled' || x.subscription === 'expired').length;
+        const tally = codes.map((c) => ({ c, l: by(c.code) })).filter((x) => x.l.length || x.c.reusable).sort((a, b) => b.l.length - a.l.length);
+        const flyer = codes.find((c) => c.code === 'TREM2428');
+        return h('section', { class: 'card', id: 'code-tally' }, h('h2', {}, 'Discount code tally'),
+          h('p', { class: 'hint' }, 'Everyone who has signed up using a discount code. Paying means their subscription is active.'),
+          h('div', { class: 'tiles' }, tile('Signed up with any code', String(withCode.length)), flyer ? tile('TREM2428 (\u00a312.99 intro, flyers)', String(by('TREM2428').length)) : null, tile('Paying now', String(paying(withCode))), tile('On free trial', String(trial(withCode)))),
+          h('div', { class: 'tablewrap' }, h('table', { id: 'tally-table' },
+            h('thead', {}, h('tr', {}, ['Code', 'Used for', 'Signed up', 'Paying', 'On trial', 'Cancelled'].map((x) => h('th', {}, x)))),
+            h('tbody', {}, tally.length ? tally.map(({ c, l }) => h('tr', { 'data-tally': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, c.kind === 'free' ? 'Free access' : c.discount_pence ? 'First site \u00a3' + ((1499 - c.discount_pence) / 100).toFixed(2) : ''), h('td', { class: 'num' }, String(l.length)), h('td', { class: 'num' }, String(paying(l))), h('td', { class: 'num' }, String(trial(l))), h('td', { class: 'num' }, String(gone(l)))))
+              : [h('tr', {}, h('td', { colspan: '6', class: 'muted' }, 'No code has been used yet.'))]))));
+      })(),
       h('h2', {}, 'Codes'),
       h('div', { class: 'tablewrap' }, h('table', { id: 'offer-table' },
         h('thead', {}, h('tr', {}, ['Code', 'Prospect', 'Status', 'Emailed', 'Valid until', 'Used by', ''].map((x) => h('th', {}, x)))),
@@ -605,10 +621,12 @@
     let interest = [];
     try { interest = await q(ctx.sb.from('interest_list').select('created_at,status,signed_up_at')); } catch (e) { interest = []; }
     if (my !== token) return;
+    // Subscribers = clients who are subscribed today (active or past due, not on trial or cancelled), counted by when they joined, so the last point is today's real number.
+    const subscribers = companies.filter((c) => c.subscription === 'active' || c.subscription === 'past_due');
     const per = (label, from, to) => {
       const inP = (iso) => iso && new Date(iso) >= from && new Date(iso) < to;
       const joined = companies.filter((c) => c.subscription !== 'trial' && inP(c.created_at));
-      return { label, reg: interest.filter((r) => inP(r.created_at)).length, signed: joined.length, added: joined.filter((c) => c.subscription === 'active').reduce((t, c) => t + (c.monthly_value_pence || 0), 0) };
+      return { label, reg: interest.filter((r) => inP(r.created_at)).length, signed: joined.length, subs: subscribers.filter((c) => new Date(c.created_at) < to).length, added: joined.filter((c) => c.subscription === 'active').reduce((t, c) => t + (c.monthly_value_pence || 0), 0) };
     };
     const monthRows = [], yearRows = [];
     for (let i = 11; i >= 0; i--) { const a = new Date(now.getFullYear(), now.getMonth() - i, 1), b = new Date(now.getFullYear(), now.getMonth() - i + 1, 1); monthRows.push(per(a.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }), a, b)); }
@@ -654,18 +672,19 @@
     const chartTh = (label, getRows, pick, asMoney, key) => h('th', {}, h('button', { class: 'thchart', type: 'button', 'data-chart': key, title: 'Show as a chart', onclick: () => openChart(label, getRows(), pick, asMoney) }, label, ' ', h('span', { 'aria-hidden': 'true' }, '\u2197')));
     let repRows = monthRows;
     const reportBody = h('tbody', {});
-    const showReport = (rowsIn) => reportBody.replaceChildren(...rowsIn.map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'num' }, String(r.reg)), h('td', { class: 'num' }, String(r.signed)), h('td', { class: 'num' }, money(r.added)), h('td', { class: 'num' }, money(r.added * 12)))));
+    const showReport = (rowsIn) => reportBody.replaceChildren(...rowsIn.map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'num' }, String(r.reg)), h('td', { class: 'num' }, String(r.signed)), h('td', { class: 'num' }, String(r.subs)), h('td', { class: 'num' }, money(r.added)), h('td', { class: 'num' }, money(r.added * 12)))));
     showReport(monthRows);
     const tabM = h('button', { class: 'btn small', type: 'button', id: 'rep-month', onclick: () => { repRows = monthRows; showReport(monthRows); tabM.className = 'btn small'; tabY.className = 'btn ghost small'; } }, 'Monthly');
     const tabY = h('button', { class: 'btn ghost small', type: 'button', id: 'rep-year', onclick: () => { repRows = yearRows; showReport(yearRows); tabY.className = 'btn small'; tabM.className = 'btn ghost small'; } }, 'Yearly');
     const report = h('div', { class: 'card', id: 'report-card' }, h('h2', {}, 'Sign-ups and revenue report'), h('div', { class: 'actions' }, tabM, ' ', tabY),
-      h('div', { class: 'tablewrap' }, h('table', { id: 'report-table' }, h('thead', {}, h('tr', {}, h('th', {}, 'Period'), chartTh('Registered interest', () => repRows, (r) => r.reg, false, 'reg'), chartTh('Signed up', () => repRows, (r) => r.signed, false, 'signed'), chartTh('New monthly revenue', () => repRows, (r) => r.added, true, 'monthly'), chartTh('New yearly value', () => repRows, (r) => r.added * 12, true, 'yearly'))), reportBody)),
+      h('div', { class: 'tablewrap' }, h('table', { id: 'report-table' }, h('thead', {}, h('tr', {}, h('th', {}, 'Period'), chartTh('Registered interest', () => repRows, (r) => r.reg, false, 'reg'), chartTh('Signed up', () => repRows, (r) => r.signed, false, 'signed'), chartTh('Current subscribers', () => repRows, (r) => r.subs, false, 'subscribers'), chartTh('New monthly revenue', () => repRows, (r) => r.added, true, 'monthly'), chartTh('New yearly value', () => repRows, (r) => r.added * 12, true, 'yearly'))), reportBody)),
       h('p', { class: 'hint' }, 'Tap any column heading to see it as a line chart.'),
+      h('p', { class: 'hint' }, 'Current subscribers counts clients who are subscribed today, by the period they joined, so the latest figure is today\u2019s real number. Earlier periods do not include people who have since cancelled.'),
       h('p', { class: 'hint' }, 'New revenue is the monthly value of clients who joined in that period, before VAT. It is worked out from the values recorded here, not from individual Stripe payments.'));
     chrome('revenue', h('h1', {}, 'Revenue & growth'),
       h('div', { class: 'tiles' },
         tile('Monthly recurring revenue', money(mrr)), tile('Yearly run rate', money(mrr * 12)),
-        tile('Paying clients', String(active.length)), tile('Average per paying client', avg),
+        tile('Current subscribers', String(subscribers.length)), tile('Paying clients', String(active.length)), tile('Average per paying client', avg),
         tile('Free accounts', String(freeN)), tile('On trial', String(count('trial'))), tile('Past due', String(count('past_due'))),
         tile('Cancelled', String(count('cancelled'))), tile('Trial to paying', conv)),
       noValue ? h('div', { class: 'msg' }, noValue + ' active client' + (noValue === 1 ? ' has' : 's have') + ' no monthly value set, so the figures above are low. Set them on the Subscriptions page.') : null,

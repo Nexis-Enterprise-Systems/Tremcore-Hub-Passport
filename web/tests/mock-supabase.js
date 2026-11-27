@@ -54,7 +54,7 @@
       const errs = M().dbError || {};
       const err = errs[table + ':' + st.op] || errs[table];
       if (err) return { data: null, error: { message: err } };
-      const match = (r) => st.filters.every(([k, col, v]) => (k === 'eq' ? r[col] === v : k === 'gte' ? r[col] >= v : k === 'lt' ? r[col] < v : v.includes(r[col])));
+      const match = (r) => st.filters.every(([k, col, v]) => (k === 'eq' ? r[col] === v : k === 'gte' ? r[col] >= v : k === 'lt' ? r[col] < v : k === 'notnull' ? r[col] != null : v.includes(r[col])));
       let out;
       if (st.op === 'insert') {
         const list = db()[table] = db()[table] || [];
@@ -82,6 +82,7 @@
       in(col, v) { st.filters.push(['in', col, v]); return qb; },
       gte(col, v) { st.filters.push(['gte', col, v]); return qb; },
       lt(col, v) { st.filters.push(['lt', col, v]); return qb; },
+      not(col, op, v) { if (op === 'is' && v === null) st.filters.push(['notnull', col, null]); return qb; },
       order(col, o) { st.order = { col, asc: !o || o.ascending !== false }; return qb; },
       limit(n) { st.lim = n; return qb; },
       single() { st.single = 'single'; return qb; },

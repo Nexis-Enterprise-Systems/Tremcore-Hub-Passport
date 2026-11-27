@@ -318,3 +318,7 @@
 
 ## Home front page matches Tremcore reference v54 (27 Nov 2026)
 - Home now has the bell (red dot when anything is overdue or due soon; tapping it jumps to Needs attention), a 230px logo, a 118px gradient doughnut and the wording "compliant / due soon / action needed". Checks with no date still show as grey "with no date" and the percentage still counts them against the total (missing is never green).
+
+## Discount code tally and Current subscribers (27 Nov 2026)
+- Hub Offers: a "Discount code tally" card shows how many clients signed up with any code and with TREM2428 (the £12.99 flyer code), split into paying, on trial and cancelled, with one row per code.
+- Hub Revenue & growth: new "Current subscribers" column (and tile) with the same line chart, Monthly/Yearly buttons, PDF and print. Subscribers are counted from the clients subscribed today by the period they joined, so earlier points leave out people who have since cancelled (no cancellation dates are recorded yet).
