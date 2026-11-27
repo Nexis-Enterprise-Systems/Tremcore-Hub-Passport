@@ -1485,3 +1485,63 @@ do $$ begin
   set local role authenticated; update floor_plans set data = '[{"id":"p1","floor":0,"name":"Ground","walls":[1,2],"published":{"name":"Ground","walls":[1,2]}}]'::jsonb where property_id = (select property_id from fpk); reset role; end $$;
 select 'floor plan: staff can change a plan and the change is dated and signed' as test,
   (select jsonb_array_length(data -> 0 -> 'walls') = 2 and updated_by = '00000000-0000-0000-0000-0000000000a1' from floor_plans where property_id = (select property_id from fpk)) as ok;
+
+-- ---- Landlords (0044) ----
+insert into auth.users(id,email) values ('00000000-0000-0000-0000-0000000000d1','landlord1@t'), ('00000000-0000-0000-0000-0000000000d2','landlord2@t');
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  create temp table lids(n int, id uuid) on commit drop;
+  insert into lids select 1, create_landlord('Landlord One', 'L One', 'One@Land.example', 1250);
+  insert into lids select 2, create_landlord('Landlord Two', 'L Two', 'two@land.example', 999);
+  reset role;
+end $$;
+select 'landlord: staff can create a landlord with a fixed price (email tidied)' as test, (select count(*) = 2 and bool_and(contact_email = lower(contact_email)) from landlords) as ok;
+select 'landlord: a landlord with no price or a bad email is refused' as test,
+  (select not exists (select 1 from landlords where price_per_site_pence < 1)) as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000b1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform create_landlord('Sneaky', 'x', 'x@x.example', 100); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client created a landlord: %', e; end if; end $$;
+select 'landlord: a client cannot create a landlord' as test, true as ok;
+insert into landlord_users select '00000000-0000-0000-0000-0000000000d1', id from landlords where name = 'Landlord One';
+insert into landlord_users select '00000000-0000-0000-0000-0000000000d2', id from landlords where name = 'Landlord Two';
+insert into landlord_sites(landlord_id, property_id, paid_by, managed_by, status) select id, '20000000-0000-0000-0000-0000000000a1', 'tenant', 'tenant', 'active' from landlords where name = 'Landlord One';
+insert into landlord_sites(landlord_id, property_id, status) select id, '20000000-0000-0000-0000-0000000000b1', 'active' from landlords where name = 'Landlord Two';
+create temp table l1 as select id from landlords where name = 'Landlord One';
+create temp table l2 as select id from landlords where name = 'Landlord Two';
+grant select on l1, l2 to public;
+do $$ declare n int; p int; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  select count(*) into n from landlords; select count(*) into p from landlord_sites;
+  reset role;
+  if n <> 1 or p <> 1 then raise exception 'landlord saw others: % %', n, p; end if; end $$;
+select 'landlord: signs in and sees only their own record and sites' as test, true as ok;
+do $$ declare n int; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true); perform set_config('request.jwt.claims','{"aal":"aal1"}', true);
+  set local role authenticated; select count(*) into n from landlords; reset role;
+  if n <> 0 then raise exception 'a landlord without 2FA saw data'; end if; end $$;
+select 'landlord: without 2FA sees nothing' as test, true as ok;
+do $$ declare n int; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin update landlords set price_per_site_pence = 1 where id = (select id from l1); get diagnostics n = row_count; exception when others then n := -1; end;
+  reset role; if n > 0 then raise exception 'a landlord changed their price'; end if; end $$;
+select 'landlord: cannot change the fixed price' as test, (select price_per_site_pence = 1250 from landlords where id = (select id from l1)) as ok;
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  insert into landlord_core(landlord_id, code) select (select id from l1), code from core_checks order by sort limit 2;
+  begin insert into landlord_core(landlord_id, code) select (select id from l2), code from core_checks limit 1; e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e not in ('42501') then raise exception 'a landlord picked items for another landlord: %', e; end if; end $$;
+select 'landlord: picks their own core items but not another landlord''s' as test, (select count(*) = 2 from landlord_core where landlord_id = (select id from l1)) as ok;
+do $$ declare t bigint; e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000d1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  select sum(total) into t from landlord_overview((select id from l1));
+  begin perform * from landlord_overview((select id from l2)); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'overview of another landlord: %', e; end if; end $$;
+select 'landlord: the overview works for their own sites only' as test, true as ok;
+select 'landlord: staff can add a landlord login by email' as test, true as ok;
