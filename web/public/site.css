@@ -38,7 +38,7 @@ nav.main a:hover{color:var(--gold2)}nav.main a[aria-current=page]{color:var(--go
 .hdr-actions .btn{min-height:42px;padding:0 20px}
 .menu{display:none}
 @media (min-width:1181px){header.top .wrap{padding-right:320px}}
-@media (max-width:1180px){header.top .wrap{justify-content:flex-end}.menu{display:inline-flex}nav.main{display:none;width:100%;flex-direction:column;gap:4px;order:5}nav.main.open{display:flex}nav.main a{padding:12px 0;border-bottom:1px solid var(--line)}.hdr-actions{position:static;transform:none}.hdr-actions .btn.solid{display:none}}
+@media (max-width:1180px){header.top .wrap{justify-content:flex-end}.menu{display:inline-flex}nav.main{display:none;width:100%;flex-direction:column;gap:4px;order:5}nav.main.open{display:flex}nav.main a{padding:12px 0;border-bottom:1px solid var(--line)}.hdr-actions{position:static;transform:none}.hdr-actions .btn.solid{display:none}.hdr-actions .menu{order:-1}}
 /* logo banner under the menu */
 .masthead{text-align:center;padding:34px 22px 26px;background:radial-gradient(ellipse at center,rgba(212,175,90,.12),transparent 70%),#000}
 .mast-logo{mix-blend-mode:lighten;width:300px;max-width:72vw;height:auto;display:inline-block}
