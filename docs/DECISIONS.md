@@ -325,3 +325,9 @@
 
 ## Desktop layout of the passport (27 Nov 2026)
 - All desktop-only changes live in `@media (min-width:960px)` blocks at the end of `web/public/app/style.css`, so phones and tablets are untouched. Same 250px menu on every screen, headings left-aligned, the Core Compliance card reads top to bottom like the phone, the Unlock-all bar stacks inside the side column, and Tasks has the site picker on top with tidy rows. Do not move phone rules into these blocks.
+
+## Tremcore Managed hub area, phase 1 (migration 0041, 27 Nov 2026)
+- New hub area "Tremcore Managed" (Customers group): Overview of managed (Level 2/3) clients, and Managed offer codes.
+- A managed code is a free-kind code flagged `managed` with a price per site chosen when it is made. Using it at sign-up opens the account as Level 2, active, no card payment, with EVERY add-on open (price 0), valued at price x sites. Managed clients are invoiced by Tremcore directly. "Make an existing client managed" does the same for a current client.
+- Planned next, each its own push: (2) floor plan tab saved per site in the database, with the published copy behind the QR code; (3) invite-only landlord sub-hub: free to the landlord, fixed price per site set by Tremcore and not changeable by them, not advertised; site doughnuts overview; tenant invites with "paid by landlord/tenant" and "managed by landlord/tenant"; landlord picks the Core items that auto-fill every invited tenant's app.
+- Floor plan needs the CSP changed to allow its QR library (qrcodejs) and fonts, or those bundled into the repo, because the app's CSP allows only the supabase-js CDN.

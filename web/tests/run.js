@@ -645,7 +645,15 @@ const USERS = {
     await p.fill('#hub-search', 'zzzznothing'); await p.press('#hub-search', 'Enter'); await p.waitForSelector('text=Nothing found');
     check('hub search: no match says so', true);
     await p.click('.hubnav >> text=Dashboard');
-    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Renewals,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
+    await p.click('.hubnav >> text=Tremcore Managed'); await p.waitForSelector('#managed-table');
+    check('managed: the overview lists managed (Level 2 and 3) clients with sites, in-date percentage, add-ons and monthly value', (await p.locator('#managed-table tbody tr[data-managed]').count()) >= 1 && (await p.locator('#managed-table').innerText()).includes('Managed Service') && (await p.locator('.tiles .tile').count()) === 4);
+    await p.click('[data-mtab=codes]'); await p.waitForSelector('#managed-create');
+    await p.click('#managed-create'); check('managed: a code needs an email address', (await p.locator('#managed-out .msg.err').innerText()).includes('email'));
+    await p.fill('#mc-email', 'vip@client.example'); await p.fill('#mc-price', '9.99'); await p.click('#managed-create'); await p.waitForSelector('#managed-link');
+    { const mc = (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'rpc:create_managed_code').map((c) => c[1])))[0]; check('managed: making a code sends the email, validity and the price per site in pence', mc && mc.p_email === 'vip@client.example' && mc.p_price_pence === 999 && mc.p_days === 30); }
+    check('managed: the sign-up link carries the new code', (await p.inputValue('#managed-link')).includes('/app/?signup=1&code='));
+    await p.click('.hubnav >> text=Dashboard');
+    check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Tremcore Managed,Renewals,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
 
     // clients list + search
     await p.click('.hubnav >> text=Clients'); await p.waitForSelector('table');
@@ -1713,7 +1721,7 @@ const USERS = {
     await t.ctx.close();
 
     t = await hubPage(null, 'staffonly@t'); pg = t.page;
-    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Renewals,Interest list,Offers,Revenue,Enquiries,Activity');
+    check('staff who are not administrators have no Settings tab', (await pg.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Tremcore Managed,Renewals,Interest list,Offers,Revenue,Enquiries,Activity');
     await pg.goto(base + '/app/#/settings'); await pg.waitForSelector('.tiles');
     check('and typing the Settings address just shows the dashboard', (await h1(pg)) === 'Dashboard');
     await t.ctx.close();

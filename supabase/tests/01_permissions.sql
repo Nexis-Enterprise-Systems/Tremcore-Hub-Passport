@@ -1435,3 +1435,26 @@ do $$ declare e text; begin
   begin perform task_alerts_pending(); e := 'allowed'; exception when others then e := sqlstate; end;
   reset role; if e <> '42501' then raise exception 'a client could read the alert list: %', e; end if; end $$;
 rollback;
+
+-- ---- Tremcore Managed: managed codes (0041) ----
+do $$ declare e text; begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated;
+  begin perform create_managed_code('vip@example.com', 'VIP', 30, 500); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client made a managed code: %', e; end if; end $$;
+select 'managed code: a client cannot make one' as test, true as ok;
+do $$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  set local role authenticated; perform create_managed_code('vip@example.com', 'VIP Co', 30, 500); reset role; end $$;
+create temp table mc as select code from offer_codes where prospect_email = 'vip@example.com';
+grant select on mc to public;
+select 'managed code: staff can make one with a price per site' as test, (select managed and kind = 'free' and managed_price_pence = 500 and status = 'active' from offer_codes where code = (select code from mc)) as ok;
+insert into companies(id,name,level,subscription,billing_interval,monthly_value_pence,source) values ('10000000-0000-0000-0000-0000000000f9','VIP Co',1,'trial','monthly',0,'self_signup');
+insert into properties(id,company_id,name) values ('20000000-0000-0000-0000-0000000000f9','10000000-0000-0000-0000-0000000000f9','VIP Site 1'),('20000000-0000-0000-0000-0000000000fa','10000000-0000-0000-0000-0000000000f9','VIP Site 2');
+select 'managed code: it can be attached to a new sign-up' as test, (select kind = 'free' from offer_attach('10000000-0000-0000-0000-0000000000f9', (select code from mc))) as ok;
+do $$ begin set local role service_role; perform free_activate('10000000-0000-0000-0000-0000000000f9', (select code from mc)); reset role; end $$;
+select 'managed code: the company becomes Managed (Level 2), active, valued at the price per site' as test,
+  (select level = 2 and subscription = 'active' and not free_access and monthly_value_pence = 1000 from companies where id = '10000000-0000-0000-0000-0000000000f9') as ok;
+select 'managed code: every add-on is open' as test,
+  (select count(*) = (select count(*) from extras where active) and bool_and(status = 'active') from company_extras where company_id = '10000000-0000-0000-0000-0000000000f9') as ok;
+select 'managed code: the code is used up' as test, (select status = 'used' from offer_codes where code = (select code from mc)) as ok;

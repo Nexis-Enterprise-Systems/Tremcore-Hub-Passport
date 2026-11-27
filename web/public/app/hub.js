@@ -15,7 +15,7 @@
   const ROLE = { client_super: 'Head office', client_site: 'Site user', tremcore_admin: 'Tremcore administrator', tremcore_staff: 'Tremcore staff' };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['interest', 'Interest list'], ['offers', 'Offers'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
+  const NAV = [['dashboard', 'Dashboard'], ['clients', 'Clients'], ['renewals', 'Renewals'], ['subscriptions', 'Subscriptions'], ['managed', 'Tremcore Managed'], ['interest', 'Interest list'], ['offers', 'Offers'], ['revenue', 'Revenue'], ['enquiries', 'Enquiries'], ['activity', 'Activity'], ['settings', 'Settings']];
   const navFor = () => NAV.filter((n) => n[0] !== 'settings' || (ctx && ctx.req.role_name === 'tremcore_admin'));
 
   let ctx = null, token = 0;
@@ -85,7 +85,7 @@
 
   // ---------- page frame ----------
   // Menu groups, in the order they appear in the sidebar.
-  const NAV_GROUPS = [['Overview', ['dashboard']], ['Customers', ['clients', 'subscriptions', 'renewals']], ['Growth', ['interest', 'offers', 'revenue', 'enquiries']], ['System', ['activity', 'settings']]];
+  const NAV_GROUPS = [['Overview', ['dashboard']], ['Customers', ['clients', 'subscriptions', 'managed', 'renewals']], ['Growth', ['interest', 'offers', 'revenue', 'enquiries']], ['System', ['activity', 'settings']]];
   function chrome(active, ...content) {
     const r = ctx.req;
     document.body.classList.add('hub');
@@ -529,6 +529,79 @@
     if (flash) showResult(flash);
   }
 
+
+  // ---------- Tremcore Managed: the VIP clients (Level 2 / 3), managed offer codes ----------
+  let managedTab = 'overview';
+  async function pageManaged(my, flash) {
+    chrome('managed', h('h1', {}, 'Tremcore Managed'), loading());
+    const [companies, props, summary, extras, codes] = await Promise.all([
+      q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,free_access,contact_name,contact_email,created_at')),
+      q(ctx.sb.from('properties').select('id,company_id,name')),
+      q(ctx.sb.from('property_summary').select('*')),
+      q(ctx.sb.from('company_extras').select('company_id,extra_code,status')),
+      q(ctx.sb.from('offer_codes').select('*').eq('managed', true).order('created_at', { ascending: false }))]);
+    if (my !== token) return;
+    const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+    const vip = companies.filter((c) => c.level >= 2 && c.subscription !== 'cancelled').sort((a, b) => (b.monthly_value_pence || 0) - (a.monthly_value_pence || 0));
+    const sitesOf = (id) => props.filter((x) => x.company_id === id), addonsOf = (id) => extras.filter((x) => x.company_id === id && x.status !== 'cancelled').length;
+    const pctOf = (id) => { const rows = summary.filter((x) => x.company_id === id); const tot = rows.reduce((t, r) => t + Number(r.total || 0), 0), ok = rows.reduce((t, r) => t + Number(r.green || 0) + Number(r.amber || 0), 0); return tot ? Math.round(100 * ok / tot) : null; };
+    const total = vip.reduce((t, c) => t + (c.monthly_value_pence || 0), 0), nSites = vip.reduce((t, c) => t + sitesOf(c.id).length, 0);
+    const reload = (t) => { if (t) managedTab = t; return pageManaged(++token); };
+    const tabs = h('div', { class: 'actions', role: 'tablist' }, ...[['overview', 'Overview'], ['codes', 'Managed offer codes']].map(([k, l]) => h('button', { type: 'button', role: 'tab', 'data-mtab': k, 'aria-selected': String(managedTab === k), class: managedTab === k ? 'btn small' : 'btn ghost small', onclick: () => reload(k) }, l)));
+    let body;
+    if (managedTab === 'codes') {
+      const out = h('div', { id: 'managed-out' });
+      const name = text('', { id: 'mc-name', autocomplete: 'off', maxlength: '120' }), email = text('', { id: 'mc-email', type: 'email', inputmode: 'email', autocomplete: 'off' });
+      const price = text('0.00', { id: 'mc-price', inputmode: 'decimal', autocomplete: 'off' });
+      const days = select({ '14': '14 days', '30': '30 days', '60': '60 days', '90': '90 days' }, '30');
+      const toP = (v) => { const n = Math.round(parseFloat(String(v).replace(/[^0-9.]/g, '')) * 100); return Number.isFinite(n) && n >= 0 && n <= 100000 ? n : null; };
+      const make = h('button', { class: 'btn', type: 'button', id: 'managed-create', onclick: async () => {
+        const em = email.value.trim(), pc = toP(price.value);
+        if (!EMAIL.test(em)) return note(out, 'err', 'Please enter the client\u2019s email address.');
+        if (pc == null) return note(out, 'err', 'Please enter the price per site as pounds, for example 9.99 (or 0 for none).');
+        await busy(make, async () => { try { const r = await q(ctx.sb.rpc('create_managed_code', { p_email: em, p_name: titleCase(name.value.trim()), p_days: Number(days.value), p_price_pence: pc })); await pageManaged(++token, { code: r.code, link: location.origin + '/app/?signup=1&code=' + encodeURIComponent(r.code) }); } catch (err) { note(out, 'err', 'The code was not made: ' + err.message); } });
+      } }, 'Create managed code');
+      const pickCo = select(Object.fromEntries([['', 'Choose a client\u2026']].concat(companies.filter((c) => c.level < 2 && c.subscription !== 'cancelled').map((c) => [c.id, c.name]))), '');
+      const mprice = text('0.00', { id: 'mm-price', inputmode: 'decimal', autocomplete: 'off' }), mout = h('div', { id: 'make-out' });
+      const mk = h('button', { class: 'btn ghost', type: 'button', id: 'make-managed', onclick: async () => {
+        const pc = toP(mprice.value); if (!pickCo.value) return note(mout, 'err', 'Please choose a client.'); if (pc == null) return note(mout, 'err', 'Please enter the price per site as pounds.');
+        if (!window.confirm('Make this client managed (view-only for them, every add-on open)?')) return;
+        await busy(mk, async () => { try { await q(ctx.sb.rpc('make_managed', { p_company: pickCo.value, p_price_pence: pc })); await pageManaged(++token, { done: true }); } catch (err) { note(mout, 'err', 'That did not work: ' + err.message); } });
+      } }, 'Make managed');
+      body = [
+        h('section', { class: 'card' }, h('h2', {}, 'New managed offer code'),
+          h('p', { class: 'hint' }, 'The client signs up with the link, and their account opens at once as Managed Compliance (view-only for them) with every add-on open and no card payment. They are invoiced by you at the price per site you set here. You can set a different price on each code.'),
+          h('div', { class: 'grid2' }, field('mc-name', 'Client\u2019s name (optional)', name), field('mc-email', 'Client\u2019s email', email)),
+          h('div', { class: 'grid2' }, field('mc-price', 'Price per site a month, \u00a3 (before VAT)', price), h('div', { class: 'f' }, h('label', {}, 'Code is valid for'), days)),
+          h('div', { class: 'actions' }, make), out),
+        h('section', { class: 'card' }, h('h2', {}, 'Make an existing client managed'),
+          h('p', { class: 'hint' }, 'Moves a client you already have onto Tremcore Managed: Level 2, every add-on open, valued at the price per site below.'),
+          h('div', { class: 'grid2' }, h('div', { class: 'f' }, h('label', {}, 'Client'), pickCo), field('mm-price', 'Price per site a month, \u00a3', mprice)),
+          h('div', { class: 'actions' }, mk), mout),
+        h('h2', {}, 'Managed codes'),
+        h('div', { class: 'tablewrap' }, h('table', { id: 'managed-codes' }, h('thead', {}, h('tr', {}, ['Code', 'Prospect', 'Price per site', 'Status', 'Valid until', ''].map((x) => h('th', {}, x)))),
+          h('tbody', {}, codes.length ? codes.map((c) => {
+            const cc = c.used_company && companies.find((x) => x.id === c.used_company), live = c.status === 'active' && new Date(c.expires_at) > new Date(), msg = h('span', { class: 'muted', role: 'status' });
+            const link = location.origin + '/app/?signup=1&code=' + encodeURIComponent(c.code);
+            const copy = live ? h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(link); msg.replaceChildren('Link copied'); } catch (e) { msg.replaceChildren(link); } } }, 'Copy link') : null;
+            const off = live ? h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await q(ctx.sb.rpc('cancel_offer_code', { p_id: c.id })); await pageManaged(++token); } catch (err) { msg.replaceChildren('Not switched off'); } } }, 'Switch off') : null;
+            return h('tr', { 'data-mcode': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, c.prospect_name || c.prospect_email || ''), h('td', { class: 'num' }, money(c.managed_price_pence)),
+              h('td', {}, c.status === 'used' ? ['Used by ', cc ? h('a', { href: '#/clients/' + cc.id }, cc.name) : ''] : c.status === 'cancelled' ? 'Switched off' : live ? 'Waiting' : 'Expired'), h('td', {}, day(c.expires_at)), h('td', {}, copy, ' ', off, ' ', msg));
+          }) : [h('tr', {}, h('td', { colspan: '6', class: 'muted' }, 'No managed codes yet.'))])))];
+    } else {
+      body = [
+        h('div', { class: 'tiles' }, tile('Managed clients', String(vip.length)), tile('Sites', String(nSites)), tile('Monthly value', money(total)), tile('Add-ons open', String(extras.filter((x) => vip.some((c) => c.id === x.company_id) && x.status !== 'cancelled').length))),
+        h('div', { class: 'tablewrap' }, h('table', { id: 'managed-table' }, h('thead', {}, h('tr', {}, ['Client', 'Package', 'Sites', 'In date', 'Add-ons', 'Monthly', 'Contact'].map((x) => h('th', {}, x)))),
+          h('tbody', {}, vip.length ? vip.map((c) => { const pc = pctOf(c.id); return h('tr', { 'data-managed': c.name }, h('td', {}, h('a', { href: '#/clients/' + c.id }, c.name)), h('td', {}, LEVELS[c.level]), h('td', { class: 'num' }, String(sitesOf(c.id).length)),
+            h('td', { class: 'num' }, pc == null ? '-' : pc + '%'), h('td', { class: 'num' }, String(addonsOf(c.id))), h('td', { class: 'num' }, money(c.monthly_value_pence)), h('td', {}, c.contact_name || c.contact_email || '')); })
+            : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'No managed clients yet. Make a managed code on the next tab.'))]))),
+        h('p', { class: 'hint' }, 'Managed clients are the ones on Managed Compliance or Property & Compliance Managed. Click a name to open the client, their sites and their records.')];
+    }
+    chrome('managed', h('h1', {}, 'Tremcore Managed'), tabs, ...body);
+    if (flash && flash.code) { const o = document.getElementById('managed-out'); if (o) o.replaceChildren(h('div', { class: 'msg ok', role: 'status' }, 'Code ', h('strong', {}, flash.code), ' is ready. Send the client this link: '), h('input', { type: 'text', readonly: true, value: flash.link, id: 'managed-link', 'aria-label': 'Sign-up link' })); }
+    if (flash && flash.done) { const o = document.getElementById('make-out'); if (o) note(o, 'ok', 'Done. The client is now managed with every add-on open.'); }
+  }
+
   // ---------- Interest list (people who registered on the website before the passport opened) ----------
   async function pageInterest(my, flash) {
     chrome('interest', h('h1', {}, 'Interest list'), loading());
@@ -948,6 +1021,7 @@
       else if (a === 'sites' && id && UUID.test(id)) await pageSite(my, id);
       else if (a === 'clients') await pageClients(my);
       else if (a === 'subscriptions') await pageSubscriptions(my);
+      else if (a === 'managed') await pageManaged(my);
       else if (a === 'interest') await pageInterest(my);
       else if (a === 'offers') await pageOffers(my);
       else if (a === 'revenue') await pageRevenue(my);

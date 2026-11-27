@@ -160,6 +160,8 @@
         if (t.repeat_months || (t.repeat_freq && t.repeat_freq !== 'none')) { db().tasks.push(Object.assign({}, t, { id: 'n-' + t.id, status: 'pending', completed_at: null, due_date: '2027-03-01' })); return { data: 'n-' + t.id }; }
         return { data: null };
       }
+      if (name === 'create_managed_code') { const r = { id: 'mc1', code: 'TC-MANAGE', kind: 'free', managed: true, managed_price_pence: args.p_price_pence, prospect_email: args.p_email, prospect_name: args.p_name, status: 'active', expires_at: new Date(Date.now() + 30 * 864e5).toISOString(), created_at: new Date().toISOString() }; (db().offer_codes = db().offer_codes || []).push(r); return { data: r }; }
+      if (name === 'make_managed') return { data: null };
       if (name === 'skip_task') {
         const t = (db().tasks || []).find((x) => x.id === args.p_id); if (!t || t.status !== 'pending' || !t.repeat_freq || t.repeat_freq === 'none') return { data: null, error: { message: 'task_not_found' } };
         t.due_date = '2027-03-08'; return { data: '2027-03-08' };
