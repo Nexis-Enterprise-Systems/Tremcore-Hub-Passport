@@ -1169,7 +1169,14 @@ const USERS = {
     check('bulk: two documents are recorded against their checks', dbs.filter((c) => c.table === 'documents' && c.op === 'insert').length === 2);
     await tb.ctx.close();
     const tv = await newPage(ppSeed, { rights: { can_edit: false, can_manage: false } }); await login(tv.page, 'site@t'); await tv.page.waitForSelector('.summary'); await tv.page.click('[data-nav=compliance]'); await tv.page.waitForSelector('[data-ctab]');
-    check('bulk: a view-only user is not offered bulk upload', (await tv.page.locator('#bulk-upload').count()) === 0); await tv.ctx.close();
+    check('bulk: a view-only user is not offered bulk upload', (await tv.page.locator('#bulk-upload').count()) === 0);
+    { const dlv = tv.page.waitForEvent('download'); await tv.page.click('#report-pdf'); const ddv = await dlv; const bv = require('fs').readFileSync(await ddv.path());
+      check('report: a view-only user can still download the full compliance report as a real PDF', (await tv.page.locator('#report-pdf').count()) === 1 && bv.slice(0, 5).toString() === '%PDF-' && /^[a-z0-9-]*compliance-report-\d{4}-\d{2}-\d{2}\.pdf$/.test(ddv.suggestedFilename()));
+      const txt = bv.toString('latin1');
+      check('report: it names the business, shows the Core score, the statuses and the not-legal-advice note',
+        txt.includes('Compliance Report') && /Core score/.test(txt) && /% in date|No checks yet/.test(txt) && /Overdue|Due soon|In date|No date entered/.test(txt) && /general guide only/.test(txt));
+    }
+    await tv.ctx.close();
     t = await newPage(ppSeed, {}); await login(t.page, 'site@t'); await t.page.waitForSelector('.summary'); await t.page.click('[data-nav=compliance]'); await t.page.waitForSelector('[data-ctab]');
     check('passport: Email Tremcore (not a phone number) is at the very top of the screen for a Self-Managed client', (await t.page.locator('main > .callbar #contact-tremcore').count()) === 1 && (await t.page.locator('#contact-tremcore').innerText()) === 'Email Tremcore' && (await t.page.locator('#contact-tremcore').getAttribute('href')).startsWith('mailto:info@tremcore.co.uk') && (await t.page.evaluate(() => document.querySelector('main').children[1].className)) === 'callbar');
     check('passport: score counts the missing date against the total (3 of 5 = 60%)', (await t.page.locator('.legend').innerText()).includes('60% in date') && (await t.page.locator('.stat.red .num').innerText()) === '1' && (await t.page.locator('.stat.missing .num').innerText()) === '1' && (await t.page.locator('.stat.green .num').innerText()) === '2');
@@ -1374,7 +1381,7 @@ const USERS = {
     check('settings: Email Tremcore help button', (await t.page.locator('#help-email').getAttribute('href')).startsWith('mailto:info@tremcore.co.uk'));
     check('help: groups of short answers are listed (Compliance, Tasks, Add-ons, Toolbox Talks, Staff Clock In / Out, Poster Generator, Emergency)', (await t.page.locator('.faqh').count()) === 7 && (await t.page.locator('.faq details').count()) >= 20 && (await t.page.locator('.faq details[open]').count()) === 0);
     await t.page.click('.faq summary:has-text("How is my compliance score worked out?")');
-    check('help: tapping a question opens its answer', (await t.page.locator('.faq details[open] p').innerText()).includes('Core Compliance items that are green'));
+    check('help: tapping a question opens its answer', (await t.page.locator('.faq details[open] p').innerText()).includes('Core Compliance items that are in date'));
     await t.page.fill('#hq', 'poster');
     check('help: searching narrows the list to matching answers and opens them', (await t.page.locator('.faq details').count()) >= 3 && (await t.page.locator('.faq details').count()) < 12 && (await t.page.locator('.faq details[open]').count()) === (await t.page.locator('.faq details').count()));
     await t.page.fill('#hq', 'zzzzqq'); check('help: a search with no match says so', (await t.page.locator('#faq-none').innerText()).includes('No answers match'));

@@ -8,6 +8,7 @@
   const esc = (s) => clean(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
   const num = (n) => (Math.round(n * 100) / 100).toString();
 
+  // blocks: ... { table: { cols: [{ t: 'Check', w: 170 }, ...], rows: [[cell, ...]], colour: colIndex } } where a cell is text, or { t: 'text', c: 'green|amber|red|grey', sub: 'smaller second line' }
   // blocks: { h: 'Heading' } { p: 'text' } { li: 'bullet' } { kv: ['Label', 'Value'] } { sig: { name, when, strokes } } { gap: n } { small: 'text' }
   function build(doc) {
     const pages = []; let cur = null, y = 0;
@@ -25,7 +26,8 @@
       }
       return out;
     };
-    const text = (x, yy, size, str, bold) => cur.push('BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + num(x) + ' ' + num(yy) + ' Td (' + esc(str) + ') Tj ET');
+    const RGB = { green: '0.08 0.55 0.25', amber: '0.80 0.50 0.00', red: '0.80 0.12 0.12', grey: '0.40 0.40 0.40' };
+    const text = (x, yy, size, str, bold, col) => cur.push('BT ' + (col && RGB[col] ? RGB[col] + ' rg ' : '') + '/' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + num(x) + ' ' + num(yy) + ' Td (' + esc(str) + ') Tj ' + (col && RGB[col] ? '0 g ' : '') + 'ET');
     const para = (str, size, opts) => {
       opts = opts || {}; const x = M + (opts.indent || 0), lines = wrap(str, size, W - 2 * M - (opts.indent || 0), opts.bold), lh = size * 1.35;
       lines.forEach((ln, i) => { need(lh); y -= lh; if (opts.bullet && i === 0) text(M + 6, y, size, '-', false); text(x, y, size, ln, opts.bold); });
@@ -41,6 +43,21 @@
       else if (b.small) para(b.small, 8);
       else if (b.li) para(b.li, 10, { bullet: true, indent: 16 });
       else if (b.kv) { const lines = wrap(b.kv[1], 10, W - 2 * M - 110, false); need(14 * lines.length); y -= 14; text(M, y, 10, b.kv[0], true); lines.forEach((ln, i) => { if (i) y -= 13.5; text(M + 110, y, 10, ln, false); }); }
+      else if (b.table) {
+        const cols = b.table.cols, fs = 8.5, lh = fs * 1.3;
+        const xs = []; let acc = M; cols.forEach((c) => { xs.push(acc); acc += c.w; });
+        const head = () => { need(24); y -= 14; cols.forEach((c, i) => text(xs[i] + 2, y, 8, c.t, true)); cur.push('0.6 w ' + M + ' ' + num(y - 4) + ' m ' + (W - M) + ' ' + num(y - 4) + ' l S'); y -= 4; };
+        head();
+        for (const r of b.table.rows) {
+          const cells = r.map((c, i) => { const o = typeof c === 'object' && c ? c : { t: c }; return { o, lines: wrap(o.t, fs, cols[i].w - 6, !!o.b), sub: o.sub ? wrap(o.sub, 7.5, cols[i].w - 6, false) : [] }; });
+          const n = Math.max(...cells.map((c) => c.lines.length + c.sub.length));
+          if (y - (n * lh + 8) < M + 14) { newPage(); head(); }
+          const top = y; y -= lh;
+          cells.forEach((c, i) => { let yy = top - lh; c.lines.forEach((ln) => { text(xs[i] + 2, yy, fs, ln, !!c.o.b, c.o.c); yy -= lh; }); c.sub.forEach((ln) => { text(xs[i] + 2, yy + 1, 7.5, ln, false, 'grey'); yy -= lh * 0.9; }); });
+          y = top - n * lh - 2; cur.push('0.25 w 0.8 G ' + M + ' ' + num(y) + ' m ' + (W - M) + ' ' + num(y) + ' l S 0 G 0.8 w'); y -= 3;
+        }
+        y -= 4;
+      }
       else if (b.sig) {
         const bh = 44, bw = 150; need(bh + 12); const top = y - 4, base = top - bh;
         text(M, top - 14, 10, b.sig.name, true); if (b.sig.when) text(M, top - 28, 8, b.sig.when, false);

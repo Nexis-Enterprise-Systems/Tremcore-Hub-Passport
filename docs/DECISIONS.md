@@ -286,3 +286,8 @@
 - **Help & Support** (Settings, Help & Support) is now a searchable list of short answers in groups (Compliance, Tasks, Add-ons, Toolbox Talks, Staff Clock In / Out, Poster Generator, Emergency) plus "Still stuck? Report an Issue". Based on Aaron's v54 screenshot, but the answers are rewritten for what the real app does today (the prototype describes some things the real app does not have, such as scanning paper, a bespoke talk request and Delivery records). Report an Issue opens the person's email app with the report ready to send to info@tremcore.co.uk; it does not send from the server, so nothing is stored in the hub. The "within 48 hours" promise is from the prototype text. Answers should be re-read by Aaron.
 - **Website**: the "Ninety seconds, start to finish" heading is now "Explore our media section" on the Home page and the Tremcore Media page.
 - Service worker cache v70.
+
+## 27 Nov 2026 - Full compliance report (PDF)
+- The Compliance screen has a "Download full report (PDF)" button, available to every client user who can see the passport (including view-only Level 2/3).
+- The report shows business, sites, date, Core score, counts (in date / due soon / overdue / no date), a by-site table for multi-site clients, then every check per site (Core, then Other) with basis, last done, due date and status. Missing dates are "No date entered" and never in date.
+- It carries the standing note that the basis wording is a general guide, not legal advice. Made in the browser with the existing PDF writer (no new packages); respects the site filter.

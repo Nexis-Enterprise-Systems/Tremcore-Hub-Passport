@@ -30,7 +30,7 @@
 
   // Help & Support: short answers written for the real app (what is on screen today). g = group heading.
   const FAQ = [
-    { g: 'Compliance', q: 'How is my compliance score worked out?', a: 'The score is the share of your Core Compliance items that are green. Amber and red items do not count as compliant, and an item with no date is never counted as green. Items in Other Compliance are not part of the score.' },
+    { g: 'Compliance', q: 'How is my compliance score worked out?', a: 'The score is the share of your Core Compliance items that are in date (green, or amber because the date is still ahead). Overdue items and items with no date count against it, and an item with no date is never shown as green. Items in Other Compliance are not part of the score.' },
     { g: 'Compliance', q: 'What is the difference between Core and Other compliance?', a: 'Core items make up your score, such as fire safety and electrical checks. Other items are still tracked with dates and documents but do not change the score.' },
     { g: 'Compliance', q: 'How do I move an item between Core and Other?', a: 'Open the item and tap Move to Other or Move to Core. The score updates straight away. Only people who can edit your records see this button.' },
     { g: 'Compliance', q: 'How is the colour code set?', a: 'Automatically from the due date. Green means more than 30 days to go, amber means due within 30 days, and red means the date has passed. An item with no date shows as No date, never green. It cannot be changed by hand.' },
@@ -254,6 +254,46 @@
     }
     const byUrgency = (a, b) => ST[a.status].rank - ST[b.status].rank || String(a.due_date || '').localeCompare(String(b.due_date || '')) || String(a.title).localeCompare(b.title);
 
+    // Full compliance report as a PDF: a summary, a table by site, then every check for each site (Core, then Other), most urgent first.
+    function downloadReport() {
+      const rowsAll = items.filter((r) => site === 'all' || r.property_id === site);
+      const co = (company && company.name) || '';
+      const sites = (site === 'all' ? props : props.filter((p) => p.id === site)).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const scope = sites.length === 1 ? sites[0].name : 'All sites';
+      const today = new Date(), dstr = today.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      const split = (c) => c.total + ' (' + c.green + ' in date, ' + c.amber + ' due soon, ' + c.red + ' overdue, ' + c.missing + ' with no date)';
+      const cCore = tally(rowsAll.filter(isCore)), cOther = tally(rowsAll.filter((r) => !isCore(r)));
+      const colour = { green: 'green', amber: 'amber', red: 'red', missing: 'grey' };
+      const statusText = (r) => r.status === 'red' ? 'Overdue' + (r.days_left != null ? ' (' + Math.abs(r.days_left) + (Math.abs(r.days_left) === 1 ? ' day)' : ' days)') : '')
+        : r.status === 'amber' ? 'Due soon' + (r.days_left != null ? ' (' + r.days_left + (r.days_left === 1 ? ' day)' : ' days)') : '') : r.status === 'green' ? 'In date' : 'No date entered';
+      const checkTable = (rows) => ({ table: { cols: [{ t: 'Check', w: 175 }, { t: 'Basis', w: 80 }, { t: 'Last done', w: 70 }, { t: 'Next due', w: 70 }, { t: 'Status', w: 100 }],
+        rows: rows.slice().sort(byUrgency).map((r) => [
+          { t: r.title, b: true, sub: [r.provider, r.certificate_number ? 'Ref ' + r.certificate_number : '', r.notes].filter(Boolean).join(' - ').slice(0, 150) },
+          BASIS[r.basis] || 'Standard', r.last_done ? shortDate(r.last_done) : '-', r.due_date ? shortDate(r.due_date) : 'Not entered', { t: statusText(r), c: colour[r.status] || 'grey', b: true }]) } });
+      const blocks = [{ h: 'Summary' }, { kv: ['Business', co || '-'] }, { kv: ['Sites covered', sites.length ? sites.map((p) => p.name).join(', ') : '-'] }, { kv: ['Report date', dstr] },
+        { kv: ['Core score', cCore.pct == null ? 'No checks yet' : cCore.pct + '% in date'] }, { kv: ['Core checks', split(cCore)] }, { kv: ['Other checks', split(cOther)] }];
+      if (sites.length > 1) {
+        blocks.push({ h: 'By site (Core checks)' });
+        blocks.push({ table: { cols: [{ t: 'Site', w: 175 }, { t: 'Score', w: 70 }, { t: 'In date', w: 60 }, { t: 'Due soon', w: 65 }, { t: 'Overdue', w: 60 }, { t: 'No date', w: 65 }],
+          rows: sites.map((p) => { const c = tally(items.filter((r) => r.property_id === p.id && isCore(r))); return [{ t: p.name, b: true }, c.pct == null ? '-' : c.pct + '%', String(c.green), String(c.amber), String(c.red), String(c.missing)]; }) } });
+      }
+      sites.forEach((p) => {
+        const mine = items.filter((r) => r.property_id === p.id), core = mine.filter(isCore), other = mine.filter((r) => !isCore(r));
+        blocks.push({ h: p.name + ' - Core Compliance (' + core.length + ')' });
+        blocks.push(core.length ? checkTable(core) : { p: 'No Core checks have been added for this site yet.' });
+        if (other.length) { blocks.push({ h: p.name + ' - Other Compliance (' + other.length + ')' }); blocks.push(checkTable(other)); }
+      });
+      if (!sites.length) blocks.push({ p: 'No checks have been added yet.' });
+      blocks.push({ h: 'About this report' });
+      blocks.push({ small: 'Status is worked out automatically from the next due date: in date means more than 30 days to go, due soon means within 30 days, and overdue means the date has passed. A check with no date entered is never counted as in date. The score is the share of Core checks that are in date, and checks with no date count against it.' });
+      blocks.push({ small: 'The basis shown for each check (legal requirement, standard or best practice) is a general guide only and is not legal advice. What applies to your premises depends on the property, equipment, current legislation and your risk assessment, so please take professional advice where needed.' });
+      const bytes = window.TCPdf.build({ title: 'Compliance Report', subtitle: (co ? co + ' - ' : '') + scope + ' - ' + dstr, footer: 'Tremcore Compliance Passport', blocks });
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      const iso = today.toISOString().slice(0, 10), slug = (co || 'compliance').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'compliance';
+      const a = h('a', { href: url, download: slug + '-compliance-report-' + iso + '.pdf' });
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+
     function viewList(note) {
       tab = 'compliance';
       const rows = items.filter((r) => site === 'all' || r.property_id === site);
@@ -277,6 +317,7 @@
         ctab !== 'due' ? h('div', { class: 'summary' }, donut(cCore),
           h('div', { class: 'legend' }, h('strong', { class: 'big' }, cCore.pct == null ? 'No checks yet' : cCore.pct + '% in date'),
             h('div', { class: 'muted' }, cCore.total ? 'Checks with no date entered count against this figure, so a missing date is never shown as green.' : 'Add your checks below and enter the date each one is next due.'))) : null,
+        ctab !== 'due' ? h('div', { class: 'btnrow reportrow' }, h('button', { class: 'btn small ghost', id: 'report-pdf', type: 'button', onclick: downloadReport }, 'Download full report (PDF)')) : null,
         ctab !== 'due' ? h('div', { class: 'subtabs groupswitch', role: 'tablist', 'aria-label': 'Core or Other' }, ...[['core', 'Core (' + nCore + ')'], ['other', 'Other (' + nOther + ')']].map(([k, l]) =>
           h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-group': k, 'aria-selected': String(cgroup === k), onclick: () => { cgroup = k; filter = 'all'; viewList(); } }, l))) : null,
         ctab !== 'due' ? h('p', { class: 'muted small', id: 'group-help' }, (cgroup === 'core' ? 'These items make up the score above.' : 'These items are tracked but not counted in the score.') + (rights.can_edit ? ' Open an item to move it between Core and Other.' : '')) : null,
