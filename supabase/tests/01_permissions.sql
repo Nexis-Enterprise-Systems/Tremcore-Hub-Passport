@@ -1015,7 +1015,7 @@ select * from chk('offer: a client cannot see any codes', :'superA', 'aal2', $$s
 do $$ declare e text; begin
   perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
   set local role authenticated;
-  begin perform cancel_offer_code((select id from offer_codes limit 1)); e := 'allowed'; exception when others then e := sqlstate; end;
+  begin perform cancel_offer_code((select id from offer_codes where not reusable limit 1)); e := 'allowed'; exception when others then e := sqlstate; end;
   reset role; if e <> '42501' then raise exception 'a client could cancel a code: %', e; end if; end $$;
 select 'offer: a client cannot cancel or edit codes' as test, true as ok;
 do $$ declare e text; begin
@@ -1024,7 +1024,7 @@ do $$ declare e text; begin
   reset role; if e <> '42501' then raise exception 'a client could call offer_check: %', e; end if; end $$;
 select 'offer: the server-only checks cannot be called by a signed-in user' as test, true as ok;
 -- the full journey, through the server functions
-create temp table oc as select code, id from offer_codes limit 1;
+create temp table oc as select code, id from offer_codes where not reusable limit 1;
 grant all on oc to public;
 select 'offer: a good code is accepted by the server check' as test, (select count(*) = 1 from (select * from offer_check((select code from oc))) t) as ok;
 select 'offer: a lower-case code with spaces is still found' as test, (select count(*) = 1 from offer_check('  ' || lower((select code from oc)) || ' ')) as ok;
@@ -1349,4 +1349,35 @@ do $$ declare r text; begin
 end $$;
 select 'yearly add-ons: cancelling a yearly add-on switches it off and takes its value off the account' as test, (select status='cancelled' from company_extras where company_id='10000000-0000-0000-0000-00000000000a' and extra_code='toolbox_talks') and (select monthly_value_pence = 1499 + 799*(select count(*)-1 from properties where company_id='10000000-0000-0000-0000-00000000000a') + 599*2 from companies where id='10000000-0000-0000-0000-00000000000a') as ok;
 select * from chk('yearly add-ons: a client cannot mark an add-on as yearly for itself', '00000000-0000-0000-0000-0000000000a2', 'aal2', $$with u as (update company_extras set billing_interval='year' where company_id='10000000-0000-0000-0000-00000000000a' returning 1) select count(*)=0 from u$$);
+-- flyer code TREM2428 and staff-set prices
+select 'flyer code: TREM2428 exists, never expires and can be reused' as test, (select reusable and expires_at is null and status = 'active' and discount_pence = 200 and months = 12 from offer_codes where code = 'TREM2428') as ok;
+select 'flyer code: the server check accepts it (first site 12.99)' as test, (select count(*) = 1 and bool_and(discount_pence = 200) from offer_check('trem2428')) as ok;
+insert into companies(id,name,level,subscription,billing_interval,monthly_value_pence,source) values ('10000000-0000-0000-0000-0000000000f8','Flyer Co One',1,'trial','monthly',0,'self_signup'),('10000000-0000-0000-0000-0000000000f9','Flyer Co Two',1,'trial','monthly',0,'self_signup');
+select 'flyer code: attaches to a new monthly sign-up' as test, (select discount_pence = 200 from offer_attach('10000000-0000-0000-0000-0000000000f8', 'TREM2428')) as ok;
+update companies set subscription = 'active', monthly_value_pence = 1499 where id = '10000000-0000-0000-0000-0000000000f8';
+select 'flyer code: first payment gives 12 months at the flyer price and the code stays active' as test,
+  (select monthly_value_pence = 1299 and offer_ends_at is not null from companies where id = '10000000-0000-0000-0000-0000000000f8')
+  and (select status = 'active' and uses = 1 from offer_codes where code = 'TREM2428') as ok;
+select 'flyer code: a second sign-up can use it too' as test, (select count(*) = 1 from offer_attach('10000000-0000-0000-0000-0000000000f9', 'TREM2428')) as ok;
+update companies set subscription = 'active', monthly_value_pence = 1499 where id = '10000000-0000-0000-0000-0000000000f9';
+select 'flyer code: the use count goes up and the code is still available' as test, (select uses = 2 and status = 'active' from offer_codes where code = 'TREM2428') and (select count(*) = 1 from offer_check('TREM2428')) as ok;
+do $$ declare e text; begin
+  begin perform offer_attach('10000000-0000-0000-0000-0000000000f8', 'TREM2428'); e := 'allowed'; exception when others then e := sqlstate; end;
+  if e <> '42501' then raise exception 'flyer code went onto an account that already pays: %', e; end if; end $$;
+select 'flyer code: it cannot be put on an account that is already subscribed' as test, true as ok;
+select * from chk('flyer code: staff can set the price on an offer code', :'staff', 'aal2', $$select (create_offer_code('price@example.com', null, 5, 'discount', 999)).discount_pence = 500$$);
+select * from chk('flyer code: staff can make a new flyer code with their own name and price', :'staff', 'aal2', $$select (create_offer_code('', 'Spring flyers', 30, 'discount', 1199, true, 'SPRING26')).reusable$$);
+select 'flyer code: the new flyer code has no expiry and no email' as test, (select expires_at is null and prospect_email is null and discount_pence = 300 from offer_codes where code = 'SPRING26') as ok;
+do $$ declare e text; begin
+  set local role authenticated; perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  begin perform create_offer_code('', 'Mine', 30, 'discount', 500, true, 'MYCODE99'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client made a flyer code: %', e; end if; end $$;
+select 'flyer code: a client cannot make a code' as test, true as ok;
+do $$ declare e text; begin
+  set local role authenticated; perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a1', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  begin perform create_offer_code('p@example.com', null, 5, 'discount', 1600); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '22023' then raise exception 'too-high price accepted or wrong error: %', e; end if; end $$;
+select 'flyer code: a first-site price above the normal 14.99 is refused' as test, true as ok;
+select * from chk('flyer code: staff can switch a flyer code off', :'staff', 'aal2', $$select cancel_offer_code((select id from offer_codes where code = 'SPRING26')) = 'cancelled'$$);
+select 'flyer code: a switched-off flyer code is refused' as test, (select count(*) = 0 from offer_check('SPRING26')) as ok;
 rollback;

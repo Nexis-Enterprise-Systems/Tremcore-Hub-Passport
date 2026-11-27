@@ -442,11 +442,14 @@
     if (my !== token) return;
     const co = Object.fromEntries(used.map((c) => [c.id, c]));
     const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
-    const stateOf = (c) => c.status === 'used' ? ['green', 'Used'] : c.status === 'cancelled' ? ['missing', 'Switched off'] : new Date(c.expires_at) <= new Date() ? ['red', 'Expired'] : ['amber', 'Waiting'];
+    const stateOf = (c) => c.status === 'used' ? ['green', 'Used'] : c.status === 'cancelled' ? ['missing', 'Switched off'] : c.reusable ? ['green', 'Always on'] : new Date(c.expires_at) <= new Date() ? ['red', 'Expired'] : ['amber', 'Waiting'];
     const out = h('div', { id: 'offer-out' });
     const name = text('', { id: 'of-name', autocomplete: 'off', maxlength: '120' }), email = text('', { id: 'of-email', type: 'email', inputmode: 'email', autocomplete: 'off' });
     const days = select({ '14': '14 days', '30': '30 days', '60': '60 days', '90': '90 days' }, '30');
-    const kind = select({ discount: 'Introductory offer (first site £7.99 for 12 months)', free: 'Free access (no payment)' }, 'discount'); kind.id = 'of-kind';
+    const kind = select({ discount: 'Introductory offer (first site for 12 months)', free: 'Free access (no payment)' }, 'discount'); kind.id = 'of-kind';
+    const price = text('7.99', { id: 'of-price', inputmode: 'decimal', autocomplete: 'off' });
+    const fcode = text('', { id: 'fl-code', autocomplete: 'off', maxlength: '24' }), fprice = text('12.99', { id: 'fl-price', inputmode: 'decimal', autocomplete: 'off' }), fname = text('Flyers', { id: 'fl-name', maxlength: '120' });
+    const toPence = (v) => { const n = Math.round(parseFloat(String(v).replace(/[^0-9.]/g, '')) * 100); return n >= 1 && n <= 1499 ? n : null; };
     const showResult = (j) => {
       const link = h('input', { type: 'text', readonly: true, value: j.link, 'aria-label': 'Sign-up link', id: 'offer-link' });
       const copy = h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(j.link); copy.textContent = 'Copied'; } catch (e) { link.select(); } } }, 'Copy link');
@@ -462,30 +465,47 @@
     const create = h('button', { class: 'btn', type: 'button', id: 'offer-create', onclick: async () => {
       const em = email.value.trim();
       if (!EMAIL.test(em)) return note(out, 'err', 'Please enter the prospect’s email address.');
+      if (kind.value === 'discount' && toPence(price.value) == null) return note(out, 'err', 'Please enter the first-site price as pounds, for example 7.99 (between £0.01 and £14.99).');
       await busy(create, async () => {
-        try { const j = await call({ email: em, name: titleCase(name.value.trim()), days: Number(days.value), kind: kind.value }); await pageOffers(++token, j); }
+        try { const j = await call({ email: em, name: titleCase(name.value.trim()), days: Number(days.value), kind: kind.value, price_pence: kind.value === 'discount' ? toPence(price.value) : null }); await pageOffers(++token, j); }
         catch (err) { note(out, 'err', err.message); }
       });
     } }, 'Create code and email it');
+    const fout = h('div', { id: 'flyer-out' });
+    const fcreate = h('button', { class: 'btn', type: 'button', id: 'flyer-create', onclick: async () => {
+      const pc = toPence(fprice.value), cd = fcode.value.trim().toUpperCase();
+      if (pc == null) return note(fout, 'err', 'Please enter the first-site price as pounds, for example 12.99.');
+      if (cd && !/^[A-Z0-9-]{6,24}$/.test(cd)) return note(fout, 'err', 'The code must be 6 to 24 letters, numbers or dashes.');
+      await busy(fcreate, async () => {
+        try { await q(ctx.sb.rpc('create_offer_code', { p_email: '', p_name: fname.value.trim() || 'Flyers', p_days: 30, p_kind: 'discount', p_price_pence: pc, p_forever: true, p_code: cd || null })); await pageOffers(++token); }
+        catch (err) { note(fout, 'err', 'The code was not made: ' + err.message); }
+      });
+    } }, 'Create flyer code');
     chrome('offers', h('h1', {}, 'Offers'),
+      h('section', { class: 'card', id: 'flyer-card' }, h('h2', {}, 'Flyer code (always on)'),
+        h('p', { class: 'hint' }, 'A code that never runs out and can be used by any number of new sign-ups, for printing on flyers. It only works for a new sign-up, never on an account that is already paying, and you can switch it off at any time. Prices are per month + VAT for the first site, for the first 12 months.'),
+        h('div', { class: 'grid2' }, field('fl-code', 'Code (leave blank to make one)', fcode), field('fl-price', 'First site price a month (£)', fprice)),
+        field('fl-name', 'Label (for your own reference)', fname),
+        h('div', { class: 'actions' }, fcreate), fout),
       h('section', { class: 'card' }, h('h2', {}, 'Introductory offer for Self-Managed'),
-        h('p', { class: 'hint' }, 'First site £7.99 a month + VAT for the first 12 months (normally £14.99), then it goes back to £14.99 by itself. Extra sites are the normal £7.99. Monthly billing only. Each code works once, for one prospect.'),
+        h('p', { class: 'hint' }, 'First site is cheaper for the first 12 months (normally £14.99), then it goes back to £14.99 by itself. Extra sites are the normal £7.99. Monthly billing only. Each code works once, for one prospect. Set the price below if you want something other than £7.99.'),
         h('div', { class: 'grid2' }, field('of-name', 'Prospect’s name (optional)', name), field('of-email', 'Prospect’s email', email)),
         h('div', { class: 'f' }, h('label', { for: 'of-kind' }, 'Type of code'), kind),
+        field('of-price', 'First site price a month, £ (offer codes only)', price),
         h('div', { class: 'f' }, h('label', {}, 'Code is valid for'), days),
         h('div', { class: 'actions' }, create), out),
       h('h2', {}, 'Codes'),
       h('div', { class: 'tablewrap' }, h('table', { id: 'offer-table' },
         h('thead', {}, h('tr', {}, ['Code', 'Prospect', 'Status', 'Emailed', 'Valid until', 'Used by', ''].map((x) => h('th', {}, x)))),
         h('tbody', {}, codes.length ? codes.map((c) => {
-          const [kind, label] = stateOf(c), rowOut = h('span', { class: 'muted', role: 'status' }), live = kind === 'amber';
-          const resend = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(resend, async () => { try { const j = await call({ id: c.id }); rowOut.replaceChildren(j.sent ? 'Sent again' : (j.note || 'Not sent')); } catch (err) { rowOut.replaceChildren(err.message); } }); } }, c.sent_at ? 'Resend' : 'Send') : null;
+          const [kind, label] = stateOf(c), rowOut = h('span', { class: 'muted', role: 'status' }), live = kind === 'amber' || (c.reusable && c.status === 'active');
+          const resend = live && !c.reusable ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(resend, async () => { try { const j = await call({ id: c.id }); rowOut.replaceChildren(j.sent ? 'Sent again' : (j.note || 'Not sent')); } catch (err) { rowOut.replaceChildren(err.message); } }); } }, c.sent_at ? 'Resend' : 'Send') : null;
           const off = live ? h('button', { class: 'btn ghost small', onclick: async () => { await busy(off, async () => { try { await q(ctx.sb.rpc('cancel_offer_code', { p_id: c.id })); await pageOffers(++token); } catch (err) { rowOut.replaceChildren('Not switched off: ' + err.message); } }); } }, 'Switch off') : null;
           const copyLink = live ? h('button', { class: 'btn ghost small', onclick: async () => { const l = location.origin + '/app/?signup=1&code=' + encodeURIComponent(c.code); try { await navigator.clipboard.writeText(l); rowOut.replaceChildren('Link copied'); } catch (e) { rowOut.replaceChildren(l); } } }, 'Copy link') : null;
           const cc = c.used_company && co[c.used_company];
-          return h('tr', { 'data-code': c.code }, h('td', {}, h('strong', {}, c.code), c.kind === 'free' ? h('div', { class: 'muted small' }, 'Free access') : null), h('td', {}, [c.prospect_name, c.prospect_email].filter(Boolean).join(' · ')), h('td', {}, badge(kind, label)),
-            h('td', {}, c.sent_at ? day(c.sent_at) : 'Not emailed'), h('td', {}, day(c.expires_at)),
-            h('td', {}, cc ? [h('a', { href: '#/clients/' + cc.id }, cc.name), cc.offer_ends_at ? h('div', { class: 'muted small' }, 'Offer price until ' + day(cc.offer_ends_at)) : null] : ''),
+          return h('tr', { 'data-code': c.code }, h('td', {}, h('strong', {}, c.code), c.kind === 'free' ? h('div', { class: 'muted small' }, 'Free access') : c.discount_pence ? h('div', { class: 'muted small' }, 'First site £' + ((1499 - c.discount_pence) / 100).toFixed(2)) : null), h('td', {}, [c.prospect_name, c.prospect_email].filter(Boolean).join(' · ')), h('td', {}, badge(kind, label)),
+            h('td', {}, c.reusable ? 'Flyers' : c.sent_at ? day(c.sent_at) : 'Not emailed'), h('td', {}, c.reusable ? 'Never expires' : day(c.expires_at)),
+            h('td', {}, c.reusable ? c.uses + (c.uses === 1 ? ' sign-up' : ' sign-ups') : cc ? [h('a', { href: '#/clients/' + cc.id }, cc.name), cc.offer_ends_at ? h('div', { class: 'muted small' }, 'Offer price until ' + day(cc.offer_ends_at)) : null] : ''),
             h('td', {}, copyLink, ' ', resend, ' ', off, ' ', rowOut));
         }) : [h('tr', {}, h('td', { colspan: '7', class: 'muted' }, 'No codes yet.'))]))));
     if (flash) showResult(flash);

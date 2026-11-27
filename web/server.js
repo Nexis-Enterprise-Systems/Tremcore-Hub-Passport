@@ -693,11 +693,11 @@ async function handleSendOffer(req, res) {
       if (!r.ok) return out(401, { error: 'Please sign in again.' });
       row = (await r.json())[0];
       if (!row) return out(404, { error: 'That code was not found.' });
-      if (row.status !== 'active' || new Date(row.expires_at) <= new Date()) return out(409, { error: 'That code can no longer be used, so it was not sent. Make a new one instead.' });
+      if (row.status !== 'active' || (row.expires_at && new Date(row.expires_at) <= new Date())) return out(409, { error: 'That code can no longer be used, so it was not sent. Make a new one instead.' });
     } else {
       const email = clip(d && d.email, 200), name = clip(d && d.name, 120), days = d && d.days != null ? Math.floor(Number(d.days)) : 30;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !(days >= 1 && days <= 365)) return out(422, { error: 'Please enter a valid email address and number of days.' });
-      const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/create_offer_code', { method: 'POST', headers: mine, body: JSON.stringify({ p_email: email, p_name: name, p_days: days, p_kind: d && d.kind === 'free' ? 'free' : 'discount' }), signal: AbortSignal.timeout(8000) });
+      const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/create_offer_code', { method: 'POST', headers: mine, body: JSON.stringify({ p_email: email, p_name: name, p_days: days, p_kind: d && d.kind === 'free' ? 'free' : 'discount', p_price_pence: d && d.price_pence != null && Number(d.price_pence) >= 1 && Number(d.price_pence) <= 1499 ? Math.round(Number(d.price_pence)) : null }), signal: AbortSignal.timeout(8000) });
       if (!r.ok) {
         const e = await r.json().catch(() => ({})), msg = String(e.message || '');
         if (r.status === 404 && /function/i.test(msg)) return out(503, { error: 'Discount codes have not been installed yet (database update 0027 or 0032 is missing).' });

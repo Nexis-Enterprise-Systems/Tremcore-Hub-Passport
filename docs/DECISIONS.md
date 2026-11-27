@@ -291,3 +291,9 @@
 - The Compliance screen has a "Download full report (PDF)" button, available to every client user who can see the passport (including view-only Level 2/3).
 - The report shows business, sites, date, Core score, counts (in date / due soon / overdue / no date), a by-site table for multi-site clients, then every check per site (Core, then Other) with basis, last done, due date and status. Missing dates are "No date entered" and never in date.
 - It carries the standing note that the basis wording is a general guide, not legal advice. Made in the browser with the existing PDF writer (no new packages); respects the site filter.
+
+## 27 Nov 2026 - Flyer code TREM2428 and staff-set offer prices (migration 0039)
+- TREM2428 is a standing "flyer" code: first site GBP 12.99 a month + VAT for 12 months (normally 14.99), then the normal price by itself. Extra sites stay at the normal price. Monthly billing only.
+- A flyer code never expires and can be used by any number of NEW sign-ups (it stays active and counts uses). It only attaches to a company still on trial, so it can never be put on an account that already pays. Staff can switch it off at any time in Hub > Offers.
+- Staff can now set the first-site price on any offer code (hub box, default 7.99) and make more flyer codes (own code text and price) from Hub > Offers > Flyer code.
+- One-prospect codes are unchanged: one use, for one email, with an end date.
