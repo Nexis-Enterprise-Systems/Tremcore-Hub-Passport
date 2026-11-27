@@ -312,3 +312,6 @@
 
 ## Hub search across all clients
 - A search box at the top of the hub menu searches client names, sites and every compliance record (title, notes, group) across all clients, e.g. "gas" or "EICR". Results link to the client or site. Staff only; it uses the same database permissions as the rest of the hub.
+
+## No contact button at the top of the passport (27 Nov 2026)
+- Aaron asked for the Email Tremcore / Call Tremcore button at the top of client screens to be removed for everyone. The hub and website never had it. This replaces the earlier rule that every client screen has a contact button.

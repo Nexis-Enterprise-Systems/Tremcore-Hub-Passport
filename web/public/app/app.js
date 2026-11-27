@@ -41,15 +41,11 @@
     root.replaceChildren(h('img', { class: 'logo', src: '/img/logo-mark.png', alt: 'Tremcore' }), ...nodes);
     const f = root.querySelector('input'); if (f) f.focus();
   }
-  // Every signed-in client screen has a contact button at the top. Self-Managed (Level 1) clients email Tremcore for now (no phone calls);
-  // Managed clients (Levels 2 and 3) get Call Tremcore. The phone number is a placeholder until the real one is known.
+  // No contact button at the top of client screens (removed at Aaron's request, 27 Nov 2026).
   const SUPPORT_EMAIL = 'info@tremcore.co.uk';
   let contactLevel = 1;
   let setupNote = null;   // shown once on the passport right after first-run set-up
-  const callBar = () => h('div', { class: 'callbar' }, contactLevel > 1
-    ? h('a', { href: 'tel:+440000000000', id: 'contact-tremcore' }, 'Call Tremcore')
-    : h('a', { href: 'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('Tremcore Passport help'), id: 'contact-tremcore' }, 'Email Tremcore'));
-  const showIn = (...nodes) => show(callBar(), ...nodes);
+  const showIn = (...nodes) => show(...nodes);
   const showForm = (...nodes) => { showIn(...nodes); document.body.classList.add('formwide'); };
   function message(box, kind, text) {
     box.replaceChildren(text ? h('div', { class: 'msg ' + kind, role: kind === 'err' ? 'alert' : 'status' }, text) : '');

@@ -212,7 +212,7 @@ body.formwide main{max-width:1000px}
 body.passport main>*,body.formwide main>*{grid-column:1/-1}
 body.passport main>.logo,body.formwide main>.logo{grid-column:1;grid-row:1;width:40px;margin:0}
 body.passport main>.callbar,body.formwide main>.callbar{grid-column:2;grid-row:1;margin:0;justify-content:flex-end}
-body.passport main>:nth-child(n+3),body.formwide main>:nth-child(n+3){margin-top:12px}
+body.passport main>:nth-child(n+2),body.formwide main>:nth-child(n+2){margin-top:12px}
 .callbar a{padding:7px 14px;font-size:.82rem}
 .card{padding:18px 16px}
 .welcome h1{font-size:1.25rem}
