@@ -695,6 +695,20 @@ const USERS = {
     await p.fill('#mc-email', 'vip@client.example'); await p.fill('#mc-price', '9.99'); await p.click('#managed-create'); await p.waitForSelector('#managed-link');
     { const mc = (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'rpc:create_managed_code').map((c) => c[1])))[0]; check('managed: making a code sends the email, validity and the price per site in pence', mc && mc.p_email === 'vip@client.example' && mc.p_price_pence === 999 && mc.p_days === 30); }
     check('managed: the sign-up link carries the new code', (await p.inputValue('#managed-link')).includes('/app/?signup=1&code='));
+    {   // Tremcore Managed > Landlord sub-hubs
+      await p.click('[data-mtab=landlords]'); await p.waitForSelector('#landlord-create');
+      await p.click('#landlord-create'); check('landlords: a landlord needs a company name', (await p.locator('#landlord-out .msg.err').innerText()).includes('company name'));
+      await p.fill('#ld-name', 'big landlord ltd'); await p.fill('#ld-email', 'bad'); await p.click('#landlord-create'); check('landlords: a landlord needs a proper email address', (await p.locator('#landlord-out .msg.err').innerText()).includes('email'));
+      await p.fill('#ld-email', 'owner@bigland.example'); await p.fill('#ld-price', '0'); await p.click('#landlord-create'); check('landlords: the fixed price must be at least a penny', (await p.locator('#landlord-out .msg.err').innerText()).includes('price'));
+      await p.fill('#ld-price', '12.50'); await p.click('#landlord-create'); await p.waitForSelector('#landlord-table tr[data-landlord]');
+      const lc = (await p.evaluate(() => window.__calls.filter((c) => c[0] === 'rpc:create_landlord').map((c) => c[1])))[0];
+      check('landlords: creating one sends the name (tidied), email and the fixed price in pence', lc && lc.p_name === 'Big Landlord Ltd' && lc.p_email === 'owner@bigland.example' && lc.p_price_pence === 1250);
+      check('landlords: the list shows the landlord with the fixed price and no sites yet', /Big Landlord Ltd/.test(await p.locator('#landlord-table').innerText()) && /\u00a312\.50/.test(await p.locator('#landlord-table').innerText()));
+      const row = p.locator('#landlord-table tr[data-landlord]').first();
+      await row.locator('input').fill('nobody@land.example'); await row.locator('button').click(); await p.waitForFunction(() => /sign up first/.test(document.querySelector('#landlord-table').innerText));
+      await row.locator('input').fill('known@land.example'); await row.locator('button').click(); await p.waitForFunction(() => /Login added/.test(document.querySelector('#landlord-table').innerText));
+      check('landlords: adding a login works for a signed-up person and says so when they have not signed up yet', true);
+    }
     {   // Tremcore Managed > Floor plan
       let fpTicket = null; await p.route('**/api/addon-ticket', (rt) => { fpTicket = JSON.parse(rt.request().postData() || '{}'); rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: base + '/floor-test-frame' }) }); });
       await p.route('**/floor-test-frame', (rt) => rt.fulfill({ status: 200, contentType: 'text/html', body: '<p>editor</p>' }));

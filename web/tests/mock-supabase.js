@@ -161,6 +161,8 @@
         if (t.repeat_months || (t.repeat_freq && t.repeat_freq !== 'none')) { db().tasks.push(Object.assign({}, t, { id: 'n-' + t.id, status: 'pending', completed_at: null, due_date: '2027-03-01' })); return { data: 'n-' + t.id }; }
         return { data: null };
       }
+      if (name === 'create_landlord') { (db().landlords = db().landlords || []).push({ id: 'ld' + (db().landlords.length + 1), name: args.p_name, contact_name: args.p_contact_name, contact_email: args.p_email, price_per_site_pence: args.p_price_pence, active: true, created_at: new Date().toISOString() }); return { data: 'ld', error: null }; }
+      if (name === 'add_landlord_login') return { data: args.p_email === 'known@land.example', error: null };
       if (name === 'create_managed_code') { const r = { id: 'mc1', code: 'TC-MANAGE', kind: 'free', managed: true, managed_price_pence: args.p_price_pence, prospect_email: args.p_email, prospect_name: args.p_name, status: 'active', expires_at: new Date(Date.now() + 30 * 864e5).toISOString(), created_at: new Date().toISOString() }; (db().offer_codes = db().offer_codes || []).push(r); return { data: r }; }
       if (name === 'make_managed') return { data: null };
       if (name === 'skip_task') {

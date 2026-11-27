@@ -543,12 +543,14 @@
   });
   async function pageManaged(my, flash) {
     chrome('managed', h('h1', {}, 'Tremcore Managed'), loading());
-    const [companies, props, summary, extras, codes] = await Promise.all([
+    const [companies, props, summary, extras, codes, landlords, lsites] = await Promise.all([
       q(ctx.sb.from('companies').select('id,name,level,subscription,monthly_value_pence,free_access,contact_name,contact_email,created_at')),
       q(ctx.sb.from('properties').select('id,company_id,name')),
       q(ctx.sb.from('property_summary').select('*')),
       q(ctx.sb.from('company_extras').select('company_id,extra_code,status')),
-      q(ctx.sb.from('offer_codes').select('*').eq('managed', true).order('created_at', { ascending: false }))]);
+      q(ctx.sb.from('offer_codes').select('*').eq('managed', true).order('created_at', { ascending: false })),
+      managedTab === 'landlords' ? q(ctx.sb.from('landlords').select('*').order('created_at', { ascending: false })) : Promise.resolve([]),
+      managedTab === 'landlords' ? q(ctx.sb.from('landlord_sites').select('id,landlord_id,status')) : Promise.resolve([])]);
     if (my !== token) return;
     const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
     const vip = companies.filter((c) => c.level >= 2 && c.subscription !== 'cancelled').sort((a, b) => (b.monthly_value_pence || 0) - (a.monthly_value_pence || 0));
@@ -556,7 +558,7 @@
     const pctOf = (id) => { const rows = summary.filter((x) => x.company_id === id); const tot = rows.reduce((t, r) => t + Number(r.total || 0), 0), ok = rows.reduce((t, r) => t + Number(r.green || 0) + Number(r.amber || 0), 0); return tot ? Math.round(100 * ok / tot) : null; };
     const total = vip.reduce((t, c) => t + (c.monthly_value_pence || 0), 0), nSites = vip.reduce((t, c) => t + sitesOf(c.id).length, 0);
     const reload = (t) => { if (t) managedTab = t; floorFrame = null; return pageManaged(++token); };
-    const tabs = h('div', { class: 'actions', role: 'tablist' }, ...[['overview', 'Overview'], ['floor', 'Floor plan'], ['codes', 'Managed offer codes']].map(([k, l]) => h('button', { type: 'button', role: 'tab', 'data-mtab': k, 'aria-selected': String(managedTab === k), class: managedTab === k ? 'btn small' : 'btn ghost small', onclick: () => reload(k) }, l)));
+    const tabs = h('div', { class: 'actions', role: 'tablist' }, ...[['overview', 'Overview'], ['floor', 'Floor plan'], ['codes', 'Managed offer codes'], ['landlords', 'Landlord sub-hubs']].map(([k, l]) => h('button', { type: 'button', role: 'tab', 'data-mtab': k, 'aria-selected': String(managedTab === k), class: managedTab === k ? 'btn small' : 'btn ghost small', onclick: () => reload(k) }, l)));
     let body;
     if (managedTab === 'codes') {
       const out = h('div', { id: 'managed-out' });
@@ -597,6 +599,36 @@
             return h('tr', { 'data-mcode': c.code }, h('td', {}, h('strong', {}, c.code)), h('td', {}, c.prospect_name || c.prospect_email || ''), h('td', { class: 'num' }, money(c.managed_price_pence)),
               h('td', {}, c.status === 'used' ? ['Used by ', cc ? h('a', { href: '#/clients/' + cc.id }, cc.name) : ''] : c.status === 'cancelled' ? 'Switched off' : live ? 'Waiting' : 'Expired'), h('td', {}, day(c.expires_at)), h('td', {}, copy, ' ', off, ' ', msg));
           }) : [h('tr', {}, h('td', { colspan: '6', class: 'muted' }, 'No managed codes yet.'))])))];
+    } else if (managedTab === 'landlords') {
+      const out = h('div', { id: 'landlord-out' });
+      const name = text('', { id: 'ld-name', autocomplete: 'off', maxlength: '160' }), cname = text('', { id: 'ld-contact', autocomplete: 'off', maxlength: '120' });
+      const email = text('', { id: 'ld-email', type: 'email', inputmode: 'email', autocomplete: 'off' }), price = text('9.99', { id: 'ld-price', inputmode: 'decimal', autocomplete: 'off' });
+      const toP = (v) => { const n = Math.round(parseFloat(String(v).replace(/[^0-9.]/g, '')) * 100); return Number.isFinite(n) && n >= 1 && n <= 100000 ? n : null; };
+      const make = h('button', { class: 'btn', type: 'button', id: 'landlord-create', onclick: async () => {
+        const em = email.value.trim(), pc = toP(price.value);
+        if (!name.value.trim()) return note(out, 'err', 'Please enter the landlord\u2019s company name.');
+        if (!EMAIL.test(em)) return note(out, 'err', 'Please enter the landlord\u2019s email address.');
+        if (pc == null) return note(out, 'err', 'Please enter the fixed price per site as pounds, for example 9.99.');
+        await busy(make, async () => { try { await q(ctx.sb.rpc('create_landlord', { p_name: titleCase(name.value.trim()), p_contact_name: titleCase(cname.value.trim()), p_email: em, p_price_pence: pc })); await pageManaged(++token, { landlord: true }); } catch (err) { note(out, 'err', 'That did not work: ' + err.message); } });
+      } }, 'Create landlord sub-hub');
+      body = [
+        h('section', { class: 'card' }, h('h2', {}, 'New landlord sub-hub'),
+          h('p', { class: 'hint' }, 'For a landlord with many tenants. It is free to the landlord and is not advertised anywhere. The price per site is fixed here and the landlord cannot change it: it is the price a tenant pays Tremcore when the tenant is paying. The landlord then chooses their own core checks and invites tenants.'),
+          h('div', { class: 'grid2' }, field('ld-name', 'Landlord company', name), field('ld-contact', 'Contact name (optional)', cname)),
+          h('div', { class: 'grid2' }, field('ld-email', 'Landlord\u2019s email', email), field('ld-price', 'Fixed price per site a month, \u00a3 (before VAT)', price)),
+          h('div', { class: 'actions' }, make), out),
+        h('h2', {}, 'Landlords'),
+        h('div', { class: 'tablewrap' }, h('table', { id: 'landlord-table' }, h('thead', {}, h('tr', {}, ['Landlord', 'Contact', 'Price per site', 'Sites', 'Add a login'].map((x) => h('th', {}, x)))),
+          h('tbody', {}, landlords.length ? landlords.map((l) => {
+            const msg = h('span', { class: 'muted', role: 'status' }), le = text('', { type: 'email', inputmode: 'email', autocomplete: 'off', 'aria-label': 'Login email for ' + l.name, placeholder: 'Their login email' });
+            const add = h('button', { class: 'btn ghost small', type: 'button', onclick: async () => {
+              if (!EMAIL.test(le.value.trim())) return msg.replaceChildren('Enter an email address.');
+              try { const ok = await q(ctx.sb.rpc('add_landlord_login', { p_landlord: l.id, p_email: le.value.trim() })); msg.replaceChildren(ok ? 'Login added' : 'No account with that email yet. They need to sign up first.'); if (ok) le.value = ''; } catch (err) { msg.replaceChildren('That did not work: ' + err.message); }
+            } }, 'Add');
+            return h('tr', { 'data-landlord': l.name }, h('td', {}, h('strong', {}, l.name)), h('td', {}, [l.contact_name, l.contact_email].filter(Boolean).join(' \u00b7 ')), h('td', { class: 'num' }, money(l.price_per_site_pence)),
+              h('td', { class: 'num' }, String(lsites.filter((x) => x.landlord_id === l.id && x.status !== 'cancelled').length)), h('td', {}, le, ' ', add, ' ', msg));
+          }) : [h('tr', {}, h('td', { colspan: '5', class: 'muted' }, 'No landlord sub-hubs yet.'))]))),
+        h('p', { class: 'hint' }, 'The landlord\u2019s own sign-in page and overview are the next step. Their price is fixed and shown to them read-only.')];
     } else if (managedTab === 'floor') {
       const area = h('div', { id: 'floor-area' });
       const allCo = companies.filter((c) => c.subscription !== 'cancelled').sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -642,6 +674,7 @@
     chrome('managed', h('h1', {}, 'Tremcore Managed'), tabs, ...body);
     if (managedTab === 'floor' && body.openFloor && !floorFrame) body.openFloor();
     if (flash && flash.code) { const o = document.getElementById('managed-out'); if (o) o.replaceChildren(h('div', { class: 'msg ok', role: 'status' }, 'Code ', h('strong', {}, flash.code), ' is ready. Send the client this link: '), h('input', { type: 'text', readonly: true, value: flash.link, id: 'managed-link', 'aria-label': 'Sign-up link' })); }
+    if (flash && flash.landlord) { const o = document.getElementById('landlord-out'); if (o) note(o, 'ok', 'Landlord sub-hub created.'); }
     if (flash && flash.done) { const o = document.getElementById('make-out'); if (o) note(o, 'ok', 'Done. The client is now managed with every add-on open.'); }
   }
 
