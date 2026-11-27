@@ -315,3 +315,6 @@
 
 ## No contact button at the top of the passport (27 Nov 2026)
 - Aaron asked for the Email Tremcore / Call Tremcore button at the top of client screens to be removed for everyone. The hub and website never had it. This replaces the earlier rule that every client screen has a contact button.
+
+## Home front page matches Tremcore reference v54 (27 Nov 2026)
+- Home now has the bell (red dot when anything is overdue or due soon; tapping it jumps to Needs attention), a 230px logo, a 118px gradient doughnut and the wording "compliant / due soon / action needed". Checks with no date still show as grey "with no date" and the percentage still counts them against the total (missing is never green).

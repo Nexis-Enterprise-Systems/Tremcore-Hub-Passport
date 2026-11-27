@@ -100,6 +100,19 @@
       svg('text', { x: 21, y: 23.2, 'text-anchor': 'middle', class: 'pct' }, c.pct == null ? '–' : c.pct + '%'));
   }
 
+  // Home doughnut: 118px ring, green / amber / red (and grey for checks with no date) with a small gap between the colours, percentage in the middle.
+  function ring(c) {
+    const el = document.createElement('div'); el.className = 'ring'; el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', c.pct == null ? 'No checks yet' : c.pct + ' per cent of your checks are in date');
+    const col = { green: '#37c871', amber: '#f4b73f', red: '#e5484d', missing: '#8d887a' }, B = 3;
+    const segs = c.total ? [['green', c.green], ['amber', c.amber], ['red', c.red], ['missing', c.missing]].filter((x) => x[1] > 0) : [];
+    const stops = []; let at = 0;
+    segs.forEach(([k, n], i) => { const w = n / c.total * 100, end = at + w, s0 = i === 0 ? at : Math.min(at + B, at + w / 2), e0 = i === segs.length - 1 ? end : Math.max(end - B, end - w / 2); stops.push(col[k] + ' ' + s0.toFixed(2) + '%', col[k] + ' ' + e0.toFixed(2) + '%'); at = end; });
+    const arc = document.createElement('div'); arc.className = 'arc'; arc.style.background = segs.length ? 'conic-gradient(from 0deg, ' + stops.join(', ') + ')' : '#2a2a2a';
+    const v = document.createElement('div'); v.className = 'v'; const st = document.createElement('strong'); st.textContent = c.pct == null ? '\u2013' : c.pct + '%'; v.appendChild(st);
+    el.append(arc, v); return el;
+  }
+
   async function mount(ctx) {
     const { sb, h, message, busy, fmtDate } = ctx;
     let props = [], items = [], core = [], tasks = [], extras = [], company = null, rights = { can_edit: false, can_manage: false }, loadError = false;
@@ -173,9 +186,9 @@
     const yearlyPence = (e) => e.yearly_pence || Math.round(e.price_pence * 12 * 0.85 / 10) * 10;
     const priceText = (e) => money(e.price_pence) + ' + VAT ' + (e.charged_per === 'site' ? 'per site, ' : '') + 'per month';
     const legendLines = (c) => h('div', { class: 'lglist' },
-      h('div', { class: 'lg' }, h('i', { class: 'dot green' }), 'On track · ' + c.green),
-      h('div', { class: 'lg' }, h('i', { class: 'dot amber' }), c.amber + (c.amber === 1 ? ' item due soon' : ' items due soon')),
-      h('div', { class: 'lg' }, h('i', { class: 'dot red' }), c.red + ' overdue'),
+      h('div', { class: 'lg' }, h('i', { class: 'dot green' }), c.green + ' compliant'),
+      h('div', { class: 'lg' }, h('i', { class: 'dot amber' }), c.amber + ' due soon'),
+      h('div', { class: 'lg' }, h('i', { class: 'dot red' }), c.red + ' action needed'),
       c.missing ? h('div', { class: 'lg' }, h('i', { class: 'dot missing' }), c.missing + ' with no date') : null);
     const heading = (note) => [ctx.banner, note ? h('div', { class: 'msg ok', role: 'status' }, note) : null,
       loadError ? h('div', { class: 'msg err', role: 'alert' }, 'Sorry, we could not load your passport. Please refresh the page.') : null];
@@ -233,12 +246,14 @@
             ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin'), false, 'clock') : null,
             pg && pg.owned ? q('posters', 'Poster Generator', '17 templates', () => viewExtra('posters'), false, 'poster') : null,
             q('emergency', 'Emergency Information', 'Contacts and emergency numbers', () => viewEmergency(), false, 'alert')));
+      const bellSvg = () => { const n = 'http://www.w3.org/2000/svg', e = document.createElementNS(n, 'svg'); e.setAttribute('viewBox', '0 0 24 24'); e.setAttribute('fill', 'none'); e.setAttribute('stroke', 'currentColor'); e.setAttribute('stroke-width', '1.8'); e.setAttribute('stroke-linecap', 'round'); e.setAttribute('stroke-linejoin', 'round'); const p = document.createElementNS(n, 'path'); p.setAttribute('d', 'M6 9a6 6 0 1 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9zM10 19.5a2 2 0 0 0 4 0'); e.appendChild(p); return e; };
+      const bell = h('button', { class: 'homebell', id: 'home-bell', type: 'button', 'aria-label': nLate + nSoon ? (nLate + nSoon) + ' things need attention' : 'Notifications', onclick: () => { const a = document.getElementById('attention'); if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, bellSvg(), nLate + nSoon ? h('i', { 'aria-hidden': 'true' }) : null);
       shellWith('home', sideCards, [
-        h('div', { class: 'homehead' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', { class: 'sr-only' }, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'tagline' }, 'the smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
+        h('div', { class: 'homehead' }, bell, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', { class: 'sr-only' }, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'tagline' }, 'the smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
         h('div', { class: 'card overview' },
           ...heading(note),
           h('h2', {}, 'Core Compliance'),
-          h('div', { class: 'summary' }, donut(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
+          h('div', { class: 'summary' }, ring(c), c.total ? legendLines(c) : h('div', { class: 'legend' }, h('strong', { class: 'big' }, 'No checks yet'), h('div', { class: 'muted' }, 'Add your checks in Compliance and enter the date each one is next due.'))),
           h('button', { class: 'btn countbtn', id: 'view-full', type: 'button', onclick: () => { cgroup = 'core'; ctab = 'overview'; go('compliance'); } }, h('span', {}, 'Core Compliance'), h('span', { class: 'cnt' }, String(nCore)), h('span', { class: 'arr', 'aria-hidden': 'true' }, '\u2192')),
           h('button', { class: 'btn ghost countbtn', id: 'view-other', type: 'button', onclick: () => { cgroup = 'other'; ctab = 'overview'; go('compliance'); } }, h('span', {}, 'Other Compliance'), h('span', { class: 'cnt' }, String(nOther)), h('span', { class: 'arr', 'aria-hidden': 'true' }, '\u2192'))),
         sitePicker(viewHome),
