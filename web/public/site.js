@@ -128,7 +128,7 @@
           else { out.className = 'msg err'; out.textContent = (r.j && r.j.error) || 'Sorry, that did not send. Please try again or call us.'; }
         })
         .catch(function () { out.className = 'msg err'; out.textContent = 'Sorry, that did not send. Please check your connection and try again.'; })
-        .then(function () { go.disabled = false; go.textContent = 'Send my question'; });
+        .then(function () { go.disabled = false; go.textContent = 'Send to Tremcore'; });
     });
   }
 
