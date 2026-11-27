@@ -156,8 +156,12 @@
       if (name === 'complete_task') {
         const t = (db().tasks || []).find((x) => x.id === args.p_id); if (!t || t.status !== 'pending') return { data: null, error: { message: 'task_not_found' } };
         t.status = 'done'; t.completed_at = new Date().toISOString();
-        if (t.repeat_months) db().tasks.push(Object.assign({}, t, { id: 'n-' + t.id, status: 'pending', completed_at: null, due_date: '2027-03-01' }));
+        if (t.repeat_months || (t.repeat_freq && t.repeat_freq !== 'none')) { db().tasks.push(Object.assign({}, t, { id: 'n-' + t.id, status: 'pending', completed_at: null, due_date: '2027-03-01' })); return { data: 'n-' + t.id }; }
         return { data: null };
+      }
+      if (name === 'skip_task') {
+        const t = (db().tasks || []).find((x) => x.id === args.p_id); if (!t || t.status !== 'pending' || !t.repeat_freq || t.repeat_freq === 'none') return { data: null, error: { message: 'task_not_found' } };
+        t.due_date = '2027-03-08'; return { data: '2027-03-08' };
       }
       if (name === 'update_business') { const c = (db().companies || [])[0]; if (c) Object.assign(c, { contact_phone: args.p_phone, address: args.p_address }); return { data: null }; }
       if (name === 'update_site') { const p = (db().properties || []).find((x) => x.id === args.p_id); if (p) Object.assign(p, { name: args.p_name, address: args.p_address }); return { data: null }; }

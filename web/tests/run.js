@@ -85,7 +85,7 @@ const USERS = {
   let myExtrasReply = { status: 200, rows: [{ code: 'posters', owned: true }, { code: 'toolbox_talks', owned: false }] };
   const stripeCalls = [], applied = []; let extraReply = { status: 200, rows: [{ company_id: 'co-1', sites: 3, email: 'pat@acme.example', stripe_customer_id: 'cus_1', name: 'Staff Clock In / Out', price_pence: 599, charged_per: 'site', quantity: 3 }] }; let billingRows = [{ company_id: 'co-1', sites: 3, billing_interval: 'monthly', email: 'pat@acme.example', subscription: 'trial' }], stripeFail = false, applyStatus = 200, applyResult = 'applied', billingAuthOk = true;
   const launchCalls = []; let launchOpen = true; let launchPeople = [{ id: '11111111-1111-1111-1111-111111111111', name: 'pat prospect', email: 'pat@shop.example', business_name: 'Pat Shop Ltd' }];
-  let remPeople = []; const cancelCalls = []; let linkOk = true, linkSub = 'sub_live1', linkStatus = 403;
+  let remPeople = [], taskPeople = []; const cancelCalls = []; let linkOk = true, linkSub = 'sub_live1', linkStatus = 403;
   const offerCalls = [], mailCalls = []; let offerGood = true, couponExists = false, mailFail = false, myOffer = [], attachOk = true, createOk = true;
   const OFFER_ROW = { id: '99999999-9999-4999-8999-999999999999', code: 'TC-ABC234', prospect_name: 'Pat Prospect', prospect_email: 'pat@prospect.example', discount_pence: 700, months: 12, expires_at: new Date(Date.now() + 20 * 86400000).toISOString(), status: 'active', sent_at: null };
   global.fetch = (u, o) => {
@@ -109,6 +109,8 @@ const USERS = {
     if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/companies?') && url.includes('select=offer_code')) return Promise.resolve(new Response(JSON.stringify([{ offer_code: 'TC-FREE22' }]), { status: 200 }));
     if (url.startsWith(process.env.SUPABASE_URL + '/rest/v1/companies?') && url.includes('contact_email')) { cancelCalls.push({ k: 'company', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify([{ name: 'Acme Cafes Ltd', contact_name: 'pat jones', contact_email: 'pat@acme.example' }]), { status: 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/reminders_pending') { cancelCalls.push({ k: 'rem-list', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify(remPeople), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/task_alerts_pending') { cancelCalls.push({ k: 'task-list', auth: o.headers.Authorization }); return Promise.resolve(new Response(JSON.stringify(taskPeople), { status: 200 })); }
+    if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/task_alerts_mark') { cancelCalls.push({ k: 'task-mark', b: JSON.parse(o.body), auth: o.headers.Authorization }); return Promise.resolve(new Response('1', { status: 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/reminders_mark') { cancelCalls.push({ k: 'rem-mark', b: JSON.parse(o.body), auth: o.headers.Authorization }); return Promise.resolve(new Response('1', { status: 200 })); }
     if (url.startsWith('https://stripe.test/')) { stripeCalls.push({ u: url, o }); return Promise.resolve(new Response(JSON.stringify(stripeFail ? { error: { message: 'boom' } } : { url: 'https://checkout.stripe.test/pay/cs_test_1' }), { status: stripeFail ? 400 : 200 })); }
     if (url === process.env.SUPABASE_URL + '/rest/v1/rpc/billing_info') { sent.push({ u: url, o }); return Promise.resolve(billingAuthOk ? new Response(JSON.stringify(billingRows), { status: 200 }) : new Response('{}', { status: 401 })); }
@@ -450,6 +452,17 @@ const USERS = {
     check('reminders: only the items that triggered are recorded as sent (not the others listed), with the service key', marks.length === 2 && marks[0].auth === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK' && marks[0].b.p_items.map((i) => i.item_id).join() === 'i1,i3' && marks[0].b.p_items[0].stage === 'overdue' && marks[1].b.p_items[0].stage === 'managed');
     mailFail = true; cancelCalls.length = 0; mailCalls.length = 0; rr = await rem(); const rjf = await rr.json(); mailFail = false;
     check('reminders: if an email fails it is not recorded as sent, so it is tried again tomorrow', rjf.failed === 2 && rjf.sent === 0 && !cancelCalls.some((c) => c.k === 'rem-mark')); remPeople = [];
+    // task alerts (My Tasks): emailed by the same run, then recorded so they are never sent twice
+    cancelCalls.length = 0; mailCalls.length = 0; remPeople = [];
+    taskPeople = [{ email: 'pat@acme.example', name: 'pat jones', company: 'Acme Cafes Ltd', items: [
+      { task_id: 't1', which: 1, title: 'Fire door check', site: 'High Street', due_date: '2026-12-03', due_time: '14:30:00', all_day: false, location: 'Back store', priority: 'urgent', minutes: 60 },
+      { task_id: 't2', which: 2, title: 'Order extinguishers', site: 'High Street', due_date: '2026-12-04', due_time: null, all_day: true, location: '', priority: 'routine', minutes: 1440 }] }];
+    rr = await rem(); rjr = await rr.json(); const tm = mailCalls.find((m) => m.body.to[0] === 'pat@acme.example');
+    check('task alerts: one email lists every due task with its date, time, location and urgency, in the branded template', rr.status === 200 && rjr.tasks.sent === 1 && tm && /Task reminders: 2 tasks/.test(tm.body.subject) && tm.body.text.includes('Hi Pat,') && tm.body.text.includes('Fire door check') && tm.body.text.includes('at 14:30') && tm.body.text.includes('Back store') && tm.body.text.includes('URGENT') && tm.body.text.includes('(all day)') && tm.body.html.includes('Open my tasks'));
+    const tmk = cancelCalls.filter((c) => c.k === 'task-mark');
+    check('task alerts: after sending, each task alert is recorded as sent (with the service key) so it is never emailed twice', tmk.length === 1 && tmk[0].auth === 'Bearer SERVICE-SECRET-MUST-NEVER-LEAK' && tmk[0].b.p_items.map((i) => i.task_id + ':' + i.which).join() === 't1:1,t2:2');
+    mailFail = true; cancelCalls.length = 0; mailCalls.length = 0; rr = await rem(); rjr = await rr.json(); mailFail = false;
+    check('task alerts: if the email fails nothing is recorded, so it is tried again at the next check', rjr.tasks.failed === 1 && !cancelCalls.some((c) => c.k === 'task-mark')); taskPeople = [];
     applyStatus = 500; rr = await hook(paidBody, sign(paidBody)); check('webhook: if the database is down we answer with an error so Stripe tries again', rr.status === 500); applyStatus = 200;
     check('billing helpers: signature check accepts a good one and rejects junk', billing.verifySignature('x', sign('x'), 'whsec_testsecret') && !billing.verifySignature('x', 'garbage', 'whsec_testsecret') && !billing.verifySignature('x', sign('x'), ''));
     check('billing helpers: price for 100 sites is built without error and 101 is refused', (() => { try { billing.checkoutParams({ companyId: 'c', sites: 100, interval: 'monthly', origin: 'https://x' }); } catch { return false; } try { billing.checkoutParams({ companyId: 'c', sites: 101, interval: 'monthly', origin: 'https://x' }); return false; } catch { return true; } })());
@@ -1305,9 +1318,9 @@ const USERS = {
           { id: 'a2', property_id: 's1', member_name: 'Al Smith', clocked_in: at(30), clocked_out: at(21.5), no_clock_out: false, closed_by: 'person' },
           { id: 'a3', property_id: 's1', member_name: 'Al Smith', clocked_in: at(60), clocked_out: null, no_clock_out: true, closed_by: null }]; }
       window.__mock.tables.tasks = [
-        { id: 't1', property_id: 's1', title: 'Check exit signs', notes: '', due_date: day(-2), repeat_months: null, status: 'pending' },
-        { id: 't2', property_id: 's1', title: 'Monthly alarm test', notes: '', due_date: day(5), repeat_months: 1, status: 'pending' },
-        { id: 't3', property_id: 's2', title: 'Old job', notes: '', due_date: day(-40), repeat_months: null, status: 'done', completed_at: new Date().toISOString() }];
+        { id: 't1', property_id: 's1', title: 'Check exit signs', notes: 'Both doors', due_date: day(-2), repeat_freq: 'none', priority: 'urgent', location: 'Fire exit', alert_minutes: 60, all_day: false, due_time: '14:30:00', url: 'example.com/signs', status: 'pending' },
+        { id: 't2', property_id: 's1', title: 'Monthly alarm test', notes: '', due_date: day(5), repeat_freq: 'month', repeat_n: 1, repeat_unit: 'week', priority: 'routine', all_day: true, status: 'pending' },
+        { id: 't3', property_id: 's2', title: 'Old job', notes: '', due_date: day(-40), repeat_freq: 'none', status: 'done', completed_at: new Date().toISOString() }];
       window.__mock.tables.site_emergency = [{ id: 'e1', property_id: 's1', assembly_point: 'Car park', gas_shutoff: 'Back store', water_shutoff: '', electric_shutoff: '', notes: '' }];
       window.__mock.tables.toolbox_talks = [
         { id: 'tt1', company_id: null, code: 'tt01', category: 'Health & Safety', title: 'Slips, Trips and Falls', summary: 'Prevent falls.', points: ['Clean spills', 'Keep clear'], discuss: ['Where is it wet?'], minutes: 8, sort: 1 },
@@ -1353,17 +1366,38 @@ const USERS = {
     await t.page.click('[data-ctab=category]');
     check('By Category groups the checks under their headings', (await t.page.locator('.group h3').allInnerTexts()).join('|').includes('Fire safety (1)') && (await t.page.locator('.group h3').count()) >= 3);
     await t.page.click('[data-nav=tasks]'); await t.page.waitForSelector('#add-task');
-    check('tasks: pending tab lists open tasks, overdue first and marked red', (await t.page.locator('[data-ttab=pending]').innerText()) === 'Pending (2)' && (await t.page.locator('.taskrow').count()) === 2 && (await t.page.locator('.taskrow').first().innerText()).includes('Check exit signs') && (await t.page.locator('.taskrow').first().locator('.dot.red').count()) === 1);
-    await t.page.click('[data-done=t2]'); await t.page.waitForSelector('text=Task completed.');
-    check('tasks: ticking a repeating task completes it and the next one appears', (await calls(t.page, 'rpc:complete_task')).length === 1 && (await t.page.locator('.taskrow:has-text("Monthly alarm test")').count()) === 1);
+    check('tasks: pending tab lists open tasks, overdue first and marked red, with time, repeat, alert, location and urgency shown', (await t.page.locator('[data-ttab=pending]').innerText()) === 'Pending (2)' && (await t.page.locator('.taskrow').count()) === 2 && (await t.page.locator('.taskrow').first().innerText()).includes('Check exit signs') && (await t.page.locator('.taskrow').first().locator('.dot.red').count()) === 1 && (await t.page.locator('.taskrow').first().innerText()).includes('14:30') && (await t.page.locator('.taskrow').first().innerText()).includes('Alert: 1 hour') && (await t.page.locator('.taskrow').first().innerText()).includes('Fire exit') && (await t.page.locator('.taskrow').first().innerText()).includes('Urgent') && (await t.page.locator('.taskrow').nth(1).innerText()).includes('Repeats: Every Month'));
+    await t.page.click('[data-task=t1]'); await t.page.waitForSelector('#task-done');
+    check('tasks: tapping a task shows its details: location, alert, priority, link and notes', (await t.page.locator('.card').innerText()).includes('Fire exit') && (await t.page.locator('.card').innerText()).includes('1 hour before') && (await t.page.locator('.card').innerText()).includes('Urgent') && (await t.page.locator('.card').innerText()).includes('Both doors') && (await t.page.locator('a[href="https://example.com/signs"]').count()) === 1 && (await t.page.locator('#task-skip').count()) === 0 && (await t.page.locator('#task-edit').count()) === 1);
+    await t.page.click('[data-back]'); await t.page.click('[data-task=t2]'); await t.page.waitForSelector('#task-done');
+    check('tasks: a repeating task offers Complete This One and Skip This One, and says when the next one is', (await t.page.locator('#task-done').innerText()) === 'Complete This One' && (await t.page.locator('#task-skip').count()) === 1 && (await t.page.locator('.card').innerText()).includes('Next after this'));
+    await t.page.click('#task-skip'); await t.page.waitForSelector('text=Skipped. Next one due');
+    check('tasks: skipping a repeating task moves it on without completing it', (await calls(t.page, 'rpc:skip_task')).length === 1 && (await t.page.locator('.taskrow:has-text("Monthly alarm test")').count()) === 1 && (await calls(t.page, 'rpc:complete_task')).length === 0);
+    await t.page.click('[data-task=t2]'); await t.page.click('#task-del'); await t.page.waitForSelector('#del-all');
+    check('tasks: deleting a repeating task asks whether to delete this one only or all future ones', (await t.page.locator('#del-this').count()) === 1 && (await t.page.locator('#del-all').innerText()) === 'Delete All Future Tasks');
+    await t.page.click('[data-back]'); await t.page.click('[data-task=t2]'); await t.page.click('#task-done'); await t.page.waitForSelector('text=Completed. The next one is on the calendar.');
+    check('tasks: completing a repeating task completes it and the next one appears', (await calls(t.page, 'rpc:complete_task')).length === 1 && (await t.page.locator('.taskrow:has-text("Monthly alarm test")').count()) === 1);
     await t.page.click('[data-ttab=done]');
     check('tasks: the completed tab shows finished tasks', (await t.page.locator('.taskrow:has-text("Monthly alarm test")').count()) === 1);
-    await t.page.click('#add-task'); await t.page.waitForSelector('#t-title');
+    await t.page.click('#add-task'); await t.page.waitForSelector('#tf-title');
+    check('tasks: the new-task form is laid out like a calendar event (title, location, all-day, date, repeat, alert, priority, URL, notes)', (await t.page.locator('#tf-title,#tf-loc,#tf-allday,#tf-date,#tf-rep,#tf-alert,#tf-pri,#tf-url,#tf-notes').count()) === 9 && (await t.page.locator('#tf-time').isHidden()) && (await t.page.locator('#tf-n').isHidden()) && (await t.page.locator('#tf-alert2').isHidden()));
     await t.page.click('#t-save');
     check('tasks: a task needs a name', (await t.page.locator('.msg.err').innerText()).includes('name'));
-    await t.page.fill('#t-title', 'Test emergency lights'); await t.page.fill('#t-repeat', '3'); await t.page.selectOption('#t-site', 's2'); await t.page.click('#t-save'); await t.page.waitForSelector('text=Task added.');
+    await t.page.uncheck('#tf-allday'); check('tasks: turning off All-day shows the time', await t.page.locator('#tf-time').isVisible());
+    await t.page.selectOption('#tf-rep', 'custom'); check('tasks: a custom repeat shows Every n days/weeks/months/years', await t.page.locator('#tf-n').isVisible());
+    await t.page.selectOption('#tf-alert', '60'); check('tasks: choosing an alert shows a second alert', await t.page.locator('#tf-alert2').isVisible());
+    await t.page.selectOption('#tf-endmode', 'date'); check('tasks: End Repeat On Date shows the end date', await t.page.locator('#tf-until').isVisible());
+    await t.page.fill('#tf-title', 'Test emergency lights'); await t.page.fill('#tf-loc', 'Plant room'); await t.page.selectOption('#t-site', 's2');
+    await t.page.fill('#tf-date', '2027-01-10'); await t.page.fill('#tf-time', '08:15'); await t.page.fill('#tf-n', '3'); await t.page.selectOption('#tf-unit', 'month');
+    await t.page.fill('#tf-until', '2026-12-01'); await t.page.click('#t-save');
+    check('tasks: an end date before the task date is refused', (await t.page.locator('.msg.err').innerText()).includes('end date'));
+    await t.page.fill('#tf-until', '2028-01-10'); await t.page.selectOption('#tf-alert2', '1440'); await t.page.selectOption('#tf-pri', 'urgent'); await t.page.fill('#tf-url', 'example.com/lights'); await t.page.fill('#tf-notes', 'Test all heads'); await t.page.click('#t-save'); await t.page.waitForSelector('text=Repeating task added.');
     const added = await t.page.evaluate(() => window.__mock.tables.tasks.find((x) => x.title === 'Test emergency lights'));
-    check('tasks: a new repeating task is saved for the chosen site', added && added.property_id === 's2' && added.repeat_months === 3 && added.status === 'pending');
+    check('tasks: a new event task is saved for the chosen site with its time, location, repeat, end date, alerts, priority, link and notes', added && added.property_id === 's2' && added.status === 'pending' && added.location === 'Plant room' && added.all_day === false && added.due_time === '08:15' && added.due_date === '2027-01-10' && added.repeat_freq === 'custom' && added.repeat_n === 3 && added.repeat_unit === 'month' && added.repeat_until === '2028-01-10' && added.repeat_start === '2027-01-10' && added.alert_minutes === 60 && added.alert2_minutes === 1440 && added.priority === 'urgent' && added.url === 'example.com/lights' && added.notes === 'Test all heads');
+    await t.page.click('[data-ttab=pending]'); await t.page.click('[data-task="' + added.id + '"]'); await t.page.click('#task-edit'); await t.page.waitForSelector('#tf-title');
+    check('tasks: editing opens the form filled in with what was saved', (await t.page.inputValue('#tf-title')) === 'Test emergency lights' && (await t.page.inputValue('#tf-rep')) === 'custom' && (await t.page.inputValue('#tf-n')) === '3' && (await t.page.inputValue('#tf-alert')) === '60' && (await t.page.inputValue('#tf-time')) === '08:15' && (await t.page.inputValue('#tf-pri')) === 'urgent');
+    await t.page.fill('#tf-title', 'Test emergency lights (monthly)'); await t.page.click('#t-save'); await t.page.waitForSelector('text=Task updated.');
+    check('tasks: saving an edit updates the task', (await t.page.evaluate(() => window.__mock.tables.tasks.filter((x) => x.title === 'Test emergency lights (monthly)').length)) === 1);
     await t.page.click('[data-nav=home]'); await t.page.click('[data-q=emergency]'); await t.page.waitForSelector('#e-assembly');
     check('emergency: the headings read Assembly Point, Gas Company / Water Board / Electric Board Phone Number and Other Numbers', (await t.page.locator('label[for=e-assembly]').innerText()) === 'Assembly Point' && (await t.page.locator('label[for=e-gas]').innerText()) === 'Gas Company Phone Number' && (await t.page.locator('label[for=e-water]').innerText()) === 'Water Board Phone Number' && (await t.page.locator('label[for=e-electric]').innerText()) === 'Electric Board Phone Number' && (await t.page.locator('label[for=e-notes]').innerText()) === 'Other Numbers');
     check('emergency: shows the site contacts, assembly point and emergency numbers', (await t.page.locator('.econ').innerText()).includes('Sam Keyholder') && (await t.page.locator('#e-assembly').inputValue()) === 'Car park' && (await t.page.locator('#e-gas').inputValue()) === 'Back store');

@@ -159,4 +159,21 @@ function managedNotice(rec, siteUrl) {
   return { subject, text, html: shell({ title: 'Renewal coming up', bodyHtml, siteUrl, why }) };
 }
 
-module.exports = { complianceReminder, managedNotice, shell, fromLines, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };
+// rec: { name, company, items:[{title, site, due_date, due_time, all_day, location, priority, minutes}] }. A task alert: one email per person, listing every task whose alert is due.
+function taskAlert(rec, siteUrl) {
+  const first = firstName(rec.name), hi = first ? 'Hi ' + first + ',' : 'Hi,';
+  const items = rec.items, multi = new Set(items.map((i) => i.site)).size > 1;
+  const dateText = (i) => { const d = new Date(String(i.due_date).slice(0, 10) + 'T12:00:00Z'); const ds = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); return ds + (!i.all_day && i.due_time ? ' at ' + String(i.due_time).slice(0, 5) : ' (all day)'); };
+  const line = (i) => i.title + ' - ' + dateText(i) + (multi && i.site ? ' - ' + i.site : '') + (i.location ? ' - ' + i.location : '') + (i.priority === 'urgent' ? ' - URGENT' : '');
+  const intro = items.length === 1 ? 'This is a reminder for a task at ' + rec.company + ':' : 'These are reminders for tasks at ' + rec.company + ':';
+  const outro = 'You can complete, skip or change the task in your passport under My Tasks.';
+  const subject = items.length === 1 ? 'Task reminder: ' + items[0].title : 'Task reminders: ' + items.length + ' tasks need your attention';
+  const why = 'You are receiving this because you set an alert on a task in the Tremcore Passport for ' + rec.company + '. You can change or remove the alert on the task.';
+  const text = [hi, '', intro, '', items.map((i) => '- ' + line(i)).join('\n'), '', outro, 'Open your passport: ' + siteUrl + '/app/', '', 'Kindest Regards,', 'Tremcore Passport Team', '', '--', COMPANY.name, 'Company number ' + COMPANY.number, COMPANY.email + ' | ' + siteUrl, '', why].join('\n');
+  const rows = items.map((i) => '<tr><td style="padding:10px 12px;border-bottom:1px solid #e6e0d3;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;"><strong>' + esc(i.title) + '</strong>' + (i.priority === 'urgent' ? ' <span style="color:#b3261e;font-weight:bold;">URGENT</span>' : '') + '<br><span style="color:#555;">' + esc(dateText(i)) + (multi && i.site ? ' &middot; ' + esc(i.site) : '') + (i.location ? ' &middot; ' + esc(i.location) : '') + '</span></td></tr>').join('');
+  const bodyHtml = '<p style="margin:0 0 18px;">' + esc(hi) + '</p><p style="margin:0 0 18px;">' + esc(intro) + '</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e6e0d3;">' + rows + '</table>'
+    + '<p style="margin:0 0 14px;">' + esc(outro) + '</p>' + button(siteUrl + '/app/', 'Open my tasks') + '<p style="margin:26px 0 20px;">Kindest Regards,<br><strong>Tremcore Passport Team</strong></p>';
+  return { subject, text, html: shell({ title: 'Task reminder', bodyHtml, siteUrl, why }) };
+}
+
+module.exports = { complianceReminder, taskAlert, managedNotice, shell, fromLines, interestThanks, welcomeReceipt, paymentFailed, firstName, COMPANY };

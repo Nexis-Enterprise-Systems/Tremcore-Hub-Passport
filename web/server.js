@@ -108,7 +108,7 @@ async function handleEnquiry(req, res) {
   return reply(200, { ok: true });
 }
 
-const { complianceReminder, managedNotice, fromLines, interestThanks, welcomeReceipt, paymentFailed, COMPANY } = require('./mail-template');
+const { complianceReminder, taskAlert, managedNotice, fromLines, interestThanks, welcomeReceipt, paymentFailed, COMPANY } = require('./mail-template');
 // Changes every time the site is deployed (Railway gives the commit; otherwise the time this copy started). The app compares it to show "Update now".
 const BUILD_ID = String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.BUILD_ID || Date.now());
 const interestHits = new Map();
@@ -233,12 +233,45 @@ async function runReminders() {
   console.log('reminders: ' + JSON.stringify(out));
   return out;
 }
+// ---- Task alerts. Every few minutes the database says which task alerts are due (it never lists one twice); this emails them and then records them.
+let taskAlertsRunning = false;
+async function runTaskAlerts() {
+  if (taskAlertsRunning) return { skipped: 'already running' };
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return { skipped: 'not configured' };
+  if (!EMAIL_API_KEY || !EMAIL_FROM) return { skipped: 'email is not set up' };
+  taskAlertsRunning = true;
+  const svc = { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' };
+  const out = { people: 0, sent: 0, failed: 0, marked: 0 };
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/task_alerts_pending', { method: 'POST', headers: svc, body: '{}', signal: AbortSignal.timeout(20000) });
+    if (!r.ok) { console.error('task_alerts_pending failed', r.status); return Object.assign(out, { skipped: 'could not get the list' }); }
+    const people = await r.json(); out.people = people.length;
+    const done = new Map();   // task+alert number -> number of people it was emailed to successfully
+    for (const p of people) {
+      try {
+        const mail = taskAlert(p, SITE_URL);
+        const er = await fetch(EMAIL_API + '/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + EMAIL_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: EMAIL_FROM, to: [p.email], reply_to: COMPANY.email, subject: mail.subject, text: mail.text, html: mail.html }), signal: AbortSignal.timeout(10000) });
+        if (!er.ok) { out.failed++; console.error('task alert email failed', er.status); continue; }
+        out.sent++; p.items.forEach((i) => done.set(i.task_id + ':' + i.which, { task_id: i.task_id, which: i.which }));
+      } catch (e) { out.failed++; console.error('task alert error', e.message); }
+    }
+    if (done.size) {
+      const mr = await fetch(SUPABASE_URL + '/rest/v1/rpc/task_alerts_mark', { method: 'POST', headers: svc, body: JSON.stringify({ p_items: [...done.values()] }), signal: AbortSignal.timeout(10000) });
+      if (mr.ok) out.marked = done.size; else console.error('task_alerts_mark failed', mr.status);
+    }
+  } catch (e) { console.error('task alerts error', e.message); out.skipped = 'error'; }
+  finally { taskAlertsRunning = false; }
+  if (out.people) console.log('task alerts: ' + JSON.stringify(out));
+  return out;
+}
+function startTaskAlertTimer() { setTimeout(() => runTaskAlerts().catch((e) => console.error('task alerts', e.message)), 90 * 1000).unref(); setInterval(() => runTaskAlerts().catch((e) => console.error('task alerts', e.message)), 5 * 60 * 1000).unref(); }
 async function handleSendReminders(req, res) {
   const out = (status, obj) => send(res, status, JSON.stringify(obj), { 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
   const secret = process.env.REMINDER_SECRET || '';
   const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
   if (!secret || !m || m[1].length !== secret.length || !crypto.timingSafeEqual(Buffer.from(m[1]), Buffer.from(secret))) return out(401, { error: 'Not allowed.' });
-  return out(200, await runReminders());
+  return out(200, Object.assign(await runReminders(), { tasks: await runTaskAlerts() }));
 }
 // Once an hour check whether it is time (8 o'clock UK time or later, and not yet done today); the database stops any repeat.
 let lastReminderDay = '';
@@ -864,6 +897,6 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) console.warn('WARNING: SUPABASE_URL and SUPABASE_ANON_KEY are not set; sign-in will not work.');
   server.listen(PORT, () => console.log('Tremcore web listening on ' + PORT));
-  if (process.env.REMINDERS_ON === '1') { startReminderTimer(); console.log('Daily reminder emails are ON.'); } else console.log('Daily reminder emails are off (set REMINDERS_ON=1 to switch them on).');
+  if (process.env.REMINDERS_ON === '1') { startReminderTimer(); startTaskAlertTimer(); console.log('Daily reminder emails are ON.'); } else console.log('Daily reminder emails are off (set REMINDERS_ON=1 to switch them on).');
 }
 module.exports = server;

@@ -673,13 +673,13 @@ do $$ declare tid uuid; nid uuid; begin
   reset role;
   if nid is null then raise exception 'no next task'; end if;
   if not exists (select 1 from tasks where id=tid and status='done' and completed_at is not null) then raise exception 'not done'; end if;
-  if not exists (select 1 from tasks where id=nid and status='pending' and repeat_months=3 and due_date >= current_date) then raise exception 'next task wrong'; end if;
+  if not exists (select 1 from tasks where id=nid and status='pending' and repeat_freq='custom' and repeat_unit='month' and repeat_n=3 and due_date >= current_date) then raise exception 'next task wrong'; end if;
 end $$;
 select 'tasks: completing a repeating task finishes it and creates the next one, never in the past' as test, true as ok;
 do $$ declare n int := 0; ok boolean := false; begin
   perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
   set local role authenticated;
-  while (select count(*) from tasks t join properties p on p.id=t.property_id where p.company_id='10000000-0000-0000-0000-00000000000a' and t.status='pending' and t.repeat_months is not null) < 10 loop
+  while (select count(*) from tasks t join properties p on p.id=t.property_id where p.company_id='10000000-0000-0000-0000-00000000000a' and t.status='pending' and t.repeat_freq <> 'none') < 10 loop
     insert into tasks(property_id,title,repeat_months) values ('20000000-0000-0000-0000-0000000000a1','Repeat '||n,1); n := n + 1;
   end loop;
   begin insert into tasks(property_id,title,repeat_months) values ('20000000-0000-0000-0000-0000000000a1','One too many',1); exception when check_violation then ok := true; end;
@@ -1380,4 +1380,58 @@ do $$ declare e text; begin
 select 'flyer code: a first-site price above the normal 14.99 is refused' as test, true as ok;
 select * from chk('flyer code: staff can switch a flyer code off', :'staff', 'aal2', $$select cancel_offer_code((select id from offer_codes where code = 'SPRING26')) = 'cancelled'$$);
 select 'flyer code: a switched-off flyer code is refused' as test, (select count(*) = 0 from offer_check('SPRING26')) as ok;
+-- task events (migration 0040)
+select 'task dates: weekly, weekday, month-end, custom and yearly steps' as test,
+  next_task_date('2026-11-27','week',1,'week',null) = '2026-12-04' and next_task_date('2026-11-27','weekday',1,'week',null) = '2026-11-30'
+  and next_task_date('2026-01-31','month',1,'week','2026-01-31') = '2026-02-28' and next_task_date('2026-02-28','month',1,'week','2026-01-31') = '2026-03-31'
+  and next_task_date('2026-11-01','custom',3,'day',null) = '2026-11-04' and next_task_date('2026-11-01','custom',2,'week',null) = '2026-11-15'
+  and next_task_date('2026-11-01','custom',2,'year','2026-11-01') = '2028-11-01' and next_task_date('2026-11-01','quarter',1,'week','2026-11-01') = '2027-02-01'
+  and next_task_date('2026-11-01','none',1,'week',null) is null as ok;
+do $$ declare tid uuid; nid uuid; sk date; begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  insert into tasks(property_id,title,due_date,all_day,due_time,location,priority,url,repeat_freq,repeat_until,alert_minutes,alert2_minutes)
+    values ('20000000-0000-0000-0000-0000000000a1','Weekly walk-round',current_date+1,false,'14:30','Back door','urgent','https://example.com','week',current_date+9,60,1440) returning id into tid;
+  nid := complete_task(tid);
+  if nid is null then raise exception 'weekly: no next task'; end if;
+  if not exists (select 1 from tasks where id=nid and due_date = current_date+8 and priority='urgent' and location='Back door' and due_time = '14:30' and not all_day and alert_minutes=60 and alert2_minutes=1440 and repeat_until = current_date+9) then raise exception 'weekly: next task wrong'; end if;
+  sk := skip_task(nid);
+  if sk is not null then raise exception 'skip past the end date should end the series, got %', sk; end if;
+  if exists (select 1 from tasks where id=nid) then raise exception 'series end did not remove the task'; end if;
+  reset role;
+end $$;
+select 'task events: a repeating task keeps all its details, stops at its end date, and skipping the last one ends the series' as test, true as ok;
+do $$ declare tid uuid; d1 date; begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims', '{"aal":"aal2"}', true);
+  set local role authenticated;
+  insert into tasks(property_id,title,due_date,repeat_freq) values ('20000000-0000-0000-0000-0000000000a1','Daily check',current_date+2,'day') returning id into tid;
+  d1 := skip_task(tid);
+  if d1 <> current_date+3 then raise exception 'skip should move to the next day, got %', d1; end if;
+  begin perform skip_task((select id from tasks where title='One-off' limit 1)); raise exception 'skipping a one-off should fail'; exception when sqlstate 'P0002' then null; end;
+  reset role;
+end $$;
+select 'task events: skipping moves a repeating task on, and a one-off task cannot be skipped' as test, true as ok;
+do $$ declare f text; u text; n int; m smallint; begin
+  insert into tasks(property_id,title,due_date,repeat_months) values ('20000000-0000-0000-0000-0000000000a1','Old style',current_date,6) returning repeat_freq, repeat_unit, repeat_n, repeat_months into f, u, n, m;
+  if f <> 'custom' or u <> 'month' or n <> 6 or m is not null then raise exception 'old repeat not converted: % % % %', f, u, n, m; end if;
+end $$;
+select 'task events: an old-style repeat_months is turned into a monthly repeat' as test, true as ok;
+do $$ declare e text; begin
+  set local role authenticated; perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a4', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  begin insert into tasks(property_id,title,priority) values ('20000000-0000-0000-0000-0000000000a1','Nope','urgent'); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a view-only client added a task: %', e; end if; end $$;
+select 'task events: a view-only client cannot add an event task' as test, true as ok;
+insert into tasks(id,property_id,title,due_date,all_day,due_time,alert_minutes) values ('30000000-0000-0000-0000-0000000000a1','20000000-0000-0000-0000-0000000000a1','Alert me',current_date,false,'00:00',0);
+update auth.users set email_confirmed_at = now() where id = '00000000-0000-0000-0000-0000000000a2' and email_confirmed_at is null;
+select 'task alerts: a due alert is listed for the people who can act on it' as test, jsonb_path_exists(task_alerts_pending(), '$[*].items[*] ? (@.task_id == "30000000-0000-0000-0000-0000000000a1")') as ok;
+select 'task alerts: marking it sent stops it being listed again' as test, task_alerts_mark('[{"task_id":"30000000-0000-0000-0000-0000000000a1","which":1}]'::jsonb) = 1 and not jsonb_path_exists(task_alerts_pending(), '$[*].items[*] ? (@.task_id == "30000000-0000-0000-0000-0000000000a1")') as ok;
+update tasks set due_date = current_date where id = '30000000-0000-0000-0000-0000000000a1';
+select 'task alerts: changing the time of a task makes its alert fire again' as test, (select due_date = current_date from tasks where id = '30000000-0000-0000-0000-0000000000a1') and ((select alert_sent_at from tasks where id = '30000000-0000-0000-0000-0000000000a1') is not null) as ok;
+update tasks set due_time = '00:05', due_date = current_date where id = '30000000-0000-0000-0000-0000000000a1';
+select 'task alerts: moving the time clears the sent mark' as test, (select alert_sent_at is null from tasks where id = '30000000-0000-0000-0000-0000000000a1') as ok;
+select 'task alerts: the alert functions cannot be called by a signed-in user' as test, true as ok;
+do $$ declare e text; begin
+  set local role authenticated; perform set_config('request.jwt.claim.sub','00000000-0000-0000-0000-0000000000a2', true); perform set_config('request.jwt.claims','{"aal":"aal2"}', true);
+  begin perform task_alerts_pending(); e := 'allowed'; exception when others then e := sqlstate; end;
+  reset role; if e <> '42501' then raise exception 'a client could read the alert list: %', e; end if; end $$;
 rollback;

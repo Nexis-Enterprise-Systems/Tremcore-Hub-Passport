@@ -302,3 +302,10 @@
 - On Hub > Revenue & growth every number column heading (Registered interest, Signed up, New monthly revenue, New yearly value, and New clients / Self sign-ups) opens a line chart over the periods shown (monthly or yearly view).
 - Line segments are green where the figure rose on the period before, red where it fell, grey where level. The chart has Download PDF (chart plus a figures table) and Print (prints just the chart).
 - Built with the existing no-package PDF writer (new chart block). Figures are the same as the table (recorded values, before VAT).
+
+## My Tasks are calendar-style events (migration 0040)
+- Tasks now work like a phone calendar event: title, location, all-day or time, date, repeat (day, weekday, week, 2 weeks, month, 3 months, 6 months, year, custom with an end date), up to two email alerts, Routine/Urgent priority, URL and notes. List and Calendar views; repeating tasks show on every day they fall on.
+- Completing a repeating task finishes it and creates the next one; Skip moves it on; deleting a repeating task asks "this one only" or "all future". Limit of 10 repeating tasks per company stays.
+- Alerts are emails from the system (`runTaskAlerts`, every 5 minutes, only when REMINDERS_ON=1). All-day tasks alert from 9am.
+- Migration 0040 must be run on Supabase before the new Tasks screen works. Old repeat_months tasks are converted automatically.
+- Emergency Information headings are Assembly Point, Gas Company / Water Board / Electric Board Phone Number, and Other Numbers.

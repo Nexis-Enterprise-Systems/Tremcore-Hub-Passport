@@ -120,7 +120,7 @@
           sb.from('compliance_status').select('id,property_id,grp,title,basis,frequency_months,last_done,due_date,notes,certificate_number,provider,is_core,status,days_left').order('title'),
           sb.rpc('passport_rights'),
           sb.from('core_checks').select('code,label,grp,basis,frequency_months,sort').order('sort'),
-          sb.from('tasks').select('id,property_id,title,notes,due_date,repeat_months,status,completed_at').order('due_date'),
+          sb.from('tasks').select('id,property_id,title,notes,due_date,status,completed_at,location,all_day,due_time,repeat_freq,repeat_n,repeat_unit,repeat_until,repeat_start,priority,url,alert_minutes,alert2_minutes').order('due_date'),
           sb.rpc('my_extras'),
           sb.from('companies').select('id,name,contact_phone,address,postcode,level,billing_interval,subscription,offer_code,offer_ends_at').limit(1)
         ]);
@@ -359,7 +359,7 @@
       shell('compliance', summary, sitePicker(viewList), insCard, checksCard);
     }
 
-    // ---------- My Tasks ----------
+    // ---------- My Tasks (calendar-style events: time, location, repeats, alerts, priority) ----------
     const taskState = (t) => {
       if (t.status === 'done') return 'green';
       if (!t.due_date) return 'missing';
@@ -367,88 +367,173 @@
       return d < 0 ? 'red' : d <= 30 ? 'amber' : 'green';
     };
     const taskText = (t) => t.status === 'done' ? 'Completed ' + shortDate(t.completed_at) : !t.due_date ? 'No due date' : (taskState(t) === 'red' ? 'Overdue since ' : 'Due ') + shortDate(t.due_date);
+    const REPEATS = [['none', 'Never'], ['day', 'Every Day'], ['weekday', 'Every Weekday (Mon–Fri)'], ['week', 'Every Week'], ['2week', 'Every 2 Weeks'], ['month', 'Every Month'], ['quarter', 'Every 3 Months'], ['6month', 'Every 6 Months'], ['year', 'Every Year'], ['custom', 'Custom…']];
+    const ALERTS = [['none', 'None'], ['0', 'At time of task'], ['15', '15 minutes before'], ['30', '30 minutes before'], ['60', '1 hour before'], ['120', '2 hours before'], ['1440', '1 day before'], ['2880', '2 days before'], ['10080', '1 week before'], ['43200', '1 month before']];
+    const isRep = (t) => t.repeat_freq && t.repeat_freq !== 'none';
+    const repLabel = (t) => { if (!isRep(t)) return ''; if (t.repeat_freq === 'custom') { const u = t.repeat_unit; return +t.repeat_n === 1 ? 'Every ' + u : 'Every ' + t.repeat_n + ' ' + u + 's'; } return (REPEATS.find((x) => x[0] === t.repeat_freq) || [, ''])[1]; };
+    const alertLabel = (m) => (ALERTS.find((x) => x[0] === String(m)) || [, ''])[1];
+    const tclock = (v) => (v ? String(v).slice(0, 5) : '');
+    const whenLabel = (t) => (t.due_date === today() ? 'Today' : shortDate(t.due_date)) + (t.all_day === false && t.due_time ? ' ' + tclock(t.due_time) : '');
+    const tone = (t) => t.status === 'done' ? 'green' : t.due_date && t.due_date < today() ? 'red' : t.priority === 'urgent' ? 'amber' : 'info';
+    // The date after `day` in a task's repeat (the database uses the same rules when you complete or skip a task).
+    function nextOcc(day, t) {
+      const f = t.repeat_freq, ms = ({ month: 1, quarter: 3, '6month': 6, year: 12 })[f] || (f === 'custom' && t.repeat_unit === 'month' ? Math.max(1, +t.repeat_n || 1) : f === 'custom' && t.repeat_unit === 'year' ? 12 * Math.max(1, +t.repeat_n || 1) : null);
+      if (ms) { const base = t.repeat_start || day; let k = 1, nx; do { nx = addMonths(base, k * ms); k += 1; } while (nx <= day && k < 3000); return nx; }
+      const d = new Date(day + 'T12:00:00Z'), add = (n) => { d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+      if (f === 'day') return add(1);
+      if (f === 'weekday') { do { d.setUTCDate(d.getUTCDate() + 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6); return d.toISOString().slice(0, 10); }
+      if (f === 'week') return add(7);
+      if (f === '2week') return add(14);
+      if (f === 'custom') return add((t.repeat_unit === 'day' ? 1 : 7) * Math.max(1, +t.repeat_n || 1));
+      return null;
+    }
+    // Every date a pending task falls on between from and to (so a repeating task shows on each of its days in the calendar).
+    function occurrences(t, from, to) {
+      if (t.status === 'done' || !t.due_date) return [];
+      if (!isRep(t)) return t.due_date >= from && t.due_date <= to ? [t.due_date] : [];
+      const out = []; let d = t.due_date, n = 0;
+      while (d && d <= to && n < 500) { if (t.repeat_until && d > t.repeat_until) break; if (d >= from) out.push(d); d = nextOcc(d, t); n += 1; }
+      return out;
+    }
+    const metaBits = (t) => [isRep(t) ? 'Repeats: ' + repLabel(t) : '', t.alert_minutes != null ? 'Alert: ' + alertLabel(t.alert_minutes).replace(' before', '') : '', t.location || '', t.priority === 'urgent' && t.status !== 'done' ? 'Urgent' : ''].filter(Boolean);
     function viewTasks(note) {
       tab = 'tasks';
       const mine = tasks.filter((t) => site === 'all' || t.property_id === site);
-      const pend = mine.filter((t) => t.status === 'pending').sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
+      const pend = mine.filter((t) => t.status === 'pending').sort((a, b) => String(a.due_date || '9999').concat(tclock(a.due_time)).localeCompare(String(b.due_date || '9999').concat(tclock(b.due_time))));
       const done = mine.filter((t) => t.status === 'done').sort((a, b) => String(b.completed_at).localeCompare(String(a.completed_at)));
       const list = ttab === 'pending' ? pend : done;
-      const box = h('div', { id: 'task-msg' });
-      const act = async (btn, fn, okNote) => ctx.busy(btn, async () => {
-        const r = await fn();
-        if (r && r.error) { ctx.message(box, 'err', 'Sorry, that did not save. You may not have permission to change tasks.'); return; }
-        await reload(); viewTasks(okNote);
-      });
-      const row = (t) => h('div', { class: 'item taskrow nosite', 'data-task': t.id },
-        h('i', { class: 'dot ' + taskState(t) }), h('span', { class: 'title' }, t.title, t.repeat_months ? h('span', { class: 'muted small rep' }, ' · repeats every ' + t.repeat_months + (t.repeat_months === 1 ? ' month' : ' months')) : null),
-        h('span', { class: 'meta muted' }, props.length > 1 ? h('span', { class: 'site' }, siteName(t.property_id)) : null, h('span', { class: 'due' }, taskText(t))),
-        rights.can_edit && t.status === 'pending' ? h('span', { class: 'rowtools' },
-          h('button', { class: 'btn small', type: 'button', 'data-done': t.id, onclick: (e) => act(e.target, () => sb.rpc('complete_task', { p_id: t.id }), 'Task completed.') }, 'Done'),
-          h('button', { class: 'btn small ghost', type: 'button', 'data-del': t.id, onclick: (e) => act(e.target, () => sb.from('tasks').delete().eq('id', t.id), 'Task removed.') }, 'Remove')) : h('span', { class: 'tag ' + taskState(t) }, t.status === 'done' ? 'Done' : ST[taskState(t)].label));
+      const row = (t, ghostDay) => h('button', { class: 'item taskrow nosite' + (ghostDay ? ' ghost' : ''), type: 'button', 'data-task': t.id, onclick: () => viewTaskDetail(t.id) },
+        h('i', { class: 'dot ' + tone(t) }), h('span', { class: 'title' }, t.title),
+        h('span', { class: 'meta muted' }, props.length > 1 ? h('span', { class: 'site' }, siteName(t.property_id)) : null,
+          h('span', { class: 'due' + (tone(t) === 'red' ? ' late' : '') }, t.status === 'done' ? 'Completed ' + shortDate(t.completed_at) : ghostDay ? 'Repeats' + (t.all_day === false && t.due_time ? ' · ' + tclock(t.due_time) : '') : (tone(t) === 'red' ? 'Overdue: ' : 'Due: ') + (t.due_date ? whenLabel(t) : 'no date'))),
+        t.status === 'pending' && metaBits(t).length ? h('span', { class: 'tmeta muted small' }, metaBits(t).join(' · ')) : null);
       const tabs = h('div', { class: 'subtabs', role: 'tablist' },
         h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'pending', 'aria-selected': String(ttab === 'pending'), onclick: () => { ttab = 'pending'; viewTasks(); } }, 'Pending (' + pend.length + ')'),
         h('button', { type: 'button', class: 'subtab', role: 'tab', 'data-ttab': 'done', 'aria-selected': String(ttab === 'done'), onclick: () => { ttab = 'done'; viewTasks(); } }, 'Completed'));
-      // List or Calendar (calendar shows pending tasks by their due date)
       const viewSwitch = h('div', { class: 'pills', role: 'group', 'aria-label': 'View' },
         h('button', { type: 'button', class: 'pill', 'data-tview': 'list', 'aria-pressed': String(tview === 'list'), onclick: () => { tview = 'list'; viewTasks(); } }, 'List'),
         h('button', { type: 'button', class: 'pill', 'data-tview': 'calendar', 'aria-pressed': String(tview === 'calendar'), onclick: () => { tview = 'calendar'; viewTasks(); } }, 'Calendar'));
       const calendar = () => {
-        const t0 = today(); const ym = calMonth || t0.slice(0, 7);
+        const t0 = today(); const ym = calMonth || t0.slice(0, 7); if (!calDay) calDay = t0;
         const y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1;
         const first = new Date(Date.UTC(y, m, 1)), days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(), lead = (first.getUTCDay() + 6) % 7;   // week starts on Monday
         const shift = (d) => { const n = new Date(Date.UTC(y, m + d, 1)); calMonth = n.toISOString().slice(0, 7); calDay = null; viewTasks(); };
-        const byDay = {}; pend.forEach((t) => { if (t.due_date && t.due_date.slice(0, 7) === ym) (byDay[t.due_date] = byDay[t.due_date] || []).push(t); });
+        const from = ym + '-01', to = ym + '-' + String(days).padStart(2, '0');
+        const byDay = {};
+        done.forEach((t) => { const k = String(t.completed_at || '').slice(0, 10); if (k >= from && k <= to) (byDay[k] = byDay[k] || []).push({ t, ghost: false }); });
+        pend.forEach((t) => occurrences(t, from, to).forEach((k) => (byDay[k] = byDay[k] || []).push({ t, ghost: !(k === t.due_date) })));
         const cells = []; for (let i = 0; i < lead; i++) cells.push(h('span', { class: 'cal-blank', 'aria-hidden': 'true' }));
         for (let d = 1; d <= days; d++) {
           const iso = ym + '-' + String(d).padStart(2, '0'), ts = byDay[iso] || [];
-          const st = ts.length ? (ts.some((x) => taskState(x) === 'red') ? 'red' : ts.some((x) => taskState(x) === 'amber') ? 'amber' : 'green') : '';
-          cells.push(h('button', { type: 'button', class: 'cal-day' + (iso === t0 ? ' today' : '') + (calDay === iso ? ' sel' : ''), 'data-day': iso, 'aria-label': d + ' ' + first.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }) + (ts.length ? ', ' + ts.length + (ts.length === 1 ? ' task' : ' tasks') : ''), onclick: () => { calDay = calDay === iso ? null : iso; viewTasks(); } },
-            h('span', {}, String(d)), ts.length ? h('i', { class: 'dot ' + st }) : null));
+          cells.push(h('button', { type: 'button', class: 'cal-day' + (iso === t0 ? ' today' : '') + (calDay === iso ? ' sel' : ''), 'data-day': iso, 'aria-label': d + ' ' + first.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }) + (ts.length ? ', ' + ts.length + (ts.length === 1 ? ' task' : ' tasks') : ''), onclick: () => { calDay = iso; viewTasks(); } },
+            h('span', {}, String(d)), ts.length ? h('span', { class: 'tdots' }, ...ts.slice(0, 3).map((x) => h('i', { class: 'dot ' + tone(x.t) }))) : null));
         }
-        const dayTasks = calDay ? (byDay[calDay] || []) : [];
+        const dayTasks = byDay[calDay] || [];
+        const lateN = pend.filter((t) => t.due_date && t.due_date < t0).length;
         return h('div', { class: 'calendar', id: 'task-calendar' },
-          h('div', { class: 'cal-head' }, h('button', { type: 'button', class: 'linkbtn', id: 'cal-prev', 'aria-label': 'Previous month', onclick: () => shift(-1) }, '\u2039'),
+          h('div', { class: 'cal-head' }, h('button', { type: 'button', class: 'linkbtn', id: 'cal-prev', 'aria-label': 'Previous month', onclick: () => shift(-1) }, '‹'),
             h('strong', {}, first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })),
-            h('button', { type: 'button', class: 'linkbtn', id: 'cal-next', 'aria-label': 'Next month', onclick: () => shift(1) }, '\u203A')),
+            h('button', { type: 'button', class: 'linkbtn', id: 'cal-next', 'aria-label': 'Next month', onclick: () => shift(1) }, '›')),
           h('div', { class: 'cal-week', 'aria-hidden': 'true' }, ...['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((x) => h('span', {}, x))),
           h('div', { class: 'cal-grid' }, ...cells),
-          calDay ? h('div', { class: 'cal-day-list' }, h('h3', {}, shortDate(calDay)), ...(dayTasks.length ? dayTasks.map(row) : [h('p', { class: 'muted' }, 'No tasks due this day.')])) : h('p', { class: 'muted small' }, 'Tap a day to see its tasks.'),
+          h('div', { class: 'tlegend muted small' }, h('span', {}, h('i', { class: 'dot red' }), 'Overdue'), h('span', {}, h('i', { class: 'dot amber' }), 'Urgent'), h('span', {}, h('i', { class: 'dot info' }), 'Routine'), h('span', {}, h('i', { class: 'dot green' }), 'Done')),
+          lateN ? h('p', { class: 'late-note' }, lateN + (lateN === 1 ? ' task is overdue' : ' tasks are overdue')) : null,
+          h('div', { class: 'cal-day-list' }, h('h3', {}, calDay === t0 ? 'Today' : shortDate(calDay)), ...(dayTasks.length ? dayTasks.map((x) => row(x.t, x.ghost)) : [h('p', { class: 'muted' }, 'No tasks on this day.')])),
           pend.some((t) => !t.due_date) ? h('p', { class: 'muted small' }, 'Tasks with no due date only show in the list.') : null);
       };
       shell('tasks', h('div', { class: 'card' },
         h('div', { class: 'titlerow' }, h('h1', {}, 'My Tasks')),
-        ...heading(note), viewSwitch, tview === 'list' ? tabs : null, box,
+        ...heading(note), viewSwitch, tview === 'list' ? tabs : null,
         !rights.can_edit ? h('p', { class: 'muted' }, 'You can see these tasks but not change them.') : null,
-        ...(tview === 'calendar' ? [calendar()] : list.length ? list.map(row) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'No pending tasks.' : 'No completed tasks yet.')]),
-        rights.can_edit && props.length ? h('button', { class: 'btn', id: 'add-task', type: 'button', onclick: () => viewTaskAdd() }, 'Add New Task +') : null),
+        ...(tview === 'calendar' ? [calendar()] : list.length ? list.map((t) => row(t)) : [h('p', { class: 'muted' }, ttab === 'pending' ? 'All caught up. Add a task to plan the next check.' : 'No completed tasks yet.')]),
+        rights.can_edit && props.length ? h('button', { class: 'btn', id: 'add-task', type: 'button', onclick: () => viewTaskForm(null, tview === 'calendar' && calDay && calDay >= today() ? calDay : null) }, tview === 'calendar' && calDay && calDay > today() ? 'Add Task for ' + shortDate(calDay) + ' +' : 'Add New Task +') : null),
         sitePicker(viewTasks));
     }
-    function viewTaskAdd() {
+    function viewTaskDetail(id, note) {
+      const t = tasks.find((x) => x.id === id); if (!t) return viewTasks();
+      tab = 'tasks';
+      const box = h('div', { id: 'task-msg' }), can = rights.can_edit, rep = isRep(t), pending = t.status === 'pending';
+      const act = async (btn, fn, okNote) => ctx.busy(btn, async () => {
+        const r = await fn();
+        if (r && r.error) { ctx.message(box, 'err', 'Sorry, that did not save. You may not have permission to change tasks.'); return; }
+        await reload(); viewTasks(typeof okNote === 'function' ? okNote(r) : okNote);
+      });
+      const kv = (l, v) => (v ? h('div', { class: 'kv' }, h('span', {}, l), h('span', {}, v)) : null);
+      const nx = rep && pending ? nextOcc(t.due_date, t) : null;
+      const delArea = h('div', { id: 'tdel' });
+      const askDel = () => delArea.replaceChildren(h('div', { class: 'delask' }, h('p', {}, 'This is a repeating task.'),
+        h('button', { class: 'btn ghost', type: 'button', id: 'del-this', onclick: (e) => act(e.target, () => sb.rpc('skip_task', { p_id: t.id }), 'Deleted this one. The next one is on the calendar.') }, 'Delete This One Only'),
+        h('button', { class: 'btn danger', type: 'button', id: 'del-all', onclick: (e) => act(e.target, () => sb.from('tasks').delete().eq('id', t.id), 'All future tasks deleted.') }, 'Delete All Future Tasks')));
+      const link = t.url ? (/^https?:\/\//i.test(t.url) ? t.url : 'https://' + t.url) : '';
+      page('form', h('div', { class: 'card form' }, backTo('Back to tasks'),
+        h('div', { class: 'titlerow' }, h('h1', {}, t.title), can && pending ? h('button', { class: 'btn small ghost', id: 'task-edit', type: 'button', onclick: () => viewTaskForm(t.id) }, 'Edit') : null),
+        note ? h('div', { class: 'msg ok', role: 'status' }, note) : null,
+        h('p', { class: 'muted' }, pending ? (t.due_date && t.due_date < today() ? 'Overdue · ' : '') + (t.due_date ? (t.all_day === false ? '' : 'All day · ') + whenLabel(t) : 'No due date') : 'Completed ' + shortDate(t.completed_at)),
+        props.length > 1 ? kv('Site', siteName(t.property_id)) : null, kv('Location', t.location),
+        rep ? kv('Repeat', repLabel(t) + (t.repeat_until ? ' · ends ' + shortDate(t.repeat_until) : '')) : null, nx && !(t.repeat_until && nx > t.repeat_until) ? kv('Next after this', shortDate(nx)) : null,
+        t.alert_minutes != null ? kv('Alert', alertLabel(t.alert_minutes) + (t.alert2_minutes != null ? ' · ' + alertLabel(t.alert2_minutes) : '')) : null,
+        kv('Priority', t.priority === 'urgent' ? 'Urgent' : 'Routine'),
+        link ? h('div', { class: 'kv' }, h('span', {}, 'URL'), h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, t.url)) : null,
+        t.notes ? h('p', { class: 'tnotes' }, t.notes) : null, box,
+        can && pending ? h('button', { class: 'btn', id: 'task-done', type: 'button', 'data-done': t.id, onclick: (e) => act(e.target, () => sb.rpc('complete_task', { p_id: t.id }), (r) => (rep ? (r && r.data ? 'Completed. The next one is on the calendar.' : 'Completed. That was the last one in the series.') : 'Task completed.')) }, rep ? 'Complete This One' : 'Mark Complete') : null,
+        can && !pending ? h('button', { class: 'btn', id: 'task-undo', type: 'button', onclick: (e) => act(e.target, () => sb.from('tasks').update({ status: 'pending', completed_at: null }).eq('id', t.id), 'Moved back to pending.') }, 'Move back to Pending') : null,
+        can && pending && rep ? h('button', { class: 'btn ghost', id: 'task-skip', type: 'button', onclick: (e) => act(e.target, () => sb.rpc('skip_task', { p_id: t.id }), (r) => (r && r.data ? 'Skipped. Next one due ' + shortDate(r.data) : 'Series ended.')) }, 'Skip This One') : null,
+        can ? delArea : null,
+        can ? h('button', { class: 'btn ghost danger-line', id: 'task-del', type: 'button', 'data-del': t.id, onclick: (e) => (rep && pending ? askDel() : act(e.target, () => sb.from('tasks').delete().eq('id', t.id), 'Task deleted.')) }, 'Delete Task') : null));
+    }
+    // Add or edit a task, laid out like a phone calendar event.
+    function viewTaskForm(editId, date) {
+      const x = editId ? tasks.find((t) => t.id === editId) : null;
+      const F = x ? { title: x.title, location: x.location || '', site: x.property_id, all_day: x.all_day !== false, due: x.due_date || today(), time: tclock(x.due_time) || '09:00', freq: x.repeat_freq || 'none', n: x.repeat_n || 1, unit: x.repeat_unit || 'week', until: x.repeat_until || '', alert: x.alert_minutes == null ? 'none' : String(x.alert_minutes), alert2: x.alert2_minutes == null ? 'none' : String(x.alert2_minutes), pri: x.priority || 'routine', url: x.url || '', notes: x.notes || '' }
+        : { title: '', location: '', site: site !== 'all' ? site : props[0].id, all_day: true, due: date || today(), time: '09:00', freq: 'none', n: 1, unit: 'week', until: '', alert: 'none', alert2: 'none', pri: 'routine', url: '', notes: '' };
       const box = h('div', {});
-      const title = h('input', { id: 't-title', maxlength: '160', autocomplete: 'off' });
-      const due = h('input', { id: 't-due', type: 'date' });
-      const rep = h('input', { id: 't-repeat', type: 'number', min: '1', max: '120', inputmode: 'numeric' });
-      const sel = h('select', { id: 't-site' }, ...props.map((p) => h('option', { value: p.id, selected: p.id === (site !== 'all' ? site : props[0].id) }, p.name)));
-      const notes = h('textarea', { id: 't-notes', rows: '3', maxlength: '2000' });
-      const used = tasks.filter((t) => t.status === 'pending' && t.repeat_months).length;
+      const opt = (list, v) => list.map(([k, l]) => h('option', { value: k, selected: String(v) === k }, l));
+      const title = h('input', { id: 'tf-title', maxlength: '160', autocomplete: 'off', placeholder: 'Title', value: F.title, 'aria-label': 'Title' });
+      const loc = h('input', { id: 'tf-loc', maxlength: '200', autocomplete: 'off', placeholder: 'Location', value: F.location, 'aria-label': 'Location' });
+      const siteSel = h('select', { id: 't-site' }, ...props.map((p) => h('option', { value: p.id, selected: p.id === F.site }, p.name)));
+      const allday = h('input', { id: 'tf-allday', type: 'checkbox', class: 'switch', checked: F.all_day });
+      const dateI = h('input', { id: 'tf-date', type: 'date', value: F.due }), timeI = h('input', { id: 'tf-time', type: 'time', value: F.time, step: '300' });
+      const rep = h('select', { id: 'tf-rep' }, ...opt(REPEATS, F.freq));
+      const nI = h('input', { id: 'tf-n', type: 'number', min: '1', max: '99', value: String(F.n), 'aria-label': 'Repeat every' }), unit = h('select', { id: 'tf-unit', 'aria-label': 'Unit' }, ...opt([['day', 'Days'], ['week', 'Weeks'], ['month', 'Months'], ['year', 'Years']], F.unit));
+      const endm = h('select', { id: 'tf-endmode' }, ...opt([['never', 'Never'], ['date', 'On Date']], F.until ? 'date' : 'never')), until = h('input', { id: 'tf-until', type: 'date', value: F.until || F.due });
+      const al = h('select', { id: 'tf-alert' }, ...opt(ALERTS, F.alert)), al2 = h('select', { id: 'tf-alert2' }, ...opt(ALERTS, F.alert2));
+      const pri = h('select', { id: 'tf-pri' }, ...opt([['routine', 'Routine'], ['urgent', 'Urgent']], F.pri));
+      const url = h('input', { id: 'tf-url', maxlength: '300', autocomplete: 'off', placeholder: 'URL', value: F.url, inputmode: 'url', 'aria-label': 'URL' });
+      const notes = h('textarea', { id: 'tf-notes', rows: '3', maxlength: '2000', placeholder: 'Notes', 'aria-label': 'Notes' }, F.notes);
+      const row = (label, el, id, hidden) => { const r = h('label', { class: 'tf-row', for: id }, h('span', {}, label), el); r.hidden = !!hidden; return r; };
+      const timeRow = row('Time', timeI, 'tf-time', F.all_day), nRow = h('div', { class: 'tf-row' }, h('span', {}, 'Every'), h('span', { class: 'tf-pair' }, nI, unit)), endRow = row('End Repeat', endm, 'tf-endmode', F.freq === 'none'), untilRow = row('End Date', until, 'tf-until', F.freq === 'none' || !F.until), al2Row = row('Second Alert', al2, 'tf-alert2', F.alert === 'none');
+      nRow.hidden = F.freq !== 'custom';
+      const sync = () => { timeRow.hidden = allday.checked; nRow.hidden = rep.value !== 'custom'; endRow.hidden = rep.value === 'none'; untilRow.hidden = rep.value === 'none' || endm.value !== 'date'; al2Row.hidden = al.value === 'none'; };
+      [allday, rep, endm, al].forEach((el) => el.addEventListener('change', sync));
+      const used = tasks.filter((t) => t.status === 'pending' && isRep(t) && t.id !== editId).length;
       const save = h('button', { class: 'btn', id: 't-save', type: 'button', onclick: async (e) => {
-        const t = title.value.trim(); const r = rep.value.trim();
+        const t = title.value.trim();
         if (!t) return ctx.message(box, 'err', 'Please give the task a name.');
-        if (!validDate(due.value)) return ctx.message(box, 'err', 'Please check the due date.');
-        if (r && !(Number.isInteger(+r) && +r >= 1 && +r <= 120)) return ctx.message(box, 'err', 'Repeat every must be a whole number of months, 1 to 120.');
+        if (!dateI.value || !validDate(dateI.value)) return ctx.message(box, 'err', 'Please pick a date.');
+        if (rep.value === 'custom' && !(Number.isInteger(+nI.value) && +nI.value >= 1 && +nI.value <= 99)) return ctx.message(box, 'err', 'Enter how often it repeats, as a whole number.');
+        const untilV = rep.value !== 'none' && endm.value === 'date' ? (until.value || dateI.value) : null;
+        if (untilV && untilV < dateI.value) return ctx.message(box, 'err', 'The end date must be on or after the task date.');
+        const old = x;
+        const keepStart = old && old.due_date === dateI.value && old.repeat_freq === rep.value && old.repeat_start;
+        const rec = { property_id: siteSel.value, title: t, location: loc.value.trim(), all_day: allday.checked, due_date: dateI.value, due_time: allday.checked ? null : (timeI.value || '09:00'),
+          repeat_freq: rep.value, repeat_n: rep.value === 'custom' ? +nI.value : 1, repeat_unit: rep.value === 'custom' ? unit.value : 'week', repeat_until: untilV, repeat_start: rep.value === 'none' ? null : (keepStart || dateI.value),
+          priority: pri.value, url: url.value.trim(), notes: notes.value.trim(), alert_minutes: al.value === 'none' ? null : +al.value, alert2_minutes: al.value === 'none' || al2.value === 'none' ? null : +al2.value };
         await ctx.busy(e.target, async () => {
-          const res = await sb.from('tasks').insert({ property_id: sel.value, title: t, notes: notes.value.trim(), due_date: due.value || null, repeat_months: r ? +r : null });
+          const res = editId ? await sb.from('tasks').update(rec).eq('id', editId) : await sb.from('tasks').insert(rec);
           if (res.error) return ctx.message(box, 'err', /repeat_limit/.test(res.error.message || '') ? 'You already have 10 repeating tasks. Finish or remove one first.' : 'Sorry, that did not save. Please try again.');
-          await reload(); viewTasks('Task added.');
+          await reload(); viewTasks(editId ? 'Task updated.' : (rep.value !== 'none' ? 'Repeating task added.' : 'Task added.'));
         });
-      } }, 'Save task');
-      page('form', h('div', { class: 'card form' }, backTo('Back to tasks'), h('h1', {}, 'Add New Task'),
-        h('label', { for: 't-title' }, 'Task'), title,
-        props.length > 1 ? [h('label', { for: 't-site' }, 'Site'), sel] : null,
-        h('label', { for: 't-due' }, 'Due date (optional)'), due,
-        h('label', { for: 't-repeat' }, 'Repeat every (months, optional)'), rep,
-        h('p', { class: 'muted small' }, 'Repeating tasks come back by themselves when you tick them off. You can have up to 10 repeating tasks (' + used + ' in use).'),
-        h('label', { for: 't-notes' }, 'Notes (optional)'), notes, save, box));
+      } }, editId ? 'Save Changes' : 'Add Task');
+      page('form', h('div', { class: 'card form tform' }, backTo('Back to tasks'), h('h1', {}, editId ? 'Edit Task' : 'New Task'),
+        h('div', { class: 'tf-group' }, title, loc),
+        props.length > 1 ? h('div', { class: 'tf-group' }, row('Site', siteSel, 't-site')) : null,
+        h('div', { class: 'tf-group' }, row('All-day', allday, 'tf-allday'), row('Date', dateI, 'tf-date'), timeRow),
+        h('div', { class: 'tf-group' }, row('Repeat', rep, 'tf-rep'), nRow, endRow, untilRow),
+        h('div', { class: 'tf-group' }, row('Alert', al, 'tf-alert'), al2Row),
+        h('div', { class: 'tf-group' }, row('Priority', pri, 'tf-pri')),
+        h('div', { class: 'tf-group' }, url, notes),
+        h('p', { class: 'muted small' }, 'Repeating tasks come back by themselves when you complete them. Alerts are emailed to you at the time you choose (all-day tasks count from 9am). You can have up to 10 repeating tasks (' + used + ' in use).'),
+        save, box));
     }
 
     // ---------- Emergency Information ----------
@@ -829,7 +914,7 @@
         ...addonRows,
         h('div', { class: 'kv' }, h('span', {}, 'Status'), h('span', {}, company && company.subscription ? String(company.subscription).replace(/^./, (x) => x.toUpperCase()) : '–')),
         ...addLinks);
-      const repeating = tasks.filter((t) => t.status === 'pending' && t.repeat_months).length;
+      const repeating = tasks.filter((t) => t.status === 'pending' && t.repeat_freq && t.repeat_freq !== 'none').length;
       const custom = h('div', { class: 'card' }, h('h2', {}, 'Customised Tasks'),
         h('p', { class: 'muted' }, 'Your own repeating tasks. You are using ' + repeating + ' of 10.'),
         h('button', { class: 'btn small ghost', id: 'open-tasks', type: 'button', onclick: () => go('tasks') }, 'Open My Tasks'));

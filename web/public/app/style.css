@@ -709,3 +709,30 @@ body{overscroll-behavior-y:contain}
   body.chart-open .linechart .seg.up{stroke:#13863c}body.chart-open .linechart .seg.down{stroke:#cc1f24}
   .linechart,.seg{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+/* My Tasks: calendar-style events */
+.dot.info{background:#d4af55}
+.taskrow{text-align:left;width:100%;color:inherit;font:inherit}
+.taskrow .tmeta{grid-column:2 / -1;display:block;margin-top:2px}
+.taskrow .due.late{color:#ff8a80}
+.taskrow.ghost{opacity:.7}
+.tdots{display:flex;gap:3px;justify-content:center;height:8px;margin-top:2px}
+.tdots .dot{width:6px;height:6px}
+.tlegend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin:10px 0 4px}
+.tlegend .dot{width:8px;height:8px;margin-right:5px}
+.late-note{color:#ff8a80;font-size:.9rem;text-align:center;margin:6px 0 0}
+.cal-day-list{margin-top:12px}
+.tnotes{white-space:pre-wrap;margin:12px 0 0;color:var(--muted)}
+.delask{border:1px solid #5a2520;border-radius:14px;padding:12px;margin-top:12px;display:flex;flex-direction:column;gap:2px}
+.btn.danger-line{color:#ff8a80;border-color:#5a2520}
+.tform .tf-group{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:#0d0d0d;overflow:hidden;margin-top:14px}
+.tform .tf-group>*+*{border-top:1px solid var(--line)}
+.tform .tf-group>input,.tform .tf-group>textarea{border:0;border-radius:0;background:none;padding:13px 14px;font-size:15px;min-height:48px;height:auto;width:100%;color:var(--text);font-family:inherit}
+.tform .tf-group>textarea{min-height:84px;resize:vertical}
+.tform .tf-row{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:6px 14px;min-height:48px;margin:0;font-size:15px;font-weight:400;color:var(--text)}
+.tform .tf-row[hidden]{display:none}
+.tform .tf-row>span:first-child{flex:none}
+.tform .tf-row select,.tform .tf-row input[type=date],.tform .tf-row input[type=time]{width:auto;max-width:62%;height:auto;border:0;background:none;color:var(--gold);text-align:right;padding:8px 0;font-size:15px;-webkit-appearance:none;appearance:none;min-height:36px}
+.tform .tf-row input[type=checkbox]{width:44px;height:26px;min-height:0;padding:0;accent-color:var(--gold)}
+.tform .tf-pair{display:flex;gap:8px;align-items:center}
+.tform .tf-pair input{width:64px;height:40px;text-align:center;padding:8px}
+.tform .tf-pair select{max-width:none;padding:8px;border:1px solid var(--line);border-radius:8px;background:#121212;color:var(--text)}
