@@ -90,10 +90,6 @@ home = '''<div class="hm"><!-- HERO -->
       <div>
         <h1>Commercial property compliance at your fingertips</h1>
         <p class="lead">Tremcore provides every commercial property with its own compliance passport, giving you a clear overview of each site&rsquo;s compliance status.</p>
-        <div class="ctas">
-          <a href="/register/" class="btn btn-primary">Register your interest</a>
-          <a href="#passport-video" class="btn btn-ghost">▶ Watch the video</a>
-        </div>
         <p class="cats">Fire safety · Electrical · Water hygiene · Building services · and more</p>
       </div>
 
@@ -104,6 +100,10 @@ home = '''<div class="hm"><!-- HERO -->
         <p class="pc-line">Your first site, with a head-office user and one manager.</p>
         <div class="pc-multi"><b>More than one site?</b> <a href="/contact/">Click here for a multi-site discount</a></div>
         <p class="pc-small">Pay yearly and save 15%.</p>
+        <div class="pc-ctas">
+          <a href="/register/" class="btn btn-primary">Register your interest</a>
+          <a href="#passport-video" class="btn btn-ghost">▶ Watch the video</a>
+        </div>
       </div>
       <div class="phone-wrap">
         <img class="appphone" src="/img/app-phone-2.webp" width="631" height="2162" alt="Tremcore app home screen showing core compliance at 80%, quick access to tasks and emergency information, and add-ons">

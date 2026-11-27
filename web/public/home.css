@@ -172,6 +172,9 @@
 .hm .pc-multi{margin:16px auto 0;padding:12px 14px;border:1px solid rgba(69,195,95,.5);background:rgba(69,195,95,.08);border-radius:14px;font-size:15px;color:#f3eee4}
 .hm .pc-multi b{color:#45c35f}
 .hm .pc-small{margin-top:12px;color:var(--grey);font-size:13px}
+.hm .pc-ctas{display:flex;flex-wrap:nowrap;gap:10px;margin-top:18px}
+.hm .pc-ctas .btn{flex:1 1 0;min-width:0;padding:13px 10px;font-size:14px;line-height:1.25;text-align:center;justify-content:center}
+@media (max-width:480px){.hm .pc-ctas .btn{font-size:13px;padding:12px 8px}}
 @media (max-width:480px){.hm .pc-num{font-size:52px}}
 .hm .hero .hero-grid.wrap{align-items:start}.hm .hero .hero-grid>div:first-child{padding-top:24px}
 .hm .pc-multi a{color:#45c35f;font-weight:700;text-decoration:underline}
