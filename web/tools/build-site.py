@@ -452,7 +452,7 @@ posters4 = ''.join(f'<img src="/media/img/{n}.jpg" alt="{a}" width="346" height=
 media = f'''<section class="sec hero"><div class="wrap">
 <div><div class="eyebrow">Tremcore Media</div>
 <h1 class="h1">Websites, posters and reviews, <span class="gold">looked after.</span></h1>
-<p class="lead">For pubs, restaurants, shops and other local businesses: a website that looks the part, posters you can change in minutes, and a calm way to answer your customers&rsquo; reviews. Review, handled with care.</p>
+<p class="lead">For pubs, restaurants, shops and other local businesses: a website that looks the part, posters you can change in minutes, and a calm way to answer your customers&rsquo; reviews, handled with care.</p>
 <div class="row" style="margin-top:32px"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a><a class="btn ghost" href="/media/red-lion/">See an example website {ARROW}</a></div>
 <p class="small" style="margin-top:24px">Websites &middot; Social media &middot; Poster design &middot; Review replies</p></div>
 {shot('builder-preview.jpg','A new website for an example pub, The Red Lion, shown in the Tremcore website builder',1400,875)}
