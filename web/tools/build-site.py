@@ -263,7 +263,7 @@ home = '''<div class="hm"><!-- HERO -->
     <div class="wrap">
       <div class="head center-head">
         <p class="kicker">Tremcore Media</p>
-        <h2>Ninety seconds, start to finish</h2>
+        <h2>Explore our media section</h2>
         <p>See how a website, a set of posters and the review replies come together for one example pub. Best with the sound on.</p>
       </div>
       <div class="vidwrap"><video controls preload="metadata" playsinline poster="/media/img/video-poster.jpg" width="720" height="1280" aria-label="Tremcore Media showcase video, 90 seconds"><source src="/media/tremcore-media-showcase.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div>
@@ -458,7 +458,7 @@ media = f'''<section class="sec hero"><div class="wrap">
 {shot('builder-preview.jpg','A new website for an example pub, The Red Lion, shown in the Tremcore website builder',1400,875)}
 </div></section>
 <div class="strip"><div class="wrap"><div><b>Made for you</b><p>Your name, your colours, your words.</p></div><div><b>Quick to change</b><p>New offer? New poster in minutes.</p></div><div><b>Easy to look at</b><p>Clear on a phone, a tablet and a computer.</p></div><div><b>Looked after</b><p>We keep it up to date, so you don&rsquo;t have to.</p></div></div></div>
-<section class="sec alt" id="video"><div class="wrap"><div class="feat flip"><div><div class="eyebrow">Watch</div><h2 class="h2">Ninety seconds, start to finish</h2><p class="lead">See how a website, a set of posters and the review replies come together for one example pub. Best with the sound on.</p>
+<section class="sec alt" id="video"><div class="wrap"><div class="feat flip"><div><div class="eyebrow">Watch</div><h2 class="h2">Explore our media section</h2><p class="lead">See how a website, a set of posters and the review replies come together for one example pub. Best with the sound on.</p>
 <div class="row" style="margin-top:28px"><a class="btn solid" href="/contact/">Ask about Tremcore Media</a></div></div>
 <div class="vidwrap"><video controls preload="metadata" playsinline poster="/media/img/video-poster.jpg" width="720" height="1280" aria-label="Tremcore Media showcase video, 90 seconds"><source src="/media/tremcore-media-showcase.mp4" type="video/mp4">Your browser can&rsquo;t play this video.</video></div></div></div></section>
 <section class="sec"><div class="wrap"><div class="center-head"><div class="eyebrow">What we do</div><h2 class="h2">Everything your business shows the world</h2><p class="lead">Four things, one team, one look.</p></div>

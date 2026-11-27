@@ -20,14 +20,43 @@
     { code: 'posters', name: 'Poster Generator', description: 'Make branded posters from 17 ready-made templates for pubs, caf\u00e9s, shops, seasonal offers and notices, with your own logo, colours and QR codes. Download as PNG or PDF. One price for your whole account.', price_pence: 499, yearly_pence: 5090, charged_per: 'company', owned: false }
   ];
   // Add-ons that are announced but not built into the real app yet: shown on Home as "Coming soon", never sold.
+  // All four add-ons for one price (per month, one site). The saving is worked out from the four separate monthly prices (2.99 + 5.99 + 9.99 + 4.99 = 23.96).
+  const BUNDLE = { price_pence: 1499, save_pence: 299 + 599 + 999 + 499 - 1499 };
   const SOON = [
     { code: 'reviews', icon: 'star', name: 'Reviews', short: 'Reply to Google & Tripadvisor reviews', price_pence: 999,
       intro: 'Every Google and Tripadvisor review in one inbox, with replies drafted in your brand voice so none go unanswered.',
       feats: ['One inbox for Google and Tripadvisor reviews, with the lowest ratings at the top', 'Replies drafted for you in your brand voice', 'Insights on ratings, trends and what guests mention most', 'Feedback QR cards for tables, rooms and receipts: happy guests go to Google, complaints reach the manager first', 'Import reviews from a CSV or JSON export'] }
   ];
+
+  // Help & Support: short answers written for the real app (what is on screen today). g = group heading.
+  const FAQ = [
+    { g: 'Compliance', q: 'How is my compliance score worked out?', a: 'The score is the share of your Core Compliance items that are green. Amber and red items do not count as compliant, and an item with no date is never counted as green. Items in Other Compliance are not part of the score.' },
+    { g: 'Compliance', q: 'What is the difference between Core and Other compliance?', a: 'Core items make up your score, such as fire safety and electrical checks. Other items are still tracked with dates and documents but do not change the score.' },
+    { g: 'Compliance', q: 'How do I move an item between Core and Other?', a: 'Open the item and tap Move to Other or Move to Core. The score updates straight away. Only people who can edit your records see this button.' },
+    { g: 'Compliance', q: 'How is the colour code set?', a: 'Automatically from the due date. Green means more than 30 days to go, amber means due within 30 days, and red means the date has passed. An item with no date shows as No date, never green. It cannot be changed by hand.' },
+    { g: 'Compliance', q: 'How do I add a certificate, report or photo?', a: 'Open the item and tap Upload to add a PDF or a photo. Then tap Read details and the app reads the dates from the document so you can check them. Dates left empty will show as No date, never as in date.' },
+    { g: 'Compliance', q: 'How do I add several certificates at once?', a: 'On the Compliance screen tap Bulk upload. Choose your files, let the app read them, then check where each one belongs before saving.' },
+    { g: 'Compliance', q: 'How do I add or remove a check of my own?', a: 'On the Compliance screen tap Add a check for anything your premises need. To remove one, open it and tap Remove this check. Its documents are removed with it, and you are asked to confirm first.' },
+    { g: 'Tasks', q: 'How do I add a new task?', a: 'Go to My Tasks and tap Add New Task. Give it a title, choose the site, add a due date and notes. If it should come back regularly, fill in Repeat every (months). You can have up to 10 repeating tasks.' },
+    { g: 'Tasks', q: 'How do I complete or delete a task?', a: 'Open My Tasks and tap the task. You can mark it complete or remove it. Completed tasks stay in the list so you can see what was done.' },
+    { g: 'Add-ons', q: 'How do I unlock an add-on?', a: 'On the Home screen tap Buy Now on the add-on, choose to pay monthly or a year upfront (15% off), and pay on the secure Stripe page. Only the head-office user can add an add-on. Toolbox Talks is £2.99 and Staff Clock In / Out is £5.99 per site per month, and Poster Generator is £4.99 a month for the whole account. All prices are plus VAT.' },
+    { g: 'Add-ons', q: 'Can I try an add-on before I buy it?', a: 'Tap any add-on card on Home to see what is included and the price. Nothing is charged until you pay on the Stripe page.' },
+    { g: 'Add-ons', q: 'How long is the contract?', a: 'Add-ons are on a 12-month rolling contract. It renews for a further 12 months unless you request cancellation at least 30 days before the renewal date. You can pay monthly, or pay for 12 months upfront and save 15%.' },
+    { g: 'Add-ons', q: 'How do I cancel an add-on?', a: 'Email Tremcore at info@tremcore.co.uk at least 30 days before your renewal date, saying which add-on you want to cancel. Otherwise it renews for a further 12 months.' },
+    { g: 'Toolbox Talks', q: 'How do I run a talk and record who attended?', a: 'Open Toolbox Talks, choose a talk and tap Run this talk and collect signatures. Pick the people who attended and they sign on screen. The record is saved, can be downloaded as a PDF, and is found under Records.' },
+    { g: 'Toolbox Talks', q: 'Can I write a talk of my own?', a: 'Yes. In Toolbox Talks open My own talks and tap Add my own talk. You can keep up to 10 of your own alongside the ready-made library.' },
+    { g: 'Staff Clock In / Out', q: 'How do staff clock in and out?', a: 'Put the QR poster up where staff will see it. They scan it with their phone camera, tap their name, then tap Clock in when they arrive and Clock out when they leave.' },
+    { g: 'Staff Clock In / Out', q: 'How do I add or remove staff?', a: 'Open Staff Clock In / Out, choose the site, then add a person with their name and job title, or tap Remove next to someone who has left. The poster does not need reprinting.' },
+    { g: 'Staff Clock In / Out', q: 'How do I print the QR poster?', a: 'Open Staff Clock In / Out and tap Print the poster. Print it on A4 at 100% scale so the code scans reliably.' },
+    { g: 'Staff Clock In / Out', q: 'How do I set shifts and see hours?', a: 'Tap Shifts next to a person to set their weekly shifts. Then tap Open the shift report to compare set hours with the times they clocked in and out.' },
+    { g: 'Poster Generator', q: 'How do I make a poster?', a: 'Open Poster Generator, pick a template, type in your wording, choose your colours and logo, then download it as a PNG or PDF. Your settings are kept on this device.' },
+    { g: 'Poster Generator', q: 'Can a poster have a QR code for Google reviews?', a: 'Yes. Paste your Google review link into the brand details, then choose the reviews QR on the poster. Scanning it takes people straight to your Google review page.' },
+    { g: 'Emergency', q: 'How do I update the assembly point, fire marshal or first aider?', a: 'Open Emergency Information from the Home screen, tap Edit on the box you want to change, then save.' }
+  ];
+  const ISSUE_TOPICS = ['Compliance', 'Documents or photos', 'Tasks', 'Toolbox Talks', 'Staff Clock In / Out', 'Poster Generator', 'Billing or add-ons', 'Something else'];
   const ICON = {
     home: 'M3 11l9-8 9 8v10h-6v-6H9v6H3z', compliance: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z M8.5 12l2.5 2.5L16 9.5',
-    tasks: 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5', chat: 'M4 5h16v11H10l-5 4v-4H4z M8 9h8 M8 12h5', clock: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z M12 7v5l3 2', star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z', poster: 'M6 3h9l4 4v14H6z M9 12h7 M9 16h7', lock: 'M7 11V8a5 5 0 0 1 10 0v3 M5 11h14v10H5z', alert: 'M12 3l10 18H2z M12 10v5 M12 18v.01', taskck: 'M5 4h14v16H5z M9 12l2.5 2.5L15.5 9.5', settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 5v4 M8 15v4'
+    tasks: 'M5 4h14v16H5z M8 9h8 M8 13h8 M8 17h5', chat: 'M4 5h16v11H10l-5 4v-4H4z M8 9h8 M8 12h5', clock: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z M12 7v5l3 2', apps: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z', star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z', poster: 'M6 3h9l4 4v14H6z M9 12h7 M9 16h7', lock: 'M7 11V8a5 5 0 0 1 10 0v3 M5 11h14v10H5z', alert: 'M12 3l10 18H2z M12 10v5 M12 18v.01', taskck: 'M5 4h14v16H5z M9 12l2.5 2.5L15.5 9.5', settings: 'M4 7h10 M18 7h2 M4 17h2 M10 17h10 M16 5v4 M8 15v4'
   };
   const icon = (k) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, svg('path', { d: ICON[k] }));
   const money = (p) => '£' + (p / 100).toFixed(2);
@@ -172,6 +201,11 @@
       const live = (code, ik, blurb) => { const e = extraOf(code); if (e.owned) return null; return aoc({ code, icon: ik, name: e.name, blurb, price: money(e.price_pence), yearly: money(yearlyPence(e)), sub: (e.charged_per === 'site' ? 'per site \u00b7 ' : '') + '+ VAT', owned: !!e.owned, go: () => viewExtra(code) }); };
       const promos = isL1 ? [live('toolbox_talks', 'chat', '30 talks, bespoke talks \u00a31.99 each'), live('staff_signin', 'clock', 'QR clock-in and attendance log'), live('posters', 'poster', '17 templates for print & social')].filter(Boolean) : [];
       const soons = isL1 ? SOON.map((x) => aoc({ code: x.code, icon: x.icon, name: x.name, blurb: x.short, price: money(x.price_pence), sub: '+ VAT', soon: true, go: () => viewSoon(x.code) })) : [];
+      // The all-in-one offer under the add-on cards: it pulses to draw the eye. Hidden once the business already has every add-on that can be bought today.
+      const bundleCard = () => !isL1 || !promos.length ? null : h('button', { class: 'bundle', type: 'button', 'data-bundle': 'all', onclick: () => viewBundle() },
+        h('span', { class: 'aoc-ic', 'aria-hidden': 'true' }, icon('apps'), h('span', { class: 'aoc-lock' }, icon('lock'))),
+        h('span', { class: 'bundle-txt' }, h('strong', {}, 'Unlock all 4 add-ons'), h('span', { class: 'bundle-list' }, 'Toolbox Talks \u00b7 Clock In / Out \u00b7 Reviews \u00b7 Posters'), h('span', { class: 'bundle-save' }, 'Save ' + money(BUNDLE.save_pence) + ' a month')),
+        h('span', { class: 'bundle-buy' }, h('span', { class: 'bundle-price' }, money(BUNDLE.price_pence), h('small', {}, ' pcm')), h('span', { class: 'bundle-go' }, 'Unlock all \u2192')));
       // What needs attention now: overdue first, then due in the next 30 days (checks and tasks), so it is the first thing seen.
       const multiH = props.length > 1 && site === 'all';
       const lateItems = rows.filter((r) => r.status === 'red').sort(byUrgency), soonItems = rows.filter((r) => r.status === 'amber').sort(byUrgency);
@@ -189,7 +223,7 @@
         cAll.missing ? h('p', { class: 'muted small', id: 'att-missing' }, cAll.missing + (cAll.missing === 1 ? ' check has' : ' checks have') + ' no date entered yet, so ' + (cAll.missing === 1 ? 'it is' : 'they are') + ' not counted as in date. ',
           h('button', { class: 'linkbtn', type: 'button', id: 'att-dates', onclick: () => { filter = 'missing'; ctab = 'overview'; go('compliance'); } }, 'Add the dates')) : null);
       const sideCards = [
-        promos.length || soons.length ? h('div', { class: 'card addons' }, h('div', { class: 'titlerow' }, h('h2', {}, 'Add-ons'), h('span', { class: 'muted small' }, 'Unlock extra tools')), h('div', { class: 'promos' }, ...promos, ...soons)) : null
+        promos.length || soons.length ? h('div', { class: 'card addons' }, h('div', { class: 'titlerow' }, h('h2', {}, 'Add-ons'), h('span', { class: 'muted small' }, 'Unlock extra tools')), h('div', { class: 'promos' }, ...promos, ...soons), bundleCard()) : null
       ].filter(Boolean);
       const toolsCard =
         h('div', { class: 'card tools' }, h('h2', {}, 'Quick Access'),
@@ -447,6 +481,18 @@
       setTimeout(() => { if (onExtra === code) afterExtraPayment(code, '1'); }, 3000);
     }
     // An announced add-on that is not available yet: what it will do and its price, with nothing to buy.
+    // The all-4 bundle: Toolbox Talks + Staff Clock In / Out + Reviews + Poster Generator for one price. Reviews is not built yet, so it cannot be bought for now.
+    function viewBundle() {
+      tab = 'home';
+      const names = ['Toolbox Talks', 'Staff Clock In / Out', 'Reviews', 'Poster Generator'];
+      page('form', h('div', { class: 'card form', 'data-bundle-page': 'all' }, backTo('Back to home'), h('h1', {}, 'Unlock all 4 add-ons'),
+        h('p', {}, 'Toolbox Talks, Staff Clock In / Out, Reviews and Poster Generator together on one subscription.'),
+        h('ul', { class: 'ticks' }, ...names.map((n) => h('li', {}, n))),
+        h('p', { class: 'big goldbox' }, money(BUNDLE.price_pence) + ' + VAT per month'),
+        h('p', { class: 'muted' }, 'That saves ' + money(BUNDLE.save_pence) + ' a month compared with buying the four separately (prices for one site).'),
+        h('div', { class: 'msg ok', role: 'status', id: 'bundle-note' }, 'Coming soon. The bundle opens as soon as Reviews is ready. Until then you can add Toolbox Talks, Staff Clock In / Out and Poster Generator on their own from Home.'),
+        h('button', { class: 'btn ghost', type: 'button', id: 'bundle-back', onclick: () => viewHome() }, 'Back to add-ons')));
+    }
     function viewSoon(code) {
       const x = SOON.find((y) => y.code === code); if (!x) return viewHome();
       tab = 'home';
@@ -746,9 +792,40 @@
       const custom = h('div', { class: 'card' }, h('h2', {}, 'Customised Tasks'),
         h('p', { class: 'muted' }, 'Your own repeating tasks. You are using ' + repeating + ' of 10.'),
         h('button', { class: 'btn small ghost', id: 'open-tasks', type: 'button', onclick: () => go('tasks') }, 'Open My Tasks'));
-      const help = h('div', { class: 'card' }, h('h2', {}, 'Help & Support'),
-        h('p', { class: 'muted' }, 'Questions about your passport? We are happy to help.'),
-        h('a', { class: 'btn small', id: 'help-email', href: 'mailto:info@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'Email Tremcore'));
+      // Help & Support: a searchable list of short answers, then a way to tell Tremcore if still stuck (opens an email to Tremcore).
+      const help = (() => {
+        const list = h('div', { id: 'faqwrap', class: 'faqwrap' }), box = h('div', {});
+        const search = h('input', { id: 'hq', type: 'search', placeholder: 'Search help, e.g. photo, poster, score', autocomplete: 'off', 'aria-label': 'Search help' });
+        const draw = () => {
+          const q = search.value.trim().toLowerCase(); list.replaceChildren();
+          const groups = [...new Set(FAQ.map((f) => f.g))]; let n = 0;
+          groups.forEach((g) => {
+            const fs = FAQ.filter((f) => f.g === g && (!q || (f.q + ' ' + f.a).toLowerCase().includes(q))); if (!fs.length) return; n += fs.length;
+            list.appendChild(h('h3', { class: 'faqh' }, g));
+            list.appendChild(h('div', { class: 'faq' }, ...fs.map((f) => h('details', q ? { open: 'open' } : {}, h('summary', {}, h('span', {}, f.q)), h('p', {}, f.a)))));
+          });
+          if (!n) list.appendChild(h('p', { class: 'muted', id: 'faq-none' }, 'No answers match “' + search.value.trim() + '”. Try another word or report the issue below.'));
+        };
+        search.addEventListener('input', draw); draw();
+        const topic = h('select', { id: 'ri-t' }, ...ISSUE_TOPICS.map((t) => h('option', {}, t)));
+        const desc = h('textarea', { id: 'ri-d', rows: '4', placeholder: 'What were you trying to do, and what happened?' });
+        const nm = h('input', { id: 'ri-n', autocomplete: 'name', placeholder: 'Your name' }), ct = h('input', { id: 'ri-c', autocomplete: 'email', placeholder: 'Best phone number or email' });
+        const form = h('div', { id: 'issue-form', class: 'issueform', hidden: 'hidden' }, h('h3', {}, 'Report an Issue'),
+          h('label', { for: 'ri-t' }, 'What is it about?'), topic, h('label', { for: 'ri-d' }, 'Describe the problem'), desc, h('label', { for: 'ri-n' }, 'Your name'), nm, h('label', { for: 'ri-c' }, 'Best phone number or email'), ct,
+          h('button', { class: 'btn', id: 'ri-send', type: 'button', onclick: () => {
+            if (!desc.value.trim()) { desc.focus(); return ctx.message(box, 'err', 'Describe the problem to send the report.'); }
+            if (!nm.value.trim()) { nm.focus(); return ctx.message(box, 'err', 'Add your name.'); }
+            if (!ct.value.trim()) { ct.focus(); return ctx.message(box, 'err', 'Add a phone number or email so we can contact you.'); }
+            const body = 'Topic: ' + topic.value + '\nBusiness: ' + ((company && company.name) || '') + '\nName: ' + nm.value.trim() + '\nContact: ' + ct.value.trim() + '\n\n' + desc.value.trim();
+            location.href = 'mailto:info@tremcore.co.uk?subject=' + encodeURIComponent('Tremcore Passport issue: ' + topic.value) + '&body=' + encodeURIComponent(body);
+            ctx.message(box, 'ok', 'Your email app should open with the report ready to send. Please press Send there. If nothing opens, email info@tremcore.co.uk.');
+          } }, 'Send Report'), box);
+        return h('div', { class: 'helppage' }, h('h2', {}, 'Help & Support'),
+          h('label', { class: 'faqsearch', for: 'hq' }, search), list,
+          h('div', { class: 'card still', id: 'still-stuck' }, h('h3', {}, 'Still stuck?'), h('p', { class: 'muted' }, 'Tell us what is wrong and someone from the Tremcore team will contact you within 48 hours.'),
+            h('button', { class: 'btn', id: 'report-issue', type: 'button', onclick: () => { form.hidden = false; desc.focus(); } }, 'Report an Issue'), form),
+          h('p', { class: 'muted small' }, 'Or email us any time: ', h('a', { id: 'help-email', href: 'mailto:info@tremcore.co.uk?subject=Tremcore%20Passport%20help' }, 'info@tremcore.co.uk')));
+      })();
       const reminders = h('div', { class: 'card' }, h('h2', {}, 'Reminder Emails'),
         h('p', { class: 'muted' }, rights.can_edit ? 'We email you before a check or task falls due, and again if it becomes overdue, so nothing slips past you.' : 'Tremcore manages your renewals and will be in touch before anything falls due.'),
         h('p', { class: 'muted small' }, 'Reminders go to the email address you sign in with.'));

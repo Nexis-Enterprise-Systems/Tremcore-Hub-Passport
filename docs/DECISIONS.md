@@ -280,3 +280,9 @@
 - Poster settings (brand, logo, saved posters) are kept in the browser for that business (`tc-poster-<company id>`), not in the database yet. A different computer or browser starts fresh.
 - The "Unlock all 4" bundle is still not offered (Reviews is not built).
 - Also: drop-down boxes (website contact form, and the app) now have a gold arrow. Service worker cache v68.
+
+## 27 Nov 2026 - Unlock-all bundle card, Help & Support page, media heading
+- **Bundle card** "Unlock all 4 add-ons" (£14.99 pcm + VAT, "Save £8.97 a month" = 2.99 + 5.99 + 9.99 + 4.99 - 14.99, one site) now sits under the add-on cards on Home and pulses (stops pulsing for people who have reduced motion switched on). It opens a page listing the four add-ons with "Coming soon", and cannot be bought yet, because Reviews is not built and we should not sell a product that is not delivered. When Reviews exists, the bundle needs its own add-on row, Stripe checkout and database rule (not built). Prices for per-site add-ons are for one site; how the bundle is priced for several sites is not decided.
+- **Help & Support** (Settings, Help & Support) is now a searchable list of short answers in groups (Compliance, Tasks, Add-ons, Toolbox Talks, Staff Clock In / Out, Poster Generator, Emergency) plus "Still stuck? Report an Issue". Based on Aaron's v54 screenshot, but the answers are rewritten for what the real app does today (the prototype describes some things the real app does not have, such as scanning paper, a bespoke talk request and Delivery records). Report an Issue opens the person's email app with the report ready to send to info@tremcore.co.uk; it does not send from the server, so nothing is stored in the hub. The "within 48 hours" promise is from the prototype text. Answers should be re-read by Aaron.
+- **Website**: the "Ninety seconds, start to finish" heading is now "Explore our media section" on the Home page and the Tremcore Media page.
+- Service worker cache v70.

@@ -1,6 +1,6 @@
 // Minimal service worker: lets the app install on a phone or desktop and keeps the app shell available.
 // It never caches anything from Supabase or any other site, so no private data is stored by it.
-const CACHE = 'tremcore-shell-v68';
+const CACHE = 'tremcore-shell-v70';
 const SHELL = ['/app/', '/app/style.css', '/app/app.js', '/app/passport.js', '/app/certread.js', '/app/shifts.js', '/app/format.js', '/app/qr.js', '/app/pdf.js', '/app/toolbox.js', '/app/hub.js', '/img/logo-mark.png', '/img/icon-192.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
