@@ -322,3 +322,6 @@
 ## Discount code tally and Current subscribers (27 Nov 2026)
 - Hub Offers: a "Discount code tally" card shows how many clients signed up with any code and with TREM2428 (the £12.99 flyer code), split into paying, on trial and cancelled, with one row per code.
 - Hub Revenue & growth: new "Current subscribers" column (and tile) with the same line chart, Monthly/Yearly buttons, PDF and print. Subscribers are counted from the clients subscribed today by the period they joined, so earlier points leave out people who have since cancelled (no cancellation dates are recorded yet).
+
+## Desktop layout of the passport (27 Nov 2026)
+- All desktop-only changes live in `@media (min-width:960px)` blocks at the end of `web/public/app/style.css`, so phones and tablets are untouched. Same 250px menu on every screen, headings left-aligned, the Core Compliance card reads top to bottom like the phone, the Unlock-all bar stacks inside the side column, and Tasks has the site picker on top with tidy rows. Do not move phone rules into these blocks.
