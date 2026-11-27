@@ -762,6 +762,21 @@ const USERS = {
     check('revenue page shows paying client count and average', rv.includes('44.50'));
     check('revenue page lists biggest paying clients and new-client months', (await p.locator('text=Biggest paying clients').count()) === 1 && (await p.locator('text=New clients, last 6 months').count()) === 1);
 
+    // click any heading for a line chart, with PDF and print
+    check('revenue: every number column in both tables can be clicked for a chart', (await p.locator('.thchart').count()) === 6);
+    for (const k of ['reg', 'signed', 'monthly', 'yearly', 'newclients', 'selfsignups']) { await p.click('[data-chart=' + k + ']'); await p.waitForSelector('#chart-modal svg.linechart'); check('revenue chart: ' + k + ' opens a line chart with one point per period', (await p.locator('#chart-modal circle.pt').count()) >= 6); await p.click('#chart-close'); check('revenue chart: ' + k + ' closes again', (await p.locator('#chart-modal').count()) === 0); }
+    await p.click('#rep-year'); await p.click('[data-chart=monthly]');
+    check('revenue chart: the yearly view charts the three years', (await p.locator('#chart-modal circle.pt').count()) === 3);
+    await p.click('#chart-close'); await p.click('#rep-month');
+    await p.click('[data-chart=monthly]');
+    check('revenue chart: segments are coloured green when rising and red when falling (and a PDF/Print button is offered)', (await p.locator('#chart-modal .seg.up, #chart-modal .seg.down, #chart-modal .seg.flat').count()) === 11 && (await p.locator('#chart-pdf').count()) === 1 && (await p.locator('#chart-print').count()) === 1);
+    { const dlc = p.waitForEvent('download'); await p.click('#chart-pdf'); const ddc = await dlc; const bc = require('fs').readFileSync(await ddc.path()).toString('latin1');
+      check('revenue chart: the PDF downloads, with the chart, its figures and coloured lines', bc.startsWith('%PDF-') && bc.includes('New monthly revenue') && bc.includes('0.08 0.55 0.25 RG') || bc.includes('0.55 0.55 0.55 RG')); }
+    await p.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed += 1; window.__openDuringPrint = document.body.classList.contains('chart-open'); }; });
+    await p.click('#chart-print');
+    check('revenue chart: Print prepares a print view of just the chart', (await p.evaluate(() => window.__printed === 1 && window.__openDuringPrint === true)));
+    await p.evaluate(() => window.dispatchEvent(new Event('afterprint'))); await p.click('#chart-close');
+
     // enquiries
     await p.click('.hubnav >> text=Enquiries'); await p.waitForSelector('.enq');
     check('enquiries are listed newest first', (await p.locator('.enq h2').first().innerText()).includes('Sam Carter') && (await p.locator('.enq').count()) === 2);

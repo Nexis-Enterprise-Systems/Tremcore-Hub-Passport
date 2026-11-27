@@ -9,6 +9,7 @@
   const num = (n) => (Math.round(n * 100) / 100).toString();
 
   // blocks: ... { table: { cols: [{ t: 'Check', w: 170 }, ...], rows: [[cell, ...]], colour: colIndex } } where a cell is text, or { t: 'text', c: 'green|amber|red|grey', sub: 'smaller second line' }
+  // blocks: ... { chart: { labels: [], values: [], tips: [], axis: fn } }
   // blocks: { h: 'Heading' } { p: 'text' } { li: 'bullet' } { kv: ['Label', 'Value'] } { sig: { name, when, strokes } } { gap: n } { small: 'text' }
   function build(doc) {
     const pages = []; let cur = null, y = 0;
@@ -43,6 +44,18 @@
       else if (b.small) para(b.small, 8);
       else if (b.li) para(b.li, 10, { bullet: true, indent: 16 });
       else if (b.kv) { const lines = wrap(b.kv[1], 10, W - 2 * M - 110, false); need(14 * lines.length); y -= 14; text(M, y, 10, b.kv[0], true); lines.forEach((ln, i) => { if (i) y -= 13.5; text(M + 110, y, 10, ln, false); }); }
+      else if (b.chart) {
+        // line chart: labels[], values[] (numbers), tips[] (text shown above each point). Segments are green when the line rises, red when it falls, grey when flat.
+        const c = b.chart, ch = 230, cw = W - 2 * M - 40, x0 = M + 40; need(ch + 40); const top = y - 10, base = top - ch + 30;
+        const vals = c.values.map((v) => +v || 0), hi = Math.max(1, ...vals), n = vals.length;
+        const px = (i) => x0 + (n > 1 ? (cw - 20) * i / (n - 1) : (cw - 20) / 2) + 10, py = (v) => base + (top - 10 - base) * v / hi;
+        cur.push('0.4 w 0.8 G'); for (let g = 0; g <= 4; g++) { const gy = base + (top - 10 - base) * g / 4; cur.push(M + 40 + ' ' + num(gy) + ' m ' + (x0 + cw) + ' ' + num(gy) + ' l S'); text(M, gy - 3, 7, (c.axis || String)(hi * g / 4), false, 'grey'); }
+        cur.push('2 w 1 J 1 j');
+        for (let i = 1; i < n; i++) { const col = vals[i] > vals[i - 1] ? '0.08 0.55 0.25' : vals[i] < vals[i - 1] ? '0.80 0.12 0.12' : '0.55 0.55 0.55'; cur.push(col + ' RG ' + num(px(i - 1)) + ' ' + num(py(vals[i - 1])) + ' m ' + num(px(i)) + ' ' + num(py(vals[i])) + ' l S'); }
+        cur.push('0 G 0.8 w');
+        vals.forEach((v, i) => { cur.push('0.15 g ' + num(px(i) - 2) + ' ' + num(py(v) - 2) + ' 4 4 re f 0 g'); text(px(i) - 8, py(v) + 5, 7, (c.tips && c.tips[i]) || String(v), false); text(px(i) - 8, base - 12, 7, c.labels[i], false, 'grey'); });
+        y = base - 26;
+      }
       else if (b.table) {
         const cols = b.table.cols, fs = 8.5, lh = fs * 1.3;
         const xs = []; let acc = M; cols.forEach((c) => { xs.push(acc); acc += c.w; });

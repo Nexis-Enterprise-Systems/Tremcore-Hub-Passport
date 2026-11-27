@@ -611,13 +611,54 @@
     const monthRows = [], yearRows = [];
     for (let i = 11; i >= 0; i--) { const a = new Date(now.getFullYear(), now.getMonth() - i, 1), b = new Date(now.getFullYear(), now.getMonth() - i + 1, 1); monthRows.push(per(a.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }), a, b)); }
     for (let y = now.getFullYear() - 2; y <= now.getFullYear(); y++) yearRows.push(per(String(y), new Date(y, 0, 1), new Date(y + 1, 0, 1)));
+    // ---- click any column heading to see it as a line chart (green where it rises, red where it falls), with PDF download and print ----
+    const NS = 'http://www.w3.org/2000/svg';
+    const sv = (tag, at, ...kids) => { const e = document.createElementNS(NS, tag); Object.entries(at || {}).forEach(([k, v]) => e.setAttribute(k, v)); kids.forEach((k) => k != null && e.append(k)); return e; };
+    const closeChart = () => { const m = document.getElementById('chart-modal'); if (m) m.remove(); document.body.classList.remove('chart-open'); };
+    const openChart = (title, rows, pick, asMoney) => {
+      closeChart();
+      const vals = rows.map(pick), labels = rows.map((r) => r.label), fmt = (v) => (asMoney ? money(v) : String(v));
+      const hi = Math.max(1, ...vals), Wd = 640, Ht = 300, L = 56, R = 20, T = 28, B = 40;
+      const X = (i) => L + (vals.length > 1 ? (Wd - L - R) * i / (vals.length - 1) : (Wd - L - R) / 2), Y = (v) => Ht - B - (Ht - B - T) * v / hi;
+      const svg = sv('svg', { viewBox: '0 0 ' + Wd + ' ' + Ht, class: 'linechart', role: 'img', 'aria-label': title + ' by period' });
+      for (let g = 0; g <= 4; g++) { const gy = Y(hi * g / 4); svg.append(sv('line', { x1: L, x2: Wd - R, y1: gy, y2: gy, class: 'grid' }), sv('text', { x: L - 6, y: gy + 4, 'text-anchor': 'end', class: 'ax' }, fmt(Math.round(hi * g / 4)))); }
+      for (let i = 1; i < vals.length; i++) svg.append(sv('line', { x1: X(i - 1), y1: Y(vals[i - 1]), x2: X(i), y2: Y(vals[i]), class: 'seg ' + (vals[i] > vals[i - 1] ? 'up' : vals[i] < vals[i - 1] ? 'down' : 'flat'), 'stroke-width': 3, 'stroke-linecap': 'round' }));
+      vals.forEach((v, i) => { svg.append(sv('circle', { cx: X(i), cy: Y(v), r: 4, class: 'pt' }), sv('text', { x: X(i), y: Y(v) - 9, 'text-anchor': 'middle', class: 'val' }, fmt(v)), sv('text', { x: X(i), y: Ht - 14, 'text-anchor': 'middle', class: 'ax' }, labels[i])); });
+      const first = vals[0], last = vals[vals.length - 1], tot = vals.reduce((t, v) => t + v, 0);
+      const trend = last > first ? 'Up' : last < first ? 'Down' : 'Level';
+      const doPdf = () => {
+        const dstr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        const bytes = window.TCPdf.build({ title: title, subtitle: 'Tremcore Management Hub - ' + dstr, footer: 'Tremcore Management Hub',
+          blocks: [{ p: 'Green lines show the figure going up from the period before, red lines show it going down.' }, { gap: 6 }, { chart: { labels, values: vals, tips: vals.map(fmt), axis: (v) => fmt(Math.round(v)) } }, { gap: 4 },
+            { h: 'Figures' }, { table: { cols: [{ t: 'Period', w: 200 }, { t: title, w: 160 }, { t: 'Change', w: 135 }], rows: rows.map((r, i) => [r.label, fmt(vals[i]), i === 0 ? '-' : { t: (vals[i] > vals[i - 1] ? 'Up ' : vals[i] < vals[i - 1] ? 'Down ' : 'No change ') + (vals[i] === vals[i - 1] ? '' : fmt(Math.abs(vals[i] - vals[i - 1]))), c: vals[i] > vals[i - 1] ? 'green' : vals[i] < vals[i - 1] ? 'red' : 'grey' }]) } },
+            { small: 'Figures are worked out from the values recorded in the hub, before VAT.' }] });
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+        const a = h('a', { href: url, download: 'tremcore-' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + new Date().toISOString().slice(0, 10) + '.pdf' });
+        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+      };
+      const doPrint = () => { document.body.classList.add('chart-open'); window.print(); };
+      const modal = h('div', { id: 'chart-modal', class: 'chartmodal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+        h('div', { class: 'chartcard' },
+          h('div', { class: 'titlerow' }, h('h2', {}, title), h('button', { class: 'btn small ghost', type: 'button', id: 'chart-close', onclick: closeChart }, 'Close')),
+          h('p', { class: 'muted small' }, 'Green means up on the period before, red means down. ' + trend + ' overall (' + fmt(first) + ' to ' + fmt(last) + ', total ' + fmt(tot) + ').'),
+          h('div', { class: 'chartbox' }, svg),
+          h('div', { class: 'actions noprint' }, h('button', { class: 'btn', type: 'button', id: 'chart-pdf', onclick: doPdf }, 'Download PDF'), ' ', h('button', { class: 'btn ghost', type: 'button', id: 'chart-print', onclick: doPrint }, 'Print'))));
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeChart(); });
+      document.body.append(modal);
+      const cl = document.getElementById('chart-close'); if (cl) cl.focus();
+    };
+    window.addEventListener('afterprint', () => document.body.classList.remove('chart-open'));
+    window.addEventListener('hashchange', closeChart);
+    const chartTh = (label, getRows, pick, asMoney, key) => h('th', {}, h('button', { class: 'thchart', type: 'button', 'data-chart': key, title: 'Show as a chart', onclick: () => openChart(label, getRows(), pick, asMoney) }, label, ' ', h('span', { 'aria-hidden': 'true' }, '\u2197')));
+    let repRows = monthRows;
     const reportBody = h('tbody', {});
     const showReport = (rowsIn) => reportBody.replaceChildren(...rowsIn.map((r) => h('tr', {}, h('td', {}, r.label), h('td', { class: 'num' }, String(r.reg)), h('td', { class: 'num' }, String(r.signed)), h('td', { class: 'num' }, money(r.added)), h('td', { class: 'num' }, money(r.added * 12)))));
     showReport(monthRows);
-    const tabM = h('button', { class: 'btn small', type: 'button', id: 'rep-month', onclick: () => { showReport(monthRows); tabM.className = 'btn small'; tabY.className = 'btn ghost small'; } }, 'Monthly');
-    const tabY = h('button', { class: 'btn ghost small', type: 'button', id: 'rep-year', onclick: () => { showReport(yearRows); tabY.className = 'btn small'; tabM.className = 'btn ghost small'; } }, 'Yearly');
+    const tabM = h('button', { class: 'btn small', type: 'button', id: 'rep-month', onclick: () => { repRows = monthRows; showReport(monthRows); tabM.className = 'btn small'; tabY.className = 'btn ghost small'; } }, 'Monthly');
+    const tabY = h('button', { class: 'btn ghost small', type: 'button', id: 'rep-year', onclick: () => { repRows = yearRows; showReport(yearRows); tabY.className = 'btn small'; tabM.className = 'btn ghost small'; } }, 'Yearly');
     const report = h('div', { class: 'card', id: 'report-card' }, h('h2', {}, 'Sign-ups and revenue report'), h('div', { class: 'actions' }, tabM, ' ', tabY),
-      h('div', { class: 'tablewrap' }, h('table', { id: 'report-table' }, h('thead', {}, h('tr', {}, ['Period', 'Registered interest', 'Signed up', 'New monthly revenue', 'New yearly value'].map((x) => h('th', {}, x)))), reportBody)),
+      h('div', { class: 'tablewrap' }, h('table', { id: 'report-table' }, h('thead', {}, h('tr', {}, h('th', {}, 'Period'), chartTh('Registered interest', () => repRows, (r) => r.reg, false, 'reg'), chartTh('Signed up', () => repRows, (r) => r.signed, false, 'signed'), chartTh('New monthly revenue', () => repRows, (r) => r.added, true, 'monthly'), chartTh('New yearly value', () => repRows, (r) => r.added * 12, true, 'yearly'))), reportBody)),
+      h('p', { class: 'hint' }, 'Tap any column heading to see it as a line chart.'),
       h('p', { class: 'hint' }, 'New revenue is the monthly value of clients who joined in that period, before VAT. It is worked out from the values recorded here, not from individual Stripe payments.'));
     chrome('revenue', h('h1', {}, 'Revenue & growth'),
       h('div', { class: 'tiles' },
@@ -633,7 +674,7 @@
           h('thead', {}, h('tr', {}, ['Package', 'Paying', 'Monthly'].map((x) => h('th', {}, x)))),
           h('tbody', {}, byLevel.length ? byLevel.map((r) => h('tr', {}, h('td', {}, LEVELS[r.l]), h('td', { class: 'num' }, String(r.n)), h('td', { class: 'num' }, money(r.v)))) : [h('tr', {}, h('td', { colspan: '3', class: 'muted' }, 'No paying clients yet.'))])))),
         h('div', { class: 'card' }, h('h2', {}, 'New clients, last 6 months'), h('div', { class: 'tablewrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, ['Month', 'New', 'Self sign-ups'].map((x) => h('th', {}, x)))),
+          h('thead', {}, h('tr', {}, h('th', {}, 'Month'), chartTh('New clients', () => months, (r) => r.n, false, 'newclients'), chartTh('Self sign-ups', () => months, (r) => r.self, false, 'selfsignups'))),
           h('tbody', {}, months.map((m) => h('tr', {}, h('td', {}, m.label), h('td', { class: 'num' }, String(m.n)), h('td', { class: 'num' }, String(m.self)))))))),
         h('div', { class: 'card' }, h('h2', {}, 'Biggest paying clients'), h('div', { class: 'tablewrap' }, h('table', {},
           h('thead', {}, h('tr', {}, ['Client', 'Monthly'].map((x) => h('th', {}, x)))),

@@ -297,3 +297,8 @@
 - A flyer code never expires and can be used by any number of NEW sign-ups (it stays active and counts uses). It only attaches to a company still on trial, so it can never be put on an account that already pays. Staff can switch it off at any time in Hub > Offers.
 - Staff can now set the first-site price on any offer code (hub box, default 7.99) and make more flyer codes (own code text and price) from Hub > Offers > Flyer code.
 - One-prospect codes are unchanged: one use, for one email, with an end date.
+
+## 27 Nov 2026 - Revenue & growth: click any column heading for a line chart
+- On Hub > Revenue & growth every number column heading (Registered interest, Signed up, New monthly revenue, New yearly value, and New clients / Self sign-ups) opens a line chart over the periods shown (monthly or yearly view).
+- Line segments are green where the figure rose on the period before, red where it fell, grey where level. The chart has Download PDF (chart plus a figures table) and Print (prints just the chart).
+- Built with the existing no-package PDF writer (new chart block). Figures are the same as the table (recorded values, before VAT).

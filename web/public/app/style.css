@@ -687,3 +687,25 @@ body{overscroll-behavior-y:contain}
 .issueform{margin-top:12px}
 .issueform[hidden]{display:none}
 .reportrow{margin:10px 0 4px}
+/* Hub: click a column heading to see a line chart */
+.thchart{all:unset;cursor:pointer;color:inherit;font:inherit;font-weight:700;text-decoration:underline;text-decoration-color:rgba(233,185,73,.5);text-underline-offset:4px}
+.thchart:hover,.thchart:focus-visible{color:#e9b949;outline:none;text-decoration-color:#e9b949}
+.chartmodal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto}
+.chartcard{width:min(720px,100%);max-height:100%;overflow:auto;background:#121212;border:1px solid rgba(233,185,73,.45);border-radius:18px;padding:18px}
+.chartbox{margin:10px 0 14px}
+.linechart{width:100%;height:auto;display:block}
+.linechart .grid{stroke:#2e2a22;stroke-width:1}
+.linechart .ax{fill:#a59c8c;font:11px system-ui,sans-serif}
+.linechart .val{fill:#f3eee4;font:600 11px system-ui,sans-serif}
+.linechart .pt{fill:#f3eee4}
+.linechart .seg.up{stroke:#45c35f}.linechart .seg.down{stroke:#e5484d}.linechart .seg.flat{stroke:#8d8678}
+@media print{
+  body.chart-open > *:not(#chart-modal){display:none !important}
+  body.chart-open #chart-modal{position:static;background:#fff;padding:0;display:block;overflow:visible}
+  body.chart-open .chartcard{background:#fff;border:0;color:#000;max-height:none;overflow:visible;width:100%}
+  body.chart-open .chartcard h2,body.chart-open .chartcard p{color:#000}
+  body.chart-open .noprint,body.chart-open #chart-close{display:none !important}
+  body.chart-open .linechart .grid{stroke:#ccc}body.chart-open .linechart .ax,body.chart-open .linechart .val{fill:#000}body.chart-open .linechart .pt{fill:#222}
+  body.chart-open .linechart .seg.up{stroke:#13863c}body.chart-open .linechart .seg.down{stroke:#cc1f24}
+  .linechart,.seg{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
