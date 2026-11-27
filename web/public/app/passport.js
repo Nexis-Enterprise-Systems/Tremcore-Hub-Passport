@@ -232,7 +232,7 @@
             tt.owned ? q('toolbox_talks', 'Toolbox Talks', '30+ available', () => viewExtra('toolbox_talks'), false, 'chat') : null,
             ss.owned ? q('staff_signin', 'Staff Clock In / Out', 'QR code per site', () => viewExtra('staff_signin'), false, 'clock') : null,
             pg && pg.owned ? q('posters', 'Poster Generator', '17 templates', () => viewExtra('posters'), false, 'poster') : null,
-            q('emergency', 'Emergency Information', 'Contacts and shut-offs', () => viewEmergency(), false, 'alert')));
+            q('emergency', 'Emergency Information', 'Contacts and emergency numbers', () => viewEmergency(), false, 'alert')));
       shellWith('home', sideCards, [
         h('div', { class: 'homehead' }, h('img', { class: 'homelogo', src: '/img/logo-full.png', alt: 'Tremcore' }), h('h1', { class: 'sr-only' }, 'Welcome' + (ctx.req && ctx.req.full_name ? ', ' + ctx.req.full_name.split(' ')[0] : '')), h('p', { class: 'tagline' }, 'the smarter way to stay compliant' + (site !== 'all' ? ' · ' + siteName(site) : ''))),
         h('div', { class: 'card overview' },
@@ -461,9 +461,9 @@
       const e0 = (er && er.data) || null, contacts = (cr && cr.data) || [];
       const can = rights.can_edit;
       const box = h('div', {});
-      const F = [['assembly_point', 'Assembly point', 'e-assembly'], ['gas_shutoff', 'Gas shut-off', 'e-gas'], ['water_shutoff', 'Water shut-off', 'e-water'], ['electric_shutoff', 'Electric shut-off', 'e-electric']];
+      const F = [['assembly_point', 'Assembly Point', 'e-assembly'], ['gas_shutoff', 'Gas Company Phone Number', 'e-gas'], ['water_shutoff', 'Water Board Phone Number', 'e-water'], ['electric_shutoff', 'Electric Board Phone Number', 'e-electric']];
       const inputs = {};
-      F.forEach(([k, , id]) => { inputs[k] = h('input', { id, maxlength: '300', value: (e0 && e0[k]) || '', autocomplete: 'off' }); });
+      F.forEach(([k, , id]) => { inputs[k] = h('input', Object.assign({ id, maxlength: '300', value: (e0 && e0[k]) || '', autocomplete: 'off' }, k === 'assembly_point' ? {} : { type: 'tel', inputmode: 'tel' })); });
       const notes = h('textarea', { id: 'e-notes', rows: '3', maxlength: '2000' }, (e0 && e0.notes) || '');
       const saveBtn = h('button', { class: 'btn', id: 'e-save', type: 'button', onclick: async (ev) => ctx.busy(ev.target, async () => {
         const v = { assembly_point: inputs.assembly_point.value.trim(), gas_shutoff: inputs.gas_shutoff.value.trim(), water_shutoff: inputs.water_shutoff.value.trim(), electric_shutoff: inputs.electric_shutoff.value.trim(), notes: notes.value.trim() };
@@ -489,8 +489,8 @@
         h('h2', {}, 'Key contacts'),
         ...(contacts.length ? contacts.map(crow) : [h('p', { class: 'muted' }, 'No contacts added yet.')]),
         can ? [h('label', { for: 'c-name' }, 'Name'), cname, h('label', { for: 'c-role' }, 'Role (optional)'), crole, h('label', { for: 'c-phone' }, 'Phone'), cphone, addC] : null,
-        h('h2', {}, 'Assembly point and shut-offs'),
-        ...(can ? [...F.flatMap(([k, l, id]) => [h('label', { for: id }, l), inputs[k]]), h('label', { for: 'e-notes' }, 'Other notes (optional)'), notes, saveBtn]
+        h('h2', {}, 'Assembly Point and Emergency Numbers'),
+        ...(can ? [...F.flatMap(([k, l, id]) => [h('label', { for: id }, l), inputs[k]]), h('label', { for: 'e-notes' }, 'Other Numbers'), notes, saveBtn]
           : [...F.map(([k, l]) => h('div', { class: 'kv' }, h('span', {}, l), h('span', {}, (e0 && e0[k]) || 'Not added yet'))), (e0 && e0.notes) ? h('p', {}, e0.notes) : null]),
         box));
     }
