@@ -44,6 +44,26 @@ function checkoutParams({ companyId, sites, interval, email, origin, methods, we
   return q;
 }
 
+// Tremcore Managed: one monthly line, the price Tremcore set for each site times the number of sites. No discount coupon. Opens every add-on when it is paid (done by the database).
+function managedCheckoutParams({ companyId, sites, perSitePence, email, origin, methods, welcome }) {
+  if (!companyId || !(sites >= 1 && sites <= 100) || !(Number.isInteger(perSitePence) && perSitePence >= 1 && perSitePence <= 100000)) throw new Error('bad checkout details');
+  const q = new URLSearchParams();
+  q.set('mode', 'subscription');
+  q.set('client_reference_id', companyId);
+  if (email) q.set('customer_email', email);
+  q.set('metadata[company_id]', companyId);
+  q.set('subscription_data[metadata][company_id]', companyId);
+  q.set('line_items[0][quantity]', String(sites));
+  q.set('line_items[0][price_data][currency]', 'gbp');
+  q.set('line_items[0][price_data][unit_amount]', String(perSitePence));
+  q.set('line_items[0][price_data][recurring][interval]', 'month');
+  q.set('line_items[0][price_data][product_data][name]', 'Tremcore Managed: per site (all add-ons included)');
+  (methods || []).forEach((m, i) => q.set(`payment_method_types[${i}]`, m));
+  q.set('success_url', origin + (welcome ? '/app/?welcome=1' : '/app/?paid=1'));
+  q.set('cancel_url', origin + (welcome ? '/app/?welcome=0' : '/app/?paid=0'));
+  return q;
+}
+
 // An add-on is its own small subscription, charged monthly (default) or once a year upfront (12 months in one payment, renews every 12 months). The Stripe customer is reused when we already have one, so the card details carry over.
 function extraCheckoutParams({ companyId, code, name, unitPence, quantity, customerId, email, origin, interval }) {
   const every = interval === 'year' ? 'year' : 'month';
@@ -108,4 +128,4 @@ function eventToAction(ev) {
   }
 }
 
-module.exports = { PRICES, offerCouponId, couponParams, checkoutParams, extraCheckoutParams, verifySignature, eventToAction };
+module.exports = { PRICES, offerCouponId, couponParams, checkoutParams, managedCheckoutParams, extraCheckoutParams, verifySignature, eventToAction };

@@ -391,6 +391,15 @@ async function ensureOfferCoupon(offer) {
   if (j && j.error && (j.error.code === 'resource_already_exists' || /already exists/i.test(j.error.message || ''))) return;
   throw new Error('coupon: ' + (j && j.error && j.error.message));
 }
+// Tremcore Managed: the price per site (in pence) if this is a live managed code, otherwise null. Read with the service key.
+async function managedPrice(code) {
+  if (!code || !SUPABASE_SERVICE_ROLE_KEY) return null;
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/offer_managed', { method: 'POST', headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_code: code }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    const v = await r.json(); return Number.isInteger(v) ? v : null;
+  } catch (e) { return null; }
+}
 const offerFrom = (row) => (row && row.kind !== 'free' && row.discount_pence > 0 ? { pence: row.discount_pence, months: row.months } : null);
 
 // Free access: opens the account with no payment. Only the server (service key) may do this, and only for a company that holds a valid FREE code.
@@ -440,8 +449,11 @@ async function handleCheckout(req, res) {
       return out(200, { url: proto + '://' + req.headers.host + '/app/?paid=1', free: true });
     }
     if (!STRIPE_SECRET_KEY) return out(503, { error: 'Online payment is not switched on yet.' });
-    if (offer) await ensureOfferCoupon(offer);
-    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, offer });
+    let mprice = null;
+    try { const cr = await fetch(SUPABASE_URL + '/rest/v1/companies?id=eq.' + encodeURIComponent(info.company_id) + '&select=offer_code', { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + m[1] }, signal: AbortSignal.timeout(8000) }); mprice = cr.ok ? await managedPrice(((await cr.json())[0] || {}).offer_code) : null; } catch (e) { mprice = null; }
+    if (offer && !mprice) await ensureOfferCoupon(offer);
+    const params = mprice ? billing.managedCheckoutParams({ companyId: info.company_id, sites: info.sites, perSitePence: mprice, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS })
+      : billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, offer });
     const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
     const sj = await sr.json().catch(() => ({}));
@@ -496,8 +508,10 @@ async function handleSignupCheckout(req, res) {
     }
     if (!STRIPE_SECRET_KEY) return out(503, { error: 'Online payment is not switched on yet.' });
     const offer = attached ? offerFrom(attached) : null;
-    if (offer) await ensureOfferCoupon(offer);
-    const params = billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, welcome: true, offer });
+    const mprice = code ? await managedPrice(code) : null;
+    if (offer && !mprice) await ensureOfferCoupon(offer);
+    const params = mprice ? billing.managedCheckoutParams({ companyId: info.company_id, sites: info.sites, perSitePence: mprice, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, welcome: true })
+      : billing.checkoutParams({ companyId: info.company_id, sites: info.sites, interval: info.billing_interval, email: info.email, origin: proto + '://' + req.headers.host, methods: STRIPE_METHODS, welcome: true, offer });
     const sr = await fetch(STRIPE_API + '/v1/checkout/sessions', { method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(STRIPE_SECRET_KEY + ':').toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(), signal: AbortSignal.timeout(10000) });
     const sj = await sr.json().catch(() => ({}));

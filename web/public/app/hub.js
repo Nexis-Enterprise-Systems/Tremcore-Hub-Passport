@@ -552,13 +552,13 @@
     if (managedTab === 'codes') {
       const out = h('div', { id: 'managed-out' });
       const name = text('', { id: 'mc-name', autocomplete: 'off', maxlength: '120' }), email = text('', { id: 'mc-email', type: 'email', inputmode: 'email', autocomplete: 'off' });
-      const price = text('0.00', { id: 'mc-price', inputmode: 'decimal', autocomplete: 'off' });
+      const price = text('9.99', { id: 'mc-price', inputmode: 'decimal', autocomplete: 'off' });
       const days = select({ '14': '14 days', '30': '30 days', '60': '60 days', '90': '90 days' }, '30');
-      const toP = (v) => { const n = Math.round(parseFloat(String(v).replace(/[^0-9.]/g, '')) * 100); return Number.isFinite(n) && n >= 0 && n <= 100000 ? n : null; };
+      const toP = (v) => { const n = Math.round(parseFloat(String(v).replace(/[^0-9.]/g, '')) * 100); return Number.isFinite(n) && n >= 1 && n <= 100000 ? n : null; };
       const make = h('button', { class: 'btn', type: 'button', id: 'managed-create', onclick: async () => {
         const em = email.value.trim(), pc = toP(price.value);
         if (!EMAIL.test(em)) return note(out, 'err', 'Please enter the client\u2019s email address.');
-        if (pc == null) return note(out, 'err', 'Please enter the price per site as pounds, for example 9.99 (or 0 for none).');
+        if (pc == null) return note(out, 'err', 'Please enter the price per site as pounds, for example 9.99.');
         await busy(make, async () => { try { const r = await q(ctx.sb.rpc('create_managed_code', { p_email: em, p_name: titleCase(name.value.trim()), p_days: Number(days.value), p_price_pence: pc })); await pageManaged(++token, { code: r.code, link: location.origin + '/app/?signup=1&code=' + encodeURIComponent(r.code) }); } catch (err) { note(out, 'err', 'The code was not made: ' + err.message); } });
       } }, 'Create managed code');
       const pickCo = select(Object.fromEntries([['', 'Choose a client\u2026']].concat(companies.filter((c) => c.level < 2 && c.subscription !== 'cancelled').map((c) => [c.id, c.name]))), '');
@@ -570,12 +570,12 @@
       } }, 'Make managed');
       body = [
         h('section', { class: 'card' }, h('h2', {}, 'New managed offer code'),
-          h('p', { class: 'hint' }, 'The client signs up with the link, and their account opens at once as Managed Compliance (view-only for them) with every add-on open and no card payment. They are invoiced by you at the price per site you set here. You can set a different price on each code.'),
+          h('p', { class: 'hint' }, 'The client signs up with the link (monthly billing) and pays through Stripe at the price per site you set here, for all their sites. When the payment clears their account becomes Managed Compliance (view-only for them) with every add-on open. You can set a different price on each code.'),
           h('div', { class: 'grid2' }, field('mc-name', 'Client\u2019s name (optional)', name), field('mc-email', 'Client\u2019s email', email)),
           h('div', { class: 'grid2' }, field('mc-price', 'Price per site a month, \u00a3 (before VAT)', price), h('div', { class: 'f' }, h('label', {}, 'Code is valid for'), days)),
           h('div', { class: 'actions' }, make), out),
         h('section', { class: 'card' }, h('h2', {}, 'Make an existing client managed'),
-          h('p', { class: 'hint' }, 'Moves a client you already have onto Tremcore Managed: Level 2, every add-on open, valued at the price per site below.'),
+          h('p', { class: 'hint' }, 'Moves a client you already have onto Tremcore Managed: Level 2, every add-on open, valued at the price per site below. This does not change what Stripe charges them: update their subscription in Stripe to match.'),
           h('div', { class: 'grid2' }, h('div', { class: 'f' }, h('label', {}, 'Client'), pickCo), field('mm-price', 'Price per site a month, \u00a3', mprice)),
           h('div', { class: 'actions' }, mk), mout),
         h('h2', {}, 'Managed codes'),
