@@ -1653,7 +1653,7 @@ const USERS = {
     let signupOpen = false;
     await pg.route('**/rest/v1/rpc/signup_open', (rt) => rt.fulfill({ status: 200, contentType: 'application/json', body: String(signupOpen) }));
     pg.on('console', (m) => { if (m.type() === 'error') probs.push(m.text()); }); pg.on('pageerror', (e) => probs.push(String(e)));
-    for (const [u, h] of [['/', 'Commercial property compliance'], ['/passport/', 'Everything in one place, made simple.'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Ask us a question']]) {
+    for (const [u, h] of [['/', 'Commercial property compliance'], ['/passport/', 'Everything in one place, made simple.'], ['/what-you-get/', 'One passport'], ['/how-it-works/', 'Simple to start'], ['/contact/', 'Get in Touch']]) {
       await pg.goto(base + u); check('website page loads: ' + u, (await pg.locator('h1,h2').first().innerText()).toLowerCase().includes(h.toLowerCase()));
     }
     await pg.goto(base + '/');
