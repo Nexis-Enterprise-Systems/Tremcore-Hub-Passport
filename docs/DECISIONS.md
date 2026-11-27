@@ -309,3 +309,6 @@
 - Alerts are emails from the system (`runTaskAlerts`, every 5 minutes, only when REMINDERS_ON=1). All-day tasks alert from 9am.
 - Migration 0040 must be run on Supabase before the new Tasks screen works. Old repeat_months tasks are converted automatically.
 - Emergency Information headings are Assembly Point, Gas Company / Water Board / Electric Board Phone Number, and Other Numbers.
+
+## Hub search across all clients
+- A search box at the top of the hub menu searches client names, sites and every compliance record (title, notes, group) across all clients, e.g. "gas" or "EICR". Results link to the client or site. Staff only; it uses the same database permissions as the rest of the hub.

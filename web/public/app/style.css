@@ -736,3 +736,6 @@ body{overscroll-behavior-y:contain}
 .tform .tf-pair{display:flex;gap:8px;align-items:center}
 .tform .tf-pair input{width:64px;height:40px;text-align:center;padding:8px}
 .tform .tf-pair select{max-width:none;padding:8px;border:1px solid var(--line);border-radius:8px;background:#121212;color:var(--text)}
+.hubsearch{margin:0 0 12px}
+.hubsearch input{width:100%;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#0d0d0d;color:var(--text);font-size:.92rem}
+.searchrow{margin:.5rem 0}

@@ -98,6 +98,8 @@
         h('a', { href: '#/dashboard', class: 'hubbrand', 'aria-label': 'Tremcore Hub home' }, h('img', { class: 'hublogo', src: '/img/logo-mark.png', alt: 'Tremcore' }), h('span', { class: 'hubtitle' }, 'Management Hub')),
         burger),
       h('div', { class: 'hubmenu', id: 'hub-menu' },
+        h('form', { class: 'hubsearch', role: 'search', onsubmit: (e) => { e.preventDefault(); const v = e.target.elements.q.value.trim(); if (v) { location.hash = '#/search/' + encodeURIComponent(v); side.classList.remove('open'); } } },
+          h('input', { type: 'search', name: 'q', id: 'hub-search', placeholder: 'Search all clients (gas, EICR…)', 'aria-label': 'Search all clients', autocomplete: 'off', value: (location.hash.match(/^#\/search\/(.*)/) || [, ''])[1] ? decodeURIComponent(location.hash.replace(/^#\/search\//, '')) : '' })),
         h('nav', { class: 'hubnav', 'aria-label': 'Hub sections' },
           NAV_GROUPS.map(([label, keys]) => {
             const links = keys.filter((k) => items[k]).map((k) => h('a', { href: '#/' + k, class: active === k ? 'on' : null, 'aria-current': active === k ? 'page' : null }, items[k]));
@@ -682,6 +684,32 @@
   }
 
   // ---------- Renewals (work list for clients whose compliance Tremcore manages) ----------
+
+  // ---------- search across every client ----------
+  async function pageSearch(my, term) {
+    chrome('dashboard', h('h1', {}, 'Search'), loading());
+    const [items, props, companies] = await Promise.all([
+      q(ctx.sb.from('compliance_status').select('*')),
+      q(ctx.sb.from('properties').select('id,company_id,name,address')),
+      q(ctx.sb.from('companies').select('id,name,level,subscription,contact_email'))]);
+    if (my !== token) return;
+    const words = term.toLowerCase().split(/\s+/).filter(Boolean);
+    const hit = (...f) => { const t = f.filter(Boolean).join(' ').toLowerCase(); return words.every((w) => t.includes(w)); };
+    const propOf = Object.fromEntries(props.map((x) => [x.id, x])), coOf = Object.fromEntries(companies.map((x) => [x.id, x]));
+    const cos = companies.filter((c) => hit(c.name, c.contact_email));
+    const sites = props.filter((x) => hit(x.name, x.address, (coOf[x.company_id] || {}).name));
+    const recs = items.filter((i) => { const p = propOf[i.property_id], c = p && coOf[p.company_id]; return hit(i.title, i.notes, i.grp, p && p.name, c && c.name); })
+      .sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
+    const sect = (title, rows) => rows.length ? h('div', { class: 'group' }, h('h3', {}, title + ' (' + rows.length + ')'), ...rows) : null;
+    chrome('dashboard', h('h1', {}, 'Search: ' + term),
+      !words.length ? h('p', { class: 'muted' }, 'Type something in the search box.') : null,
+      words.length && !cos.length && !sites.length && !recs.length ? h('p', { class: 'muted' }, 'Nothing found for \u201c' + term + '\u201d.') : null,
+      sect('Clients', cos.map((c) => h('p', {}, h('a', { href: '#/clients/' + c.id }, c.name), ' ', h('span', { class: 'muted' }, LEVELS[c.level])))),
+      sect('Sites', sites.map((x) => h('p', {}, h('a', { href: '#/sites/' + x.id }, x.name), h('span', { class: 'muted' }, ' \u00b7 ' + ((coOf[x.company_id] || {}).name || ''))))),
+      sect('Compliance records', recs.map((i) => { const p = propOf[i.property_id], c = p && coOf[p.company_id]; return h('p', { class: 'searchrow' }, badge(i.status, STATUS[i.status]), ' ', h('a', { href: '#/sites/' + i.property_id }, i.title), h('span', { class: 'muted' }, ' \u00b7 ' + (c ? c.name + ' \u00b7 ' : '') + (p ? p.name : '') + ' \u00b7 ' + (i.due_date ? fmtDate(i.due_date) : 'no date')));
+      })));
+  }
+
   async function pageRenewals(my) {
     chrome('renewals', h('h1', {}, 'Renewals'), loading());
     const [tasks, items, props, companies] = await Promise.all([
@@ -904,6 +932,7 @@
       else if (a === 'interest') await pageInterest(my);
       else if (a === 'offers') await pageOffers(my);
       else if (a === 'revenue') await pageRevenue(my);
+      else if (a === 'search') await pageSearch(my, decodeURIComponent(location.hash.replace(/^#\/?search\/?/, '')));
       else if (a === 'renewals') await pageRenewals(my);
       else if (a === 'activity') await pageActivity(my);
       else if (a === 'enquiries') await pageEnquiries(my);

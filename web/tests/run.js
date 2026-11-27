@@ -640,6 +640,11 @@ const USERS = {
     check('hub dashboard shows client, site, revenue and enquiry figures', (await p.locator('.tiles').innerText()).replace(/\s+/g, ' ').includes('3 Active clients') && (await p.locator('.tiles').innerText()).includes('3') && (await p.locator('.tiles').innerText()).includes('£49.00') && (await p.locator('.tiles').innerText()).includes('Self sign-ups to follow up'));
     check('dashboard compliance figure counts the missing date against the site (2 of 4 in date = 50%)', (await p.locator('.overall').first().innerText()).includes('50% of 4'));
     check('dashboard lists the site that needs attention', (await p.locator('.list').innerText()).includes('Harbour Cafe Ipswich'));
+    await p.fill('#hub-search', 'eicr'); await p.press('#hub-search', 'Enter'); await p.waitForSelector('text=Compliance records');
+    check('hub search: typing EICR lists every client\'s EICR record, linked to its site', (await p.locator('.searchrow').count()) >= 1 && (await p.locator('.searchrow').first().innerText()).includes('EICR') && (await p.locator('.searchrow a').first().getAttribute('href')).startsWith('#/sites/'));
+    await p.fill('#hub-search', 'zzzznothing'); await p.press('#hub-search', 'Enter'); await p.waitForSelector('text=Nothing found');
+    check('hub search: no match says so', true);
+    await p.click('.hubnav >> text=Dashboard');
     check('hub nav is shown', (await p.locator('.hubnav a').allInnerTexts()).join() === 'Dashboard,Clients,Subscriptions,Renewals,Interest list,Offers,Revenue,Enquiries,Activity,Settings');
 
     // clients list + search
@@ -688,9 +693,9 @@ const USERS = {
       check('pull to refresh: letting go reloads the app', true);
       await t2.ctx.close(); }
     check('clients list shows every client with package and site counts', (await p.locator('tbody tr').count()) === 3 && (await p.locator('tbody').innerText()).includes('Managed Service'));
-    await p.fill('input[type=search]', 'quay'); check('search narrows the client list', (await p.locator('tbody tr').count()) === 1);
-    await p.fill('input[type=search]', 'zzz'); check('search with no match says so', (await p.locator('tbody').innerText()).includes('No clients match'));
-    await p.fill('input[type=search]', '');
+    await p.fill('input[aria-label="Search clients"]', 'quay'); check('search narrows the client list', (await p.locator('tbody tr').count()) === 1);
+    await p.fill('input[aria-label="Search clients"]', 'zzz'); check('search with no match says so', (await p.locator('tbody').innerText()).includes('No clients match'));
+    await p.fill('input[aria-label="Search clients"]', '');
 
     // add client (validation, then success)
     await p.click('text=Add client'); await p.waitForSelector('#c-name');
